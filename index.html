@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f0f0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Smart Me</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+
+<!-- CDN Dependencies -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+/* ── CSS Variables (dark theme) ─────────────────────────────────────────── */
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --surface2: #242424;
+  --border: #2e2e2e;
+  --accent: #4f9eff;
+  --accent2: #7c5cff;
+  --text: #f0f0f0;
+  --text-muted: #888;
+  --success: #34c759;
+  --danger: #ff453a;
+  --warning: #ffd60a;
+  --orange: #ff9f0a;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; min-height: 100dvh; }
+
+.page { display: none; flex: 1; padding: 16px 16px calc(80px + var(--safe-bottom)); }
+.page.active { display: block; }
+
+/* ── Bottom nav ──────────────────────────────────────────────────────────── */
+#bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding-bottom: var(--safe-bottom);
+  z-index: 100;
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 8px 4px; gap: 3px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer; font-size: 10px;
+  transition: color 0.15s;
+}
+.nav-item.active { color: var(--accent); }
+.nav-item svg { width: 22px; height: 22px; }
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 16px 0; position: sticky; top: 0;
+  background: var(--bg); z-index: 50;
+}
+.page-title { font-size: 22px; font-weight: 700; }
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface); border-radius: var(--radius);
+  border: 1px solid var(--border); padding: 16px; margin-bottom: 12px;
+}
+.card-sm { padding: 12px; }
+
+/* ── Stat pill ───────────────────────────────────────────────────────────── */
+.stat-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.stat-pill {
+  background: var(--surface2); border-radius: 20px;
+  padding: 6px 12px; font-size: 12px; color: var(--text-muted);
+}
+.stat-pill strong { color: var(--text); }
+
+/* ── Target bar ──────────────────────────────────────────────────────────── */
+.target-bar-wrap { margin: 8px 0; }
+.target-bar-label {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: var(--text-muted); margin-bottom: 4px;
+}
+.target-bar-track {
+  height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; position: relative;
+}
+.target-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.target-bar-target {
+  position: absolute; top: 0; height: 100%; width: 2px; background: var(--text-muted); border-radius: 1px;
+}
+
+/* ── Signal badge ────────────────────────────────────────────────────────── */
+.signal {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+}
+.signal-BUY { background: rgba(52,199,89,0.15); color: var(--success); }
+.signal-SELL { background: rgba(255,69,58,0.15); color: var(--danger); }
+.signal-HOLD { background: rgba(255,214,10,0.15); color: var(--warning); }
+.signal-TRIM { background: rgba(255,159,10,0.15); color: var(--orange); }
+
+/* ── Currency toggle ─────────────────────────────────────────────────────── */
+.currency-toggle {
+  display: flex; background: var(--surface2); border-radius: 20px; padding: 3px; gap: 2px;
+}
+.currency-btn {
+  padding: 4px 12px; border-radius: 16px; border: none; font-size: 12px; font-weight: 600;
+  cursor: pointer; background: none; color: var(--text-muted); transition: all 0.15s;
+}
+.currency-btn.active { background: var(--accent); color: #fff; }
+
+/* ── Section header ──────────────────────────────────────────────────────── */
+.section-header {
+  font-size: 13px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin: 16px 0 8px;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 8px; margin-bottom: 12px;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  white-space: nowrap; padding: 6px 16px; border-radius: 20px; border: none;
+  background: var(--surface2); color: var(--text-muted); font-size: 13px;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+}
+.tab-btn.active { background: var(--accent); color: #fff; }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { color: var(--text-muted); font-weight: 500; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+.data-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ── Holding row ─────────────────────────────────────────────────────────── */
+.holding-row { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.holding-row:last-child { border-bottom: none; }
+.holding-top { display: flex; align-items: center; justify-content: space-between; }
+.holding-ticker { font-size: 15px; font-weight: 700; }
+.holding-price { font-size: 15px; font-weight: 600; }
+.holding-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+.pct-change { font-weight: 600; }
+.pct-change.positive { color: var(--success); }
+.pct-change.negative { color: var(--danger); }
+
+/* ── NET WORTH card ──────────────────────────────────────────────────────── */
+.nw-card {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+  border-radius: var(--radius); border: 1px solid var(--border);
+  padding: 20px; margin-bottom: 16px; text-align: center;
+}
+.nw-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+.nw-amount { font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+.nw-sub { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+
+/* ── PIN login ───────────────────────────────────────────────────────────── */
+#login-page {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 100dvh; gap: 24px; padding: 24px;
+}
+.login-title { font-size: 28px; font-weight: 800; text-align: center; }
+.login-sub { font-size: 14px; color: var(--text-muted); text-align: center; }
+.user-selector { display: flex; gap: 12px; }
+.user-btn {
+  flex: 1; padding: 12px; border-radius: var(--radius); border: 2px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; text-align: center;
+}
+.user-btn.selected { border-color: var(--accent); background: rgba(79,158,255,0.1); }
+.pin-dots { display: flex; gap: 12px; justify-content: center; margin: 8px 0; }
+.pin-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--border); transition: background 0.15s;
+}
+.pin-dot.filled { background: var(--accent); }
+.pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 280px; }
+.pin-key {
+  aspect-ratio: 1; border-radius: 50%; border: none;
+  background: var(--surface2); color: var(--text); font-size: 22px; font-weight: 500;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s, background 0.15s;
+}
+.pin-key:active { transform: scale(0.92); background: var(--surface); }
+.pin-key.del { font-size: 16px; }
+.login-error { color: var(--danger); font-size: 14px; text-align: center; min-height: 20px; }
+
+/* ── DCA Plan ────────────────────────────────────────────────────────────── */
+.dca-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.dca-row:last-child { border-bottom: none; }
+.dca-ticker { font-weight: 700; width: 60px; flex-shrink: 0; }
+.dca-reasoning { font-size: 12px; color: var(--text-muted); flex: 1; }
+.dca-amount-input {
+  width: 80px; padding: 6px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 14px; text-align: right;
+}
+.dca-amount-input:focus { border-color: var(--accent); outline: none; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: block; width: 100%; padding: 14px; border-radius: var(--radius);
+  border: none; font-size: 16px; font-weight: 700; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.8; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.empty { text-align: center; color: var(--text-muted); padding: 32px 16px; }
+.empty-icon { font-size: 36px; margin-bottom: 8px; }
+.empty-text { font-size: 14px; }
+
+/* ── Loading skeleton ────────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+  background-size: 200% 100%; animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Chart container ─────────────────────────────────────────────────────── */
+.chart-wrap { position: relative; height: 180px; margin: 12px 0; }
+
+/* ── Partner badge ───────────────────────────────────────────────────────── */
+.partner-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(124,92,255,0.15); color: var(--accent2);
+  border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: calc(80px + var(--safe-bottom) + 8px); left: 50%;
+  transform: translateX(-50%) translateY(20px); opacity: 0;
+  background: var(--surface2); color: var(--text);
+  padding: 10px 20px; border-radius: 20px; font-size: 14px;
+  transition: all 0.3s; pointer-events: none; z-index: 200; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+.divider { height: 1px; background: var(--border); margin: 12px 0; }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-muted { color: var(--text-muted); }
+.font-mono { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+<!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
+<div id="login-page">
+  <div>
+    <div class="login-title">Smart Me</div>
+    <div class="login-sub" style="margin-top:6px">Asset Tracker</div>
+  </div>
+  <div class="user-selector" id="user-selector">
+    <button class="user-btn selected" data-uid="1" onclick="selectUser(this)">User 1</button>
+    <button class="user-btn" data-uid="2" onclick="selectUser(this)">User 2</button>
+  </div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="dot-0"></div>
+    <div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div>
+    <div class="pin-dot" id="dot-3"></div>
+    <div class="pin-dot" id="dot-4"></div>
+    <div class="pin-dot" id="dot-5"></div>
+  </div>
+  <div class="login-error" id="login-error"></div>
+  <div class="pin-keypad" id="pin-keypad">
+    <button class="pin-key" onclick="pinKey('1')">1</button>
+    <button class="pin-key" onclick="pinKey('2')">2</button>
+    <button class="pin-key" onclick="pinKey('3')">3</button>
+    <button class="pin-key" onclick="pinKey('4')">4</button>
+    <button class="pin-key" onclick="pinKey('5')">5</button>
+    <button class="pin-key" onclick="pinKey('6')">6</button>
+    <button class="pin-key" onclick="pinKey('7')">7</button>
+    <button class="pin-key" onclick="pinKey('8')">8</button>
+    <button class="pin-key" onclick="pinKey('9')">9</button>
+    <button class="pin-key" style="opacity:0" disabled></button>
+    <button class="pin-key" onclick="pinKey('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+</div>
+
+<!-- ── MAIN APP ───────────────────────────────────────────────────────────── -->
+<div id="main-app" style="display:none; flex-direction:column; min-height:100dvh">
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="page active">
+    <div class="top-bar">
+      <div class="page-title">Dashboard</div>
+      <div class="currency-toggle">
+        <button class="currency-btn active" onclick="setCurrency('USD')">USD</button>
+        <button class="currency-btn" onclick="setCurrency('THB')">THB</button>
+      </div>
+    </div>
+    <div style="height:16px"></div>
+    <div class="nw-card">
+      <div class="nw-label">Combined Net Worth</div>
+      <div class="nw-amount" id="nw-combined">฿—</div>
+      <div class="nw-sub" id="nw-sub">Loading...</div>
+    </div>
+    <div class="card">
+      <div class="section-header" style="margin-top:0">My Portfolio</div>
+      <div id="dashboard-my-nw" class="nw-amount" style="font-size:26px">฿—</div>
+    </div>
+    <div class="card">
+      <div class="section-header" style="margin-top:0">Partner's Portfolio</div>
+      <div id="dashboard-partner-nw" class="nw-amount" style="font-size:26px">฿—</div>
+    </div>
+    <div class="section-header">Net Worth Over Time</div>
+    <div class="card" style="padding:12px">
+      <div class="chart-wrap"><canvas id="nw-chart"></canvas></div>
+    </div>
+    <div class="section-header">Recent Alerts</div>
+    <div id="recent-alerts"></div>
+  </div>
+
+  <!-- US PORTFOLIO -->
+  <div id="page-us" class="page">
+    <div class="top-bar">
+      <div class="page-title">US Portfolio</div>
+      <div class="currency-toggle">
+        <button class="currency-btn active" onclick="setCurrency('USD')" id="us-usd-btn">USD</button>
+        <button class="currency-btn" onclick="setCurrency('THB')" id="us-thb-btn">THB</button>
+      </div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="tabs" id="portfolio-tabs"></div>
+    <div id="portfolio-content"></div>
+  </div>
+
+  <!-- CRYPTO -->
+  <div id="page-crypto" class="page">
+    <div class="top-bar"><div class="page-title">Crypto</div></div>
+    <div style="height:12px"></div>
+    <div id="crypto-content"></div>
+  </div>
+
+  <!-- GOLD -->
+  <div id="page-gold" class="page">
+    <div class="top-bar"><div class="page-title">Gold</div></div>
+    <div style="height:12px"></div>
+    <div id="gold-content"></div>
+  </div>
+
+  <!-- MUTUAL FUNDS -->
+  <div id="page-mf" class="page">
+    <div class="top-bar"><div class="page-title">Mutual Funds</div></div>
+    <div style="height:12px"></div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="setMFCategory('all', this)">All</button>
+      <button class="tab-btn" onclick="setMFCategory('RMF', this)">RMF</button>
+      <button class="tab-btn" onclick="setMFCategory('ESG', this)">ESG</button>
+      <button class="tab-btn" onclick="setMFCategory('other', this)">Other</button>
+    </div>
+    <div id="mf-content"></div>
+  </div>
+
+  <!-- CASH -->
+  <div id="page-cash" class="page">
+    <div class="top-bar"><div class="page-title">Cash</div></div>
+    <div style="height:12px"></div>
+    <div id="cash-content"></div>
+  </div>
+
+  <!-- INSURANCE -->
+  <div id="page-insurance" class="page">
+    <div class="top-bar"><div class="page-title">Insurance</div></div>
+    <div style="height:12px"></div>
+    <div id="insurance-content"></div>
+  </div>
+
+  <!-- PRIVATE INVESTMENTS -->
+  <div id="page-private" class="page">
+    <div class="top-bar"><div class="page-title">Private</div></div>
+    <div style="height:12px"></div>
+    <div id="private-content"></div>
+  </div>
+
+  <!-- DCA PLAN -->
+  <div id="page-dca" class="page">
+    <div class="top-bar"><div class="page-title">DCA Plan</div></div>
+    <div style="height:12px"></div>
+    <div id="dca-content"></div>
+  </div>
+
+  <!-- PARTNER VIEW -->
+  <div id="page-partner" class="page">
+    <div class="top-bar">
+      <div class="page-title">Partner <span class="partner-badge">Read Only</span></div>
+    </div>
+    <div style="height:12px"></div>
+    <div id="partner-content"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="page-settings" class="page">
+    <div class="top-bar"><div class="page-title">Settings</div></div>
+    <div style="height:16px"></div>
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:12px">Logged in as <span id="settings-username"></span></div>
+      <button class="btn btn-danger" onclick="logout()" style="margin-top:8px">Log Out</button>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="section-header" style="margin-top:0">Exchange Rate</div>
+      <div id="settings-rate" class="text-muted" style="font-size:14px">Loading...</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="bottom-nav">
+    <button class="nav-item active" onclick="navigate('dashboard')" id="nav-dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Home
+    </button>
+    <button class="nav-item" onclick="navigate('us')" id="nav-us">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      US
+    </button>
+    <button class="nav-item" onclick="navigate('crypto')" id="nav-crypto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9h4a2 2 0 0 1 0 4H9v4"/><line x1="9" y1="9" x2="9" y2="5"/><line x1="13" y1="9" x2="13" y2="5"/></svg>
+      Crypto
+    </button>
+    <button class="nav-item" onclick="navigate('mf')" id="nav-mf">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      Funds
+    </button>
+    <button class="nav-item" onclick="navigate('settings')" id="nav-settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      More
+    </button>
+  </nav>
+
+</div><!-- /main-app -->
+
+</div><!-- /app -->
+<div id="toast"></div>
+
+<script>
+// ── Configuration ─────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://zchwqmykjjjtoaymuvwx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ONSsLlQfSpD5uqIhCD-7eg_Lkb-0YlK';
+
+// ── Supabase client ───────────────────────────────────────────────────────────
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── App state ─────────────────────────────────────────────────────────────────
+const state = {
+  userId: null,
+  userName: null,
+  partnerId: null,
+  currency: 'USD',
+  usdThb: 33.5,
+  selectedUser: 1,    // on login screen
+  pin: '',
+  currentPage: 'dashboard',
+  mfCategory: 'all',
+  cache: {}
+};
+
+// ── PIN Auth ──────────────────────────────────────────────────────────────────
+
+function selectUser(btn) {
+  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  state.selectedUser = parseInt(btn.dataset.uid);
+  state.pin = '';
+  updatePinDots();
+  document.getElementById('login-error').textContent = '';
+}
+
+function pinKey(digit) {
+  if (state.pin.length >= 6) return;
+  state.pin += digit;
+  updatePinDots();
+  if (state.pin.length >= 4) {
+    setTimeout(attemptLogin, 150);
+  }
+}
+
+function pinDel() {
+  state.pin = state.pin.slice(0, -1);
+  updatePinDots();
+  document.getElementById('login-error').textContent = '';
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 6; i++) {
+    document.getElementById(`dot-${i}`).classList.toggle('filled', i < state.pin.length);
+  }
+}
+
+async function attemptLogin() {
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+
+  try {
+    const { data: users, error } = await sb.from('users').select('id, name, pin_hash, salt').order('created_at');
+    if (error || !users || users.length === 0) {
+      errEl.textContent = 'Could not load users.';
+      state.pin = ''; updatePinDots(); return;
+    }
+
+    const userIdx = state.selectedUser - 1;
+    const user = users[userIdx];
+    if (!user) { state.pin = ''; updatePinDots(); return; }
+
+    // Handle first-time setup: if placeholder hash, set the PIN
+    if (user.pin_hash === 'REPLACE_WITH_HASH') {
+      await setupPin(user);
+      return;
+    }
+
+    const hash = await sha256(state.pin + user.salt);
+    if (hash === user.pin_hash) {
+      const allUsers = users;
+      state.userId = user.id;
+      state.userName = user.name;
+      state.partnerId = allUsers.find(u => u.id !== user.id)?.id || null;
+      localStorage.setItem('session', JSON.stringify({ userId: user.id, userName: user.name, partnerId: state.partnerId }));
+      enterApp();
+    } else {
+      errEl.textContent = 'Incorrect PIN.';
+      state.pin = ''; updatePinDots();
+      // Shake animation
+      document.getElementById('pin-dots').animate([
+        { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' },
+        { transform: 'translateX(-4px)' }, { transform: 'translateX(0)' }
+      ], { duration: 300 });
+    }
+  } catch (e) {
+    errEl.textContent = 'Login error. Check connection.';
+    console.error(e);
+    state.pin = ''; updatePinDots();
+  }
+}
+
+async function setupPin(user) {
+  if (state.pin.length < 4) return;
+  const salt = crypto.randomUUID();
+  const hash = await sha256(state.pin + salt);
+
+  await sb.from('users').update({ pin_hash: hash, salt }).eq('id', user.id);
+
+  const { data: users } = await sb.from('users').select('id, name').order('created_at');
+  state.userId = user.id;
+  state.userName = user.name;
+  state.partnerId = users?.find(u => u.id !== user.id)?.id || null;
+  localStorage.setItem('session', JSON.stringify({ userId: user.id, userName: user.name, partnerId: state.partnerId }));
+  showToast('PIN set! Welcome, ' + user.name);
+  enterApp();
+}
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function logout() {
+  localStorage.removeItem('session');
+  state.userId = null; state.userName = null; state.pin = '';
+  document.getElementById('main-app').style.display = 'none';
+  document.getElementById('login-page').style.display = 'flex';
+  updatePinDots();
+}
+
+// ── App entry ─────────────────────────────────────────────────────────────────
+
+function enterApp() {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+  document.getElementById('settings-username').textContent = state.userName;
+  fetchExchangeRate().then(() => {
+    loadPage('dashboard');
+  });
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`page-${page}`)?.classList.add('active');
+  document.getElementById(`nav-${page}`)?.classList.add('active');
+  state.currentPage = page;
+  loadPage(page);
+}
+
+async function loadPage(page) {
+  if (page === 'dashboard') await loadDashboard();
+  else if (page === 'us') await loadUSPortfolio();
+  else if (page === 'crypto') await loadCrypto();
+  else if (page === 'gold') await loadGold();
+  else if (page === 'mf') await loadMutualFunds();
+  else if (page === 'cash') await loadCash();
+  else if (page === 'insurance') await loadInsurance();
+  else if (page === 'private') await loadPrivate();
+  else if (page === 'dca') await loadDCA();
+  else if (page === 'partner') await loadPartner();
+  else if (page === 'settings') loadSettings();
+}
+
+// ── Currency ──────────────────────────────────────────────────────────────────
+
+async function fetchExchangeRate() {
+  const { data } = await sb.from('exchange_rates')
+    .select('rate').eq('from_currency', 'USD').eq('to_currency', 'THB')
+    .order('date', { ascending: false }).limit(1);
+  if (data && data.length > 0) state.usdThb = data[0].rate;
+  document.getElementById('settings-rate').textContent = `USD/THB: ${state.usdThb.toFixed(2)}`;
+}
+
+function setCurrency(c) {
+  state.currency = c;
+  document.querySelectorAll('.currency-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === c);
+  });
+  loadPage(state.currentPage);
+}
+
+function fmtUSD(v) { return '$' + (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtTHB(v) { return '฿' + (v || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+function fmtVal(usdVal) { return state.currency === 'THB' ? fmtTHB(usdVal * state.usdThb) : fmtUSD(usdVal); }
+function fmtPct(v) { const s = v >= 0 ? '+' : ''; return s + (v || 0).toFixed(2) + '%'; }
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  const [myNW, partnerNW] = await Promise.all([
+    calcNetWorth(state.userId),
+    state.partnerId ? calcNetWorth(state.partnerId) : Promise.resolve(0)
+  ]);
+
+  const combined = myNW + partnerNW;
+  document.getElementById('nw-combined').textContent = fmtTHB(combined * state.usdThb);
+  document.getElementById('dashboard-my-nw').textContent = fmtTHB(myNW * state.usdThb);
+  document.getElementById('dashboard-partner-nw').textContent = fmtTHB(partnerNW * state.usdThb);
+  document.getElementById('nw-sub').textContent =
+    `Me: ${fmtTHB(myNW * state.usdThb)} · Partner: ${fmtTHB(partnerNW * state.usdThb)}`;
+
+  // Recent alerts
+  const { data: notifs } = await sb.from('notifications_log')
+    .select('notification_type, message, sent_at')
+    .eq('user_id', state.userId)
+    .order('sent_at', { ascending: false })
+    .limit(5);
+
+  const alertsEl = document.getElementById('recent-alerts');
+  if (!notifs || notifs.length === 0) {
+    alertsEl.innerHTML = '<div class="empty"><div class="empty-text">No recent alerts</div></div>';
+    return;
+  }
+  alertsEl.innerHTML = notifs.map(n => `
+    <div class="card card-sm">
+      <div style="font-size:12px;color:var(--text-muted)">${new Date(n.sent_at).toLocaleString()}</div>
+      <div style="font-size:13px;margin-top:4px">${n.message?.slice(0, 120) || ''}</div>
+    </div>
+  `).join('');
+}
+
+async function calcNetWorth(userId) {
+  // Sum all asset classes for a user, return total in USD
+  const [portfolios, crypto, gold, mf, cash, priv] = await Promise.all([
+    sb.from('portfolios').select('id').eq('user_id', userId),
+    sb.from('crypto_holdings').select('coin_id,symbol,quantity').eq('user_id', userId),
+    sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
+    sb.from('mutual_fund_holdings').select('fund_code,units').eq('user_id', userId),
+    sb.from('cash_accounts').select('currency,balance,cash_on_hand_thb').eq('user_id', userId),
+    sb.from('private_investments').select('current_valuation,currency').eq('user_id', userId)
+  ]);
+
+  let total = 0;
+
+  // US Portfolio
+  if (portfolios.data) {
+    for (const p of portfolios.data) {
+      const { data: holdings } = await sb.from('holdings')
+        .select('ticker,shares').eq('portfolio_id', p.id);
+      if (!holdings) continue;
+      for (const h of holdings) {
+        const price = await getLatestPrice(h.ticker);
+        total += h.shares * price;
+      }
+    }
+  }
+
+  // Crypto
+  if (crypto.data) {
+    for (const c of crypto.data) {
+      const price = await getLatestPrice(c.symbol.toUpperCase());
+      total += c.quantity * price;
+    }
+  }
+
+  // Gold
+  if (gold.data) {
+    const goldPrice = await getLatestPrice('XAU');
+    gold.data.forEach(g => total += g.troy_oz * goldPrice);
+  }
+
+  // Mutual funds (THB → USD)
+  if (mf.data) {
+    for (const f of mf.data) {
+      const nav = await getLatestPrice(f.fund_code);
+      total += (f.units * nav) / state.usdThb; // NAV in THB
+    }
+  }
+
+  // Cash
+  if (cash.data) {
+    cash.data.forEach(a => {
+      if (a.currency === 'THB') total += a.balance / state.usdThb;
+      else total += a.balance; // assume USD for FCD (simplified)
+      total += a.cash_on_hand_thb / state.usdThb;
+    });
+  }
+
+  // Private investments
+  if (priv.data) {
+    priv.data.forEach(p => {
+      if (p.currency === 'THB') total += p.current_valuation / state.usdThb;
+      else total += p.current_valuation;
+    });
+  }
+
+  return total;
+}
+
+// ── US Portfolio ──────────────────────────────────────────────────────────────
+
+async function loadUSPortfolio() {
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id, name, type, dca_budget_usd')
+    .eq('user_id', state.userId)
+    .order('created_at');
+
+  if (!portfolios || portfolios.length === 0) {
+    document.getElementById('portfolio-tabs').innerHTML = '';
+    document.getElementById('portfolio-content').innerHTML =
+      '<div class="empty"><div class="empty-icon">📂</div><div class="empty-text">No portfolios yet</div></div>';
+    return;
+  }
+
+  // Build tabs
+  const tabsEl = document.getElementById('portfolio-tabs');
+  tabsEl.innerHTML = portfolios.map((p, i) => `
+    <button class="tab-btn ${i === 0 ? 'active' : ''}" onclick="loadPortfolioTab('${p.id}', this)">
+      ${p.name}
+    </button>
+  `).join('') + `
+    <button class="tab-btn" onclick="navigate('partner')" style="color:var(--accent2)">Partner</button>
+    <button class="tab-btn" onclick="navigate('gold')">Gold</button>
+    <button class="tab-btn" onclick="navigate('dca')">DCA Plan</button>
+  `;
+
+  await loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'));
+}
+
+async function loadPortfolioTab(portfolioId, tabBtn) {
+  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  tabBtn?.classList.add('active');
+
+  const { data: holdings } = await sb.from('holdings')
+    .select('ticker, target_pct, shares, avg_cost_usd')
+    .eq('portfolio_id', portfolioId)
+    .order('target_pct', { ascending: false, nullsFirst: false });
+
+  if (!holdings || holdings.length === 0) {
+    document.getElementById('portfolio-content').innerHTML =
+      '<div class="empty"><div class="empty-text">No holdings in this portfolio</div></div>';
+    return;
+  }
+
+  // Get prices and latest analysis
+  const prices = {};
+  for (const h of holdings) {
+    prices[h.ticker] = await getLatestPrice(h.ticker);
+  }
+
+  const { data: analyses } = await sb.from('ai_analyses')
+    .select('ticker, signal, reasoning, support_level, resistance_level, created_at')
+    .in('ticker', holdings.map(h => h.ticker))
+    .order('created_at', { ascending: false });
+
+  const latestAnalysis = {};
+  if (analyses) {
+    analyses.forEach(a => { if (!latestAnalysis[a.ticker]) latestAnalysis[a.ticker] = a; });
+  }
+
+  // Calculate total portfolio value for current weight
+  const totalValue = holdings.reduce((s, h) => s + h.shares * (prices[h.ticker] || 0), 0);
+  const allocatedTarget = holdings.reduce((s, h) => s + (h.target_pct || 0), 0);
+
+  let html = '';
+
+  holdings.forEach(h => {
+    const currentPrice = prices[h.ticker] || 0;
+    const currentValue = h.shares * currentPrice;
+    const currentPct = totalValue > 0 ? (currentValue / totalValue) * 100 : 0;
+    const target = h.target_pct || 0;
+    const gainLoss = h.avg_cost_usd > 0 ? ((currentPrice - h.avg_cost_usd) / h.avg_cost_usd) * 100 : null;
+    const displayVal = fmtVal(currentValue);
+    const analysis = latestAnalysis[h.ticker];
+
+    // Bar color: green if within 2%, red if off by more than 5%
+    const gap = target - currentPct;
+    const barColor = Math.abs(gap) <= 2 ? 'var(--success)' : Math.abs(gap) <= 5 ? 'var(--warning)' : 'var(--danger)';
+    const fillPct = target > 0 ? Math.min(100, (currentPct / target) * 100) : 0;
+
+    html += `
+      <div class="holding-row">
+        <div class="holding-top">
+          <span class="holding-ticker">${h.ticker}</span>
+          <span class="holding-price">${displayVal}</span>
+        </div>
+        <div class="holding-meta">
+          <span>${fmtVal(currentPrice)} · ${h.shares} shares</span>
+          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
+        </div>
+        ${target > 0 ? `
+        <div class="target-bar-wrap">
+          <div class="target-bar-label">
+            <span>${currentPct.toFixed(1)}% current</span>
+            <span style="color:var(--text-muted)">target ${target}%</span>
+          </div>
+          <div class="target-bar-track">
+            <div class="target-bar-fill" style="width:${fillPct}%;background:${barColor}"></div>
+            <div class="target-bar-target" style="left:100%"></div>
+          </div>
+        </div>` : ''}
+        ${analysis ? `
+        <div style="margin-top:6px;display:flex;align-items:flex-start;gap:8px">
+          <span class="signal signal-${analysis.signal}">${analysis.signal}</span>
+          <span style="font-size:12px;color:var(--text-muted);flex:1">${analysis.reasoning || ''}</span>
+        </div>
+        ${analysis.support_level || analysis.resistance_level ? `
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          ${analysis.support_level ? `S: $${analysis.support_level}` : ''}
+          ${analysis.resistance_level ? ` · R: $${analysis.resistance_level}` : ''}
+        </div>` : ''}
+        ` : ''}
+      </div>
+    `;
+  });
+
+  // Unallocated bar
+  const unallocated = 100 - allocatedTarget;
+  if (unallocated > 0) {
+    html += `<div class="holding-row">
+      <div class="holding-top">
+        <span style="color:var(--text-muted);font-style:italic">Unallocated target</span>
+        <span style="color:var(--text-muted)">${unallocated.toFixed(0)}%</span>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('portfolio-content').innerHTML = `<div class="card">${html}</div>`;
+}
+
+// ── Crypto ────────────────────────────────────────────────────────────────────
+
+async function loadCrypto() {
+  const { data: holdings } = await sb.from('crypto_holdings')
+    .select('coin_id, symbol, name, quantity, avg_cost_usd')
+    .eq('user_id', state.userId);
+
+  const el = document.getElementById('crypto-content');
+
+  if (!holdings || holdings.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">₿</div><div class="empty-text">No crypto holdings</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  for (const h of holdings) {
+    const price = await getLatestPrice(h.symbol.toUpperCase());
+    const value = h.quantity * price;
+    const gainLoss = h.avg_cost_usd > 0 ? ((price - h.avg_cost_usd) / h.avg_cost_usd) * 100 : null;
+
+    html += `
+      <div class="holding-row">
+        <div class="holding-top">
+          <span class="holding-ticker">${h.symbol.toUpperCase()}</span>
+          <span class="holding-price">${fmtVal(value)}</span>
+        </div>
+        <div class="holding-meta">
+          <span>${fmtUSD(price)} · ${h.quantity} ${h.symbol}</span>
+          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Gold ──────────────────────────────────────────────────────────────────────
+
+async function loadGold() {
+  const { data: holdings } = await sb.from('gold_holdings')
+    .select('troy_oz, avg_cost_usd, notes')
+    .eq('user_id', state.userId);
+
+  const el = document.getElementById('gold-content');
+
+  if (!holdings || holdings.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🥇</div><div class="empty-text">No gold holdings</div></div>';
+    return;
+  }
+
+  const goldPrice = await getLatestPrice('XAU');
+
+  let html = '<div class="card">';
+  holdings.forEach(g => {
+    const value = g.troy_oz * goldPrice;
+    const gainLoss = g.avg_cost_usd > 0 ? ((goldPrice - g.avg_cost_usd) / g.avg_cost_usd) * 100 : null;
+    html += `
+      <div class="holding-row">
+        <div class="holding-top">
+          <span class="holding-ticker">XAU/USD</span>
+          <span class="holding-price">${fmtVal(value)}</span>
+        </div>
+        <div class="holding-meta">
+          <span>${fmtUSD(goldPrice)}/oz · ${g.troy_oz} oz</span>
+          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
+        </div>
+        ${g.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${g.notes}</div>` : ''}
+      </div>
+    `;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Mutual Funds ──────────────────────────────────────────────────────────────
+
+async function loadMutualFunds() {
+  let query = sb.from('mutual_fund_holdings')
+    .select('fund_code, fund_name, category, units, buy_price_thb, buy_date')
+    .eq('user_id', state.userId);
+
+  if (state.mfCategory !== 'all') query = query.eq('category', state.mfCategory);
+  const { data: holdings } = await query;
+
+  const el = document.getElementById('mf-content');
+
+  if (!holdings || holdings.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No mutual fund holdings</div></div>';
+    return;
+  }
+
+  let html = '<div class="card">';
+  for (const h of holdings) {
+    const nav = await getLatestPrice(h.fund_code);
+    const currentValue = h.units * nav;
+    const costValue = h.units * h.buy_price_thb;
+    const gainLossThb = currentValue - costValue;
+    const gainLossPct = costValue > 0 ? (gainLossThb / costValue) * 100 : 0;
+
+    html += `
+      <div class="holding-row">
+        <div class="holding-top">
+          <div>
+            <div class="holding-ticker">${h.fund_code}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${h.fund_name || ''} · <span style="color:var(--accent)">${h.category}</span></div>
+          </div>
+          <span class="holding-price">${fmtTHB(currentValue)}</span>
+        </div>
+        <div class="holding-meta">
+          <span>NAV ฿${nav.toFixed(4)} · ${h.units.toLocaleString()} units</span>
+          <span class="pct-change ${gainLossPct >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLossPct)}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+          Cost ฿${costValue.toLocaleString('th-TH', {maximumFractionDigits:0})} ·
+          G/L <span class="${gainLossThb >= 0 ? 'text-success' : 'text-danger'}">${gainLossThb >= 0 ? '+' : ''}฿${gainLossThb.toLocaleString('th-TH', {maximumFractionDigits:0})}</span>
+        </div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function setMFCategory(cat, btn) {
+  state.mfCategory = cat;
+  document.querySelectorAll('#page-mf .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadMutualFunds();
+}
+
+// ── Cash ──────────────────────────────────────────────────────────────────────
+
+async function loadCash() {
+  const { data: accounts } = await sb.from('cash_accounts')
+    .select('*').eq('user_id', state.userId);
+
+  const el = document.getElementById('cash-content');
+  if (!accounts || accounts.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">💵</div><div class="empty-text">No cash accounts</div></div>';
+    return;
+  }
+
+  const grouped = { saving: [], fixed_deposit: [], fcd: [] };
+  accounts.forEach(a => grouped[a.sub_type]?.push(a));
+
+  const labels = { saving: 'Savings', fixed_deposit: 'Fixed Deposits', fcd: 'Foreign Currency (FCD)' };
+  let html = '';
+
+  Object.entries(grouped).forEach(([type, accs]) => {
+    if (accs.length === 0) return;
+    html += `<div class="section-header">${labels[type]}</div><div class="card">`;
+    accs.forEach(a => {
+      const thbVal = a.currency === 'THB' ? a.balance : a.balance * state.usdThb;
+      html += `
+        <div class="holding-row">
+          <div class="holding-top">
+            <div>
+              <div class="holding-ticker" style="font-size:14px">${a.name}</div>
+              ${a.bank ? `<div style="font-size:11px;color:var(--text-muted)">${a.bank}</div>` : ''}
+            </div>
+            <span class="holding-price">${fmtTHB(thbVal + a.cash_on_hand_thb)}</span>
+          </div>
+          <div class="holding-meta">
+            <span>${a.currency !== 'THB' ? `${a.currency} ${a.balance.toLocaleString()} · ` : ''}฿${a.balance.toLocaleString('th-TH', {maximumFractionDigits:0})}</span>
+            ${a.interest_rate ? `<span style="color:var(--success)">${a.interest_rate}% p.a.</span>` : ''}
+          </div>
+          ${a.maturity_date ? `<div style="font-size:12px;color:var(--text-muted)">Matures: ${a.maturity_date}</div>` : ''}
+          ${a.cash_on_hand_thb > 0 ? `<div style="font-size:12px;color:var(--text-muted)">+ ฿${a.cash_on_hand_thb.toLocaleString('th-TH')} cash on hand</div>` : ''}
+        </div>
+      `;
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+// ── Insurance ─────────────────────────────────────────────────────────────────
+
+async function loadInsurance() {
+  const { data: policies } = await sb.from('insurance_policies')
+    .select('*').eq('user_id', state.userId);
+
+  const el = document.getElementById('insurance-content');
+  if (!policies || policies.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">No insurance policies</div></div>';
+    return;
+  }
+
+  el.innerHTML = policies.map(p => `
+    <div class="card">
+      <div style="font-weight:700;font-size:15px">${p.policy_name}</div>
+      ${p.insurer ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${p.insurer}</div>` : ''}
+      <div class="stat-row">
+        <div class="stat-pill"><strong>${fmtTHB(p.annual_premium_thb)}</strong>/yr premium</div>
+        <div class="stat-pill">Assured <strong>${fmtTHB(p.sum_assured_thb)}</strong></div>
+        <div class="stat-pill">Surrender <strong>${fmtTHB(p.surrender_value_thb)}</strong></div>
+      </div>
+      ${p.start_date ? `<div style="font-size:12px;color:var(--text-muted)">Start: ${p.start_date}${p.maturity_date ? ` · Matures: ${p.maturity_date}` : ''}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Private Investments ───────────────────────────────────────────────────────
+
+async function loadPrivate() {
+  const { data: investments } = await sb.from('private_investments')
+    .select('*').eq('user_id', state.userId);
+
+  const el = document.getElementById('private-content');
+  if (!investments || investments.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🏢</div><div class="empty-text">No private investments</div></div>';
+    return;
+  }
+
+  el.innerHTML = investments.map(inv => {
+    const isThb = inv.currency === 'THB';
+    const fmt = isThb ? fmtTHB : fmtUSD;
+    const gainLoss = inv.current_valuation - inv.invested_amount;
+    const gainLossPct = inv.invested_amount > 0 ? (gainLoss / inv.invested_amount) * 100 : 0;
+    return `
+      <div class="card">
+        <div class="holding-top">
+          <div class="holding-ticker">${inv.name}</div>
+          <span class="holding-price">${fmt(inv.current_valuation)}</span>
+        </div>
+        <div class="holding-meta" style="margin-top:6px">
+          <span>Invested: ${fmt(inv.invested_amount)}</span>
+          <span class="pct-change ${gainLossPct >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLossPct)}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+          Last updated: ${new Date(inv.last_updated_at).toLocaleDateString()}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── DCA Plan ──────────────────────────────────────────────────────────────────
+
+async function loadDCA() {
+  const monthYear = new Date().toISOString().slice(0, 7);
+  const { data: plans } = await sb.from('dca_plans')
+    .select('*').eq('user_id', state.userId).eq('month_year', monthYear);
+
+  const el = document.getElementById('dca-content');
+
+  if (!plans || plans.length === 0) {
+    el.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📅</div>
+        <div class="empty-text">No DCA plan for ${monthYear}</div>
+        <div style="font-size:12px;margin-top:8px">Plans are generated automatically on the 1st of each month</div>
+      </div>`;
+    return;
+  }
+
+  const plan = plans[0];
+  const { data: items } = await sb.from('dca_plan_items')
+    .select('*').eq('plan_id', plan.id);
+
+  const statusColor = { draft: 'var(--warning)', approved: 'var(--success)', executed: 'var(--accent)' };
+  const isEditable = plan.status === 'draft';
+
+  let html = `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700">${monthYear} DCA Plan</div>
+          <div style="font-size:13px;color:var(--text-muted)">Budget: ${fmtUSD(plan.total_budget_usd)}</div>
+        </div>
+        <span style="background:${statusColor[plan.status]}22;color:${statusColor[plan.status]};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700">
+          ${plan.status.toUpperCase()}
+        </span>
+      </div>
+    </div>
+    <div class="card">
+      ${(items || []).map(item => `
+        <div class="dca-row">
+          <span class="dca-ticker">${item.ticker}</span>
+          <span class="dca-reasoning">${item.reasoning || ''}</span>
+          ${isEditable
+            ? `<input class="dca-amount-input" type="number" id="dca-${item.id}" value="${item.adjusted_amount_usd || item.suggested_amount_usd}" step="5">`
+            : `<span style="font-weight:700">${fmtUSD(item.adjusted_amount_usd || item.suggested_amount_usd)}</span>`
+          }
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  if (isEditable) {
+    html += `
+      <div style="margin-top:12px">
+        <button class="btn btn-success" onclick="approveDCA('${plan.id}')">Approve Plan</button>
+      </div>
+    `;
+  }
+
+  el.innerHTML = html;
+}
+
+async function approveDCA(planId) {
+  const { data: items } = await sb.from('dca_plan_items').select('id').eq('plan_id', planId);
+  if (!items) return;
+
+  for (const item of items) {
+    const input = document.getElementById(`dca-${item.id}`);
+    if (input) {
+      await sb.from('dca_plan_items').update({
+        adjusted_amount_usd: parseFloat(input.value),
+        is_approved: true
+      }).eq('id', item.id);
+    }
+  }
+
+  await sb.from('dca_plans').update({ status: 'approved' }).eq('id', planId);
+  showToast('DCA plan approved!');
+  loadDCA();
+}
+
+// ── Partner View ──────────────────────────────────────────────────────────────
+
+async function loadPartner() {
+  const el = document.getElementById('partner-content');
+  if (!state.partnerId) {
+    el.innerHTML = '<div class="empty"><div class="empty-text">No partner linked</div></div>';
+    return;
+  }
+
+  const { data: partner } = await sb.from('users').select('name').eq('id', state.partnerId).single();
+
+  let html = `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Viewing ${partner?.name || 'Partner'}'s portfolio (read-only)</div>`;
+
+  // Partner's portfolios
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id, name, type').eq('user_id', state.partnerId);
+
+  if (portfolios) {
+    for (const p of portfolios) {
+      const { data: holdings } = await sb.from('holdings')
+        .select('ticker, shares, avg_cost_usd, target_pct')
+        .eq('portfolio_id', p.id);
+
+      let portValue = 0;
+      for (const h of (holdings || [])) {
+        const price = await getLatestPrice(h.ticker);
+        portValue += h.shares * price;
+      }
+
+      html += `
+        <div class="section-header">${p.name} (${p.type})</div>
+        <div class="card">
+          <div style="font-size:20px;font-weight:700">${fmtTHB(portValue * state.usdThb)}</div>
+          ${(holdings || []).map(h => `<div style="font-size:13px;color:var(--text-muted);margin-top:4px">${h.ticker} · target ${h.target_pct || '—'}%</div>`).join('')}
+        </div>
+      `;
+    }
+  }
+
+  // Partner crypto, gold, MF totals
+  const [crypto, gold, mf] = await Promise.all([
+    sb.from('crypto_holdings').select('symbol,quantity').eq('user_id', state.partnerId),
+    sb.from('gold_holdings').select('troy_oz').eq('user_id', state.partnerId),
+    sb.from('mutual_fund_holdings').select('fund_code,units').eq('user_id', state.partnerId)
+  ]);
+
+  let cryptoVal = 0;
+  for (const c of (crypto.data || [])) {
+    cryptoVal += c.quantity * (await getLatestPrice(c.symbol.toUpperCase()));
+  }
+
+  const goldPrice = await getLatestPrice('XAU');
+  const goldVal = (gold.data || []).reduce((s, g) => s + g.troy_oz * goldPrice, 0);
+
+  let mfVal = 0;
+  for (const f of (mf.data || [])) {
+    mfVal += (f.units * (await getLatestPrice(f.fund_code))) / state.usdThb;
+  }
+
+  if (cryptoVal > 0 || goldVal > 0 || mfVal > 0) {
+    html += `
+      <div class="section-header">Other Assets</div>
+      <div class="card">
+        <div class="stat-row">
+          ${cryptoVal > 0 ? `<div class="stat-pill">Crypto <strong>${fmtTHB(cryptoVal * state.usdThb)}</strong></div>` : ''}
+          ${goldVal > 0 ? `<div class="stat-pill">Gold <strong>${fmtTHB(goldVal * state.usdThb)}</strong></div>` : ''}
+          ${mfVal > 0 ? `<div class="stat-pill">MF <strong>${fmtTHB(mfVal * state.usdThb)}</strong></div>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+function loadSettings() {
+  document.getElementById('settings-username').textContent = state.userName || 'User';
+  fetchExchangeRate();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function getLatestPrice(symbol) {
+  if (state.cache[symbol] !== undefined) return state.cache[symbol];
+  const { data } = await sb.from('market_data')
+    .select('price').eq('symbol', symbol)
+    .order('fetched_at', { ascending: false }).limit(1);
+  const price = data?.[0]?.price || 0;
+  state.cache[symbol] = price;
+  return price;
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+(function init() {
+  // Check for existing session
+  const saved = localStorage.getItem('session');
+  if (saved) {
+    try {
+      const s = JSON.parse(saved);
+      state.userId = s.userId;
+      state.userName = s.userName;
+      state.partnerId = s.partnerId;
+      enterApp();
+      return;
+    } catch (_) {}
+  }
+  // Show login
+  document.getElementById('login-page').style.display = 'flex';
+})();
+
+// ── Service Worker registration ───────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

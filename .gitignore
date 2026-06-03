@@ -1,0 +1,15 @@
+# Never commit real secrets
+.env
+.env.*
+secrets.*
+*secrets*
+*credentials*
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor
+.vscode/
+.idea/
+*.swp
