@@ -157,3 +157,42 @@ function _logError(source, error) {
     Logger.log(`[ERROR] ${source}: ${error.message}\n${error.stack}`);
   } catch (_) {}
 }
+
+// ── Manual test runners (run these from the GAS IDE to verify each agent) ─────
+
+function testFetchAll() {
+  DataAgent.fetchAll();
+}
+
+function testAnalystGrowth() {
+  AnalystAgent.reviewGrowthPortfolios();
+}
+
+function testAnalystWeekly() {
+  AnalystAgent.reviewDividendAndETF();
+}
+
+function testDCAGenerate() {
+  DCAAgent.generatePlans();
+}
+
+function testNews() {
+  NewsAgent.fetchForAllHoldings();
+}
+
+function testDailyTrigger() {
+  onDailyTrigger();
+}
+
+function testWeeklyTrigger() {
+  onWeeklyTrigger();
+}
+
+function testMonthlyTrigger() {
+  onMonthlyTrigger();
+}
+
+function testRealtimeAlerts() {
+  const alerts = DataAgent.checkRealtimeAlerts();
+  Logger.log('[testRealtimeAlerts] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
+}
