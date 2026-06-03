@@ -273,3 +273,12 @@ const DataAgent = (() => {
 
   return { fetchAll, checkRealtimeAlerts };
 })();
+
+// ── Standalone test runners (visible in GAS function picker) ──────────────────
+
+function testFetchAll()          { DataAgent.fetchAll(); }
+function testFetchRate()         { Logger.log('[test] Fetching USD/THB rate only'); DataAgent.fetchAll(); }
+function testRealtimeAlerts()    {
+  const alerts = DataAgent.checkRealtimeAlerts();
+  Logger.log('[test] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
+}
