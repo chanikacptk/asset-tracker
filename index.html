@@ -425,7 +425,26 @@ body {
       <div style="font-weight:600;margin-bottom:12px">Logged in as <span id="settings-username"></span></div>
       <button class="btn btn-danger" onclick="logout()" style="margin-top:8px">Log Out</button>
     </div>
-    <div class="card" style="margin-top:12px">
+
+    <div class="section-header">Google Apps Script</div>
+    <div class="card">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
+        Web App URL — used to trigger agents from the app.<br>
+        Deploy in GAS: <em>Deploy → New deployment → Web app → Execute as Me → Anyone</em>
+      </div>
+      <input
+        id="settings-gas-url"
+        type="url"
+        placeholder="https://script.google.com/macros/s/.../exec"
+        style="width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;margin-bottom:10px"
+        oninput="document.getElementById('settings-gas-url').style.borderColor='var(--border)'"
+      >
+      <button class="btn btn-primary" onclick="saveGasUrl()">Save URL</button>
+      <div id="settings-gas-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
+    </div>
+
+    <div class="section-header">Market Data</div>
+    <div class="card">
       <div class="section-header" style="margin-top:0">Exchange Rate</div>
       <div id="settings-rate" class="text-muted" style="font-size:14px">Loading...</div>
     </div>
@@ -479,6 +498,7 @@ const state = {
   pin: '',
   currentPage: 'dashboard',
   mfCategory: 'all',
+  gasUrl: null,
   cache: {}
 };
 
@@ -590,13 +610,20 @@ function logout() {
 
 // ── App entry ─────────────────────────────────────────────────────────────────
 
-function enterApp() {
+async function enterApp() {
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('main-app').style.display = 'flex';
   document.getElementById('settings-username').textContent = state.userName;
-  fetchExchangeRate().then(() => {
-    loadPage('dashboard');
-  });
+  await Promise.all([
+    fetchExchangeRate(),
+    _loadGasUrl()
+  ]);
+  loadPage('dashboard');
+}
+
+async function _loadGasUrl() {
+  const { data } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
+  state.gasUrl = data?.value || null;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -1279,9 +1306,70 @@ async function loadPartner() {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
-function loadSettings() {
+async function loadSettings() {
   document.getElementById('settings-username').textContent = state.userName || 'User';
   fetchExchangeRate();
+
+  // Load saved GAS URL from Supabase
+  const { data } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
+  const url = data?.value || '';
+  state.gasUrl = url || null;
+  document.getElementById('settings-gas-url').value = url;
+  document.getElementById('settings-gas-status').textContent = url ? 'URL loaded from Supabase' : '';
+}
+
+async function saveGasUrl() {
+  const input = document.getElementById('settings-gas-url');
+  const statusEl = document.getElementById('settings-gas-status');
+  const url = input.value.trim();
+
+  if (!url) {
+    input.style.borderColor = 'var(--danger)';
+    statusEl.textContent = 'Please enter a URL.';
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+  if (!url.startsWith('https://script.google.com/')) {
+    input.style.borderColor = 'var(--warning)';
+    statusEl.textContent = 'URL should start with https://script.google.com/';
+    statusEl.style.color = 'var(--warning)';
+  }
+
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--text-muted)';
+
+  const { error } = await sb.from('app_config').upsert(
+    { key: 'gas_web_app_url', value: url, updated_at: new Date().toISOString() },
+    { onConflict: 'key' }
+  );
+
+  if (error) {
+    statusEl.textContent = 'Save failed: ' + error.message;
+    statusEl.style.color = 'var(--danger)';
+    return;
+  }
+
+  state.gasUrl = url;
+  statusEl.textContent = 'Saved ✓';
+  statusEl.style.color = 'var(--success)';
+  showToast('GAS URL saved');
+}
+
+// Call GAS Web App endpoint (used by other pages to trigger agents)
+async function callGAS(action, params = {}) {
+  if (!state.gasUrl) {
+    showToast('No GAS URL set — add it in Settings');
+    return null;
+  }
+  const qs = new URLSearchParams({ action, ...params }).toString();
+  try {
+    const resp = await fetch(`${state.gasUrl}?${qs}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } catch (e) {
+    showToast('GAS call failed: ' + e.message);
+    return null;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

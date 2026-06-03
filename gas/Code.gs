@@ -6,7 +6,48 @@
  *   - Every Monday 8AM    → onWeeklyTrigger  (also fires from daily on Mondays)
  *   - 1st of month 7AM    → onMonthlyTrigger (checked inside daily trigger)
  *   - Every 5 minutes     → onRealtimeTrigger
+ *
+ * WEB APP (Deploy → New deployment → Web app → Execute as Me → Anyone):
+ *   GET ?action=fetchData       → DataAgent.fetchAll()
+ *   GET ?action=analyzeGrowth   → AnalystAgent.reviewGrowthPortfolios()
+ *   GET ?action=analyzeWeekly   → AnalystAgent.reviewDividendAndETF()
+ *   GET ?action=generateDCA     → DCAAgent.generatePlans()
+ *   GET ?action=fetchNews       → NewsAgent.fetchForAllHoldings()
+ *   GET ?action=checkAlerts     → DataAgent.checkRealtimeAlerts() (returns JSON)
  */
+
+// ── Web App entry point ───────────────────────────────────────────────────────
+
+function doGet(e) {
+  const action = e?.parameter?.action || '';
+  let result = { ok: true, action: action };
+
+  try {
+    if (action === 'fetchData') {
+      DataAgent.fetchAll();
+    } else if (action === 'analyzeGrowth') {
+      AnalystAgent.reviewGrowthPortfolios();
+    } else if (action === 'analyzeWeekly') {
+      AnalystAgent.reviewDividendAndETF();
+    } else if (action === 'generateDCA') {
+      DCAAgent.generatePlans();
+    } else if (action === 'fetchNews') {
+      NewsAgent.fetchForAllHoldings();
+    } else if (action === 'checkAlerts') {
+      result.alerts = DataAgent.checkRealtimeAlerts();
+    } else if (action === 'ping') {
+      result.message = 'Smart Me GAS is alive';
+    } else {
+      result = { ok: false, error: 'Unknown action: ' + action };
+    }
+  } catch (err) {
+    result = { ok: false, error: err.message };
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
 // ── Entry points (called by time-based triggers) ──────────────────────────────
 
