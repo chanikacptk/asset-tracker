@@ -35,6 +35,9 @@ function doGet(e) {
       NewsAgent.fetchForAllHoldings();
     } else if (action === 'checkAlerts') {
       result.alerts = DataAgent.checkRealtimeAlerts();
+    } else if (action === 'testTelegram') {
+      const userId = e?.parameter?.userId;
+      result.sent = _sendTestTelegram(userId);
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
@@ -47,6 +50,50 @@ function doGet(e) {
   return ContentService
     .createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function _sendTestTelegram(userId) {
+  const token = Config.TELEGRAM_BOT_TOKEN();
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN not set in Script Properties');
+
+  // Look up user record for name + chat_id
+  const users = supabaseRequest('GET', `users?id=eq.${userId}&select=name,telegram_chat_id`);
+  if (!users || users.length === 0) throw new Error('User not found: ' + userId);
+
+  const user = users[0];
+  if (!user.telegram_chat_id) throw new Error('No Telegram Chat ID saved for this user');
+
+  // Bangkok time (UTC+7)
+  const bangkokTime = new Date(Date.now() + 7 * 60 * 60 * 1000)
+    .toUTCString()
+    .replace('GMT', '+07:00')
+    .replace(/:\d{2} /, ' ');
+
+  const msg =
+    '🤖 *Smart Me — Test Alert*\n' +
+    '━━━━━━━━━━━━━━━━━━\n' +
+    '✅ Telegram connected successfully\\!\n' +
+    `👤 User: ${user.name}\n` +
+    `🕐 Time: ${bangkokTime}\n` +
+    '📡 Status: All systems operational\n' +
+    '━━━━━━━━━━━━━━━━━━\n' +
+    '_Smart Me Asset Tracker_';
+
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const resp = UrlFetchApp.fetch(url, {
+    method: 'POST',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      chat_id: user.telegram_chat_id,
+      text: msg,
+      parse_mode: 'MarkdownV2'
+    }),
+    muteHttpExceptions: true
+  });
+
+  const body = JSON.parse(resp.getContentText());
+  if (!body.ok) throw new Error('Telegram error: ' + body.description);
+  return true;
 }
 
 // ── Entry points (called by time-based triggers) ──────────────────────────────
