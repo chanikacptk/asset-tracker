@@ -36,7 +36,7 @@ const DataAgent = (() => {
     if (!data) return;
     const rate = data.regularMarketPrice;
     const today = _dateStr();
-    supabaseRequest('POST', 'exchange_rates?on_conflict=from_currency,to_currency,date', {
+    supabaseUpsert('exchange_rates?on_conflict=from_currency,to_currency,date', {
       from_currency: 'USD',
       to_currency: 'THB',
       rate: rate,

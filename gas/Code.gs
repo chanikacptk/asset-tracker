@@ -108,7 +108,7 @@ function setupTriggers() {
   Logger.log('[Orchestrator] Triggers set up: daily@8AM + every5min');
 }
 
-// ── Supabase helper ───────────────────────────────────────────────────────────
+// ── Supabase helpers ──────────────────────────────────────────────────────────
 
 function supabaseRequest(method, path, payload) {
   const url = Config.SUPABASE_URL() + '/rest/v1/' + path;
@@ -124,6 +124,27 @@ function supabaseRequest(method, path, payload) {
   const code = response.getResponseCode();
   if (code >= 400) {
     throw new Error(`Supabase ${method} ${path} → ${code}: ${response.getContentText()}`);
+  }
+  const text = response.getContentText();
+  return text ? JSON.parse(text) : null;
+}
+
+// INSERT … ON CONFLICT DO UPDATE — requires the merge-duplicates Prefer header
+function supabaseUpsert(path, payload) {
+  const url = Config.SUPABASE_URL() + '/rest/v1/' + path;
+  const headers = Object.assign({}, Config.supabaseHeaders(), {
+    'Prefer': 'return=representation,resolution=merge-duplicates'
+  });
+  const options = {
+    method: 'POST',
+    headers: headers,
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+  const response = UrlFetchApp.fetch(url, options);
+  const code = response.getResponseCode();
+  if (code >= 400) {
+    throw new Error(`Supabase UPSERT ${path} → ${code}: ${response.getContentText()}`);
   }
   const text = response.getContentText();
   return text ? JSON.parse(text) : null;
