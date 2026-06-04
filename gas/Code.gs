@@ -64,20 +64,23 @@ function _sendTestTelegram(userId) {
   if (!user.telegram_chat_id) throw new Error('No Telegram Chat ID saved for this user');
 
   // Bangkok time (UTC+7)
-  const bangkokTime = new Date(Date.now() + 7 * 60 * 60 * 1000)
-    .toUTCString()
-    .replace('GMT', '+07:00')
-    .replace(/:\d{2} /, ' ');
+  const bangkokDate = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const bangkokTime = bangkokDate.toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'UTC'   // already offset above
+  }) + ' (Bangkok)';
 
+  // HTML parse mode — no character escaping needed
   const msg =
-    '🤖 *Smart Me — Test Alert*\n' +
+    '🤖 <b>Smart Me — Test Alert</b>\n' +
     '━━━━━━━━━━━━━━━━━━\n' +
-    '✅ Telegram connected successfully\\!\n' +
+    '✅ Telegram connected successfully!\n' +
     `👤 User: ${user.name}\n` +
     `🕐 Time: ${bangkokTime}\n` +
     '📡 Status: All systems operational\n' +
     '━━━━━━━━━━━━━━━━━━\n' +
-    '_Smart Me Asset Tracker_';
+    '<i>Smart Me Asset Tracker</i>';
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const resp = UrlFetchApp.fetch(url, {
@@ -86,7 +89,7 @@ function _sendTestTelegram(userId) {
     payload: JSON.stringify({
       chat_id: user.telegram_chat_id,
       text: msg,
-      parse_mode: 'MarkdownV2'
+      parse_mode: 'HTML'
     }),
     muteHttpExceptions: true
   });
