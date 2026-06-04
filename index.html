@@ -1876,7 +1876,7 @@ async function saveHolding() {
 
   if (!ticker) { errorEl.textContent = 'Ticker is required.'; return; }
   if (isNaN(shares) || shares < 0) { errorEl.textContent = 'Enter a valid number of shares.'; return; }
-  if (isNaN(cost) || cost < 0)     { errorEl.textContent = 'Enter a valid average cost.'; return; }
+  if (isNaN(cost) || cost <= 0)    { errorEl.textContent = 'Enter a valid avg cost (must be > 0).'; return; }
 
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving…';
@@ -1902,7 +1902,9 @@ async function saveHolding() {
     );
     if (error) throw new Error(error.message);
 
-    delete state.cache[ticker];
+    // Keep the GAS-fetched price in cache so the portfolio view shows it
+    // immediately (market_data won't have a row yet for brand-new tickers)
+    if (!state.cache[ticker] && cost > 0) state.cache[ticker] = cost;
     closeAddHolding();
     showToast(`${ticker} saved`);
     await loadUSPortfolio();
