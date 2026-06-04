@@ -56,47 +56,57 @@ function _sendTestTelegram(userId) {
   const token = Config.TELEGRAM_BOT_TOKEN();
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN not set in Script Properties');
 
-  // Look up user record for name + chat_id
-  const users = supabaseRequest('GET', `users?id=eq.${userId}&select=name,telegram_chat_id`);
-  if (!users || users.length === 0) throw new Error('User not found: ' + userId);
-
-  const user = users[0];
-  if (!user.telegram_chat_id) throw new Error('No Telegram Chat ID saved for this user');
+  // Fetch ALL users so we can notify both
+  const allUsers = supabaseRequest('GET', 'users?select=id,name,telegram_chat_id');
+  if (!allUsers || allUsers.length === 0) throw new Error('No users found');
 
   // Bangkok time (UTC+7)
   const bangkokDate = new Date(Date.now() + 7 * 60 * 60 * 1000);
   const bangkokTime = bangkokDate.toLocaleString('en-GB', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
-    timeZone: 'UTC'   // already offset above
+    timeZone: 'UTC'
   }) + ' (Bangkok)';
 
-  // HTML parse mode — no character escaping needed
-  const msg =
-    '🤖 <b>Smart Me — Test Alert</b>\n' +
-    '━━━━━━━━━━━━━━━━━━\n' +
-    '✅ Telegram connected successfully!\n' +
-    `👤 User: ${user.name}\n` +
-    `🕐 Time: ${bangkokTime}\n` +
-    '📡 Status: All systems operational\n' +
-    '━━━━━━━━━━━━━━━━━━\n' +
-    '<i>Smart Me Asset Tracker</i>';
+  const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+  const sent = [];
+  const failed = [];
 
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const resp = UrlFetchApp.fetch(url, {
-    method: 'POST',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      chat_id: user.telegram_chat_id,
-      text: msg,
-      parse_mode: 'HTML'
-    }),
-    muteHttpExceptions: true
+  allUsers.forEach(function(user) {
+    if (!user.telegram_chat_id) return; // skip users with no chat ID
+
+    const msg =
+      '🤖 <b>Smart Me — Test Alert</b>\n' +
+      '━━━━━━━━━━━━━━━━━━\n' +
+      '✅ Telegram connected successfully!\n' +
+      `👤 User: ${user.name}\n` +
+      `🕐 Time: ${bangkokTime}\n` +
+      '📡 Status: All systems operational\n' +
+      '━━━━━━━━━━━━━━━━━━\n' +
+      '<i>Smart Me Asset Tracker</i>';
+
+    const resp = UrlFetchApp.fetch(telegramUrl, {
+      method: 'POST',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: user.telegram_chat_id, text: msg, parse_mode: 'HTML' }),
+      muteHttpExceptions: true
+    });
+
+    const body = JSON.parse(resp.getContentText());
+    if (body.ok) {
+      sent.push(user.name);
+    } else {
+      failed.push(user.name + ': ' + body.description);
+    }
   });
 
-  const body = JSON.parse(resp.getContentText());
-  if (!body.ok) throw new Error('Telegram error: ' + body.description);
-  return true;
+  if (sent.length === 0 && failed.length > 0) {
+    throw new Error(failed.join('; '));
+  }
+  if (failed.length > 0) {
+    Logger.log('[Telegram] Partial failure: ' + failed.join('; '));
+  }
+  return { sent: sent, failed: failed };
 }
 
 // ── Entry points (called by time-based triggers) ──────────────────────────────

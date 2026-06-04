@@ -1513,11 +1513,23 @@ async function saveChatId(who) {
 
   statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)';
 
-  // Determine which user row to update
+  // Resolve target user ID — always fetch from DB to avoid stale state.partnerId
   let targetUserId = state.userId;
-  if (!isMe && state.partnerId) targetUserId = state.partnerId;
+  if (!isMe) {
+    // Partner = any user row that isn't me
+    const { data: others } = await sb.from('users')
+      .select('id').neq('id', state.userId).limit(1);
+    if (!others || others.length === 0) {
+      statusEl.textContent = 'Partner user not found in DB.';
+      statusEl.style.color = 'var(--danger)';
+      return;
+    }
+    targetUserId = others[0].id;
+    state.partnerId = targetUserId; // keep state in sync
+  }
 
-  const { error } = await sb.from('users').update({ telegram_chat_id: chatId }).eq('id', targetUserId);
+  const { error } = await sb.from('users')
+    .update({ telegram_chat_id: chatId }).eq('id', targetUserId);
 
   if (error) {
     statusEl.textContent = 'Save failed: ' + error.message;
