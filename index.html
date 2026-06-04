@@ -1786,25 +1786,43 @@ function onPortfolioSelectChange() {
 }
 
 async function _onTickerInput(query) {
-  // Try Yahoo Finance search
-  try {
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=0&quotesCount=6&enableFuzzyQuery=false`;
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error();
-    const data = await resp.json();
-    const quotes = (data.quotes || []).filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF');
-    _showSuggestions(quotes);
-  } catch (_) {
-    // CORS or network failure — show nothing, just show cached price
+  const priceEl = document.getElementById('modal-live-price');
+
+  if (!state.gasUrl) {
+    priceEl.textContent = 'Set GAS URL in Settings to enable price lookup';
+    priceEl.style.color = 'var(--warning)';
+    return;
   }
 
-  // Always try to show cached price
-  const price = await getLatestPrice(query);
-  if (price > 0) {
-    document.getElementById('modal-live-price').textContent = `Last price: ${fmtUSD(price)}`;
+  priceEl.textContent = 'Looking up…';
+  priceEl.style.color = 'var(--text-muted)';
+
+  // Run search + price fetch in parallel via GAS
+  const [searchResult, priceResult] = await Promise.all([
+    callGAS('searchTicker', { q: query }),
+    callGAS('getPrice', { symbol: query })
+  ]);
+
+  // Show autocomplete suggestions
+  if (searchResult?.ok && searchResult.quotes?.length > 0) {
+    _showSuggestions(searchResult.quotes);
+  } else {
+    document.getElementById('ticker-suggestions').style.display = 'none';
+  }
+
+  // Show live price
+  if (priceResult?.ok && priceResult.price > 0) {
+    const price = priceResult.price;
+    priceEl.textContent = `${priceResult.name} — ${fmtUSD(price)}`;
+    priceEl.style.color = 'var(--success)';
     if (!document.getElementById('modal-cost').value) {
       document.getElementById('modal-cost').value = price.toFixed(4);
     }
+    // Cache it so the portfolio view uses it immediately after adding
+    state.cache[query.toUpperCase()] = price;
+  } else {
+    priceEl.textContent = priceResult?.error || 'Ticker not found on Yahoo Finance';
+    priceEl.style.color = 'var(--danger)';
   }
 }
 
@@ -1814,7 +1832,7 @@ function _showSuggestions(quotes) {
   box.innerHTML = quotes.map(q => `
     <div class="ticker-suggestion" onmousedown="pickSuggestion('${q.symbol}')">
       <span class="suggestion-symbol">${q.symbol}</span>
-      <span class="suggestion-name">${q.shortname || q.longname || ''}</span>
+      <span class="suggestion-name">${q.name || ''}</span>
     </div>
   `).join('');
   box.style.display = 'block';

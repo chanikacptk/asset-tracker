@@ -35,6 +35,19 @@ function doGet(e) {
       NewsAgent.fetchForAllHoldings();
     } else if (action === 'checkAlerts') {
       result.alerts = DataAgent.checkRealtimeAlerts();
+    } else if (action === 'getPrice') {
+      const symbol = e?.parameter?.symbol || '';
+      if (!symbol) throw new Error('symbol required');
+      const data = _yahooQuoteMeta(symbol);
+      if (!data) throw new Error('Ticker not found: ' + symbol);
+      result.symbol = symbol.toUpperCase();
+      result.price = data.regularMarketPrice;
+      result.name = data.shortName || data.longName || symbol;
+      result.currency = data.currency || 'USD';
+    } else if (action === 'searchTicker') {
+      const q = e?.parameter?.q || '';
+      if (!q) throw new Error('q required');
+      result.quotes = _yahooSearch(q);
     } else if (action === 'testTelegram') {
       const userId = e?.parameter?.userId;
       result.sent = _sendTestTelegram(userId);
@@ -107,6 +120,40 @@ function _sendTestTelegram(userId) {
     Logger.log('[Telegram] Partial failure: ' + failed.join('; '));
   }
   return { sent: sent, failed: failed };
+}
+
+function _yahooQuoteMeta(symbol) {
+  try {
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+      encodeURIComponent(symbol) + '?interval=1d&range=1d';
+    const resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (resp.getResponseCode() !== 200) return null;
+    const data = JSON.parse(resp.getContentText());
+    return data?.chart?.result?.[0]?.meta || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function _yahooSearch(query) {
+  try {
+    const url = 'https://query1.finance.yahoo.com/v1/finance/search?q=' +
+      encodeURIComponent(query) + '&newsCount=0&quotesCount=8&enableFuzzyQuery=false';
+    const resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (resp.getResponseCode() !== 200) return [];
+    const data = JSON.parse(resp.getContentText());
+    return (data.quotes || [])
+      .filter(function(q) { return q.quoteType === 'EQUITY' || q.quoteType === 'ETF'; })
+      .map(function(q) { return { symbol: q.symbol, name: q.shortname || q.longname || '' }; });
+  } catch (e) {
+    return [];
+  }
 }
 
 // ── Entry points (called by time-based triggers) ──────────────────────────────
