@@ -876,7 +876,7 @@ async function loadDashboard() {
 
   document.getElementById('db-user-cards').innerHTML = `
     <div class="db-user-card">
-      <div class="db-user-name">${state.userAvatar} ${state.userName}<br><span class="db-user-pct">(${myPct.toFixed(1)}% / 50%)</span></div>
+      <div class="db-user-name">${state.userAvatar} ${state.userName}</div>
       <div class="db-donut-wrap"><canvas id="donut-my"></canvas></div>
       <div class="db-legend" id="legend-my"></div>
       <div class="db-card-actions">
@@ -885,7 +885,7 @@ async function loadDashboard() {
       </div>
     </div>
     <div class="db-user-card">
-      <div class="db-user-name">${partnerAvatar} ${partnerName}<br><span class="db-user-pct">(${partPct.toFixed(1)}% / 50%)</span></div>
+      <div class="db-user-name">${partnerAvatar} ${partnerName}</div>
       <div class="db-donut-wrap"><canvas id="donut-partner"></canvas></div>
       <div class="db-legend" id="legend-partner"></div>
       <div class="db-card-actions">
