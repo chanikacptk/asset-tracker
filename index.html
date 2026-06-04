@@ -1793,7 +1793,7 @@ function onPortfolioSelectChange() {
     val === '__new__' ? 'block' : 'none';
 }
 
-async function _onTickerInput(query) {
+async function _onTickerInput(query, priceOnly = false) {
   const priceEl = document.getElementById('modal-live-price');
 
   if (!state.gasUrl) {
@@ -1805,17 +1805,19 @@ async function _onTickerInput(query) {
   priceEl.textContent = 'Looking up…';
   priceEl.style.color = 'var(--text-muted)';
 
-  // Run search + price fetch in parallel via GAS
+  // When called after picking a suggestion, skip search to avoid re-showing dropdown
   const [searchResult, priceResult] = await Promise.all([
-    callGAS('searchTicker', { q: query }),
+    priceOnly ? Promise.resolve(null) : callGAS('searchTicker', { q: query }),
     callGAS('getPrice', { symbol: query })
   ]);
 
-  // Show autocomplete suggestions
-  if (searchResult?.ok && searchResult.quotes?.length > 0) {
-    _showSuggestions(searchResult.quotes);
-  } else {
-    document.getElementById('ticker-suggestions').style.display = 'none';
+  // Show autocomplete suggestions (only when not in price-only mode)
+  if (!priceOnly) {
+    if (searchResult?.ok && searchResult.quotes?.length > 0) {
+      _showSuggestions(searchResult.quotes);
+    } else {
+      document.getElementById('ticker-suggestions').style.display = 'none';
+    }
   }
 
   // Show live price
@@ -1852,7 +1854,7 @@ function pickSuggestion(symbol) {
   const input = document.getElementById('modal-ticker');
   input.value = symbol;
   document.getElementById('ticker-suggestions').style.display = 'none';
-  _onTickerInput(symbol);
+  _onTickerInput(symbol, true);
 }
 
 function closeAddHolding() {
