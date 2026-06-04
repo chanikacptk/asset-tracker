@@ -1016,7 +1016,7 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
     const currentPct = totalValue > 0 ? (currentValue / totalValue) * 100 : 0;
     const target = h.target_pct || 0;
     const gainLoss = h.avg_cost_usd > 0 ? ((currentPrice - h.avg_cost_usd) / h.avg_cost_usd) * 100 : null;
-    const displayVal = fmtVal(currentValue);
+    const displayVal = currentPrice > 0 ? fmtVal(currentValue) : 'Price pending';
     const analysis = latestAnalysis[h.ticker];
 
     // Bar color: green if within 2%, red if off by more than 5%
@@ -1031,7 +1031,7 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
           <span class="holding-price">${displayVal}</span>
         </div>
         <div class="holding-meta">
-          <span>${fmtVal(currentPrice)} · ${h.shares} shares</span>
+          <span>${currentPrice > 0 ? fmtVal(currentPrice) : '—'} · ${parseFloat(h.shares.toPrecision(8))} shares</span>
           ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
         </div>
         ${target > 0 ? `
