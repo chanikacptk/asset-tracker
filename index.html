@@ -291,13 +291,13 @@ body {
   <div id="page-dashboard" class="page active">
     <div class="top-bar" style="padding-top:12px">
       <div class="db-totals">
-        <div class="db-total-lbl">มูลค่ารวม</div>
+        <div class="db-total-lbl">Total Value</div>
         <div class="db-total-val" id="db-total">$—</div>
-        <div class="db-pnl-row" id="db-pnl">กำไร/ขาดทุน: —</div>
+        <div class="db-pnl-row" id="db-pnl">Gain / Loss: —</div>
       </div>
       <div class="db-header-right">
         <div style="display:flex;gap:6px;align-items:center">
-          <button onclick="navigate('us');setTimeout(openAddHolding,120)" style="padding:5px 10px;border-radius:20px;border:none;background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ เพิ่มพอร์ต</button>
+          <button onclick="navigate('us');setTimeout(openAddHolding,120)" style="padding:5px 10px;border-radius:20px;border:none;background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ Add Portfolio</button>
           <div class="currency-toggle">
             <button class="currency-btn active" onclick="setCurrency('USD')">USD</button>
             <button class="currency-btn" onclick="setCurrency('THB')">THB</button>
@@ -683,7 +683,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 }
 .db-user-name { font-size:11px;font-weight:700;text-align:center;margin-bottom:4px;line-height:1.3; }
 .db-user-pct { color:var(--text-muted);font-weight:400;font-size:10px; }
-.db-donut-wrap { position:relative;height:140px; }
+.db-donut-wrap { position:relative;height:180px; }
 .db-legend { display:flex;flex-wrap:wrap;gap:3px 6px;margin-top:6px;font-size:9px; }
 .db-legend-item { display:flex;align-items:center;gap:2px;color:var(--text-muted); }
 .db-card-actions { display:flex;gap:6px;margin-top:8px; }
@@ -869,7 +869,7 @@ async function loadDashboard() {
 
   document.getElementById('db-total').textContent = fmtVal(combined);
   const pnlEl = document.getElementById('db-pnl');
-  pnlEl.textContent = `กำไร/ขาดทุน: ${dispPnL} (${pnlSign}${pnlPct.toFixed(2)}%)`;
+  pnlEl.textContent = `Gain / Loss: ${dispPnL} (${pnlSign}${pnlPct.toFixed(2)}%)`;
   pnlEl.style.color = pnlColor;
   document.getElementById('db-rate-val').textContent  = state.usdThb.toFixed(3);
   document.getElementById('db-rate-date').textContent = new Date().toISOString().slice(0, 10);
@@ -902,7 +902,7 @@ async function loadDashboard() {
   const { data: notifs } = await sb.from('notifications_log')
     .select('notification_type, message, sent_at')
     .eq('user_id', state.userId)
-    .order('sent_at', { ascending: false }).limit(5);
+    .order('sent_at', { ascending: false }).limit(3);
 
   const alertsEl = document.getElementById('recent-alerts');
   if (!notifs || notifs.length === 0) {
