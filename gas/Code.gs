@@ -44,6 +44,14 @@ function doGet(e) {
       result.price = data.regularMarketPrice;
       result.name = data.shortName || data.longName || symbol;
       result.currency = data.currency || 'USD';
+    } else if (action === 'savePrice') {
+      const symbol = (e?.parameter?.symbol || '').toUpperCase();
+      const price  = parseFloat(e?.parameter?.price || '0');
+      const asset_type = e?.parameter?.asset_type || 'stock';
+      const currency   = e?.parameter?.currency   || 'USD';
+      if (!symbol || !(price > 0)) throw new Error('symbol and price > 0 required');
+      DataAgent.savePrice(symbol, price, asset_type, currency);
+      result.saved = true;
     } else if (action === 'searchTicker') {
       const q = e?.parameter?.q || '';
       if (!q) throw new Error('q required');

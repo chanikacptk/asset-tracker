@@ -1902,9 +1902,14 @@ async function saveHolding() {
     );
     if (error) throw new Error(error.message);
 
-    // Keep the GAS-fetched price in cache so the portfolio view shows it
-    // immediately (market_data won't have a row yet for brand-new tickers)
-    if (!state.cache[ticker] && cost > 0) state.cache[ticker] = cost;
+    // Seed market_data so price survives page reloads (GAS uses service role to write)
+    // Fire-and-forget — don't block the UI on this
+    const livePrice = state.cache[ticker] || cost;
+    state.cache[ticker] = livePrice;
+    if (state.gasUrl && livePrice > 0) {
+      callGAS('savePrice', { symbol: ticker, price: livePrice, asset_type: 'stock', currency: 'USD' });
+    }
+
     closeAddHolding();
     showToast(`${ticker} saved`);
     await loadUSPortfolio();

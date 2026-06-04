@@ -271,7 +271,11 @@ const DataAgent = (() => {
     return new Date().toISOString().slice(0, 10);
   }
 
-  return { fetchAll, checkRealtimeAlerts };
+  function savePrice(symbol, price, assetType, currency) {
+    _upsertMarketData(symbol, assetType || 'stock', price, currency || 'USD');
+  }
+
+  return { fetchAll, checkRealtimeAlerts, savePrice };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
