@@ -621,7 +621,8 @@ body {
 }
 .ticker-suggestion {
   display:flex;justify-content:space-between;align-items:center;
-  padding:10px 12px;cursor:pointer;transition:background 0.1s;border-bottom:1px solid var(--border);
+  padding:14px 12px;cursor:pointer;border-bottom:1px solid var(--border);
+  touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;
 }
 .ticker-suggestion:last-child { border-bottom:none; }
 .ticker-suggestion:active { background:var(--surface2); }
@@ -1837,7 +1838,9 @@ function _showSuggestions(quotes) {
   const box = document.getElementById('ticker-suggestions');
   if (!quotes || quotes.length === 0) { box.style.display = 'none'; return; }
   box.innerHTML = quotes.map(q => `
-    <div class="ticker-suggestion" onclick="pickSuggestion('${q.symbol}')">
+    <div class="ticker-suggestion"
+      ontouchstart="event.preventDefault();pickSuggestion('${q.symbol}')"
+      onclick="pickSuggestion('${q.symbol}')">
       <span class="suggestion-symbol">${q.symbol}</span>
       <span class="suggestion-name">${q.name || ''}</span>
     </div>
