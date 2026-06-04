@@ -311,30 +311,28 @@ body {
 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page active">
-    <div class="top-bar">
-      <div class="page-title">Dashboard</div>
-      <div class="currency-toggle">
-        <button class="currency-btn active" onclick="setCurrency('USD')">USD</button>
-        <button class="currency-btn" onclick="setCurrency('THB')">THB</button>
+    <div class="top-bar" style="padding-top:12px">
+      <div class="db-totals">
+        <div class="db-total-lbl">มูลค่ารวม</div>
+        <div class="db-total-val" id="db-total">$—</div>
+        <div class="db-pnl-row" id="db-pnl">กำไร/ขาดทุน: —</div>
+      </div>
+      <div class="db-header-right">
+        <div style="display:flex;gap:6px;align-items:center">
+          <button onclick="navigate('us');setTimeout(openAddHolding,120)" style="padding:5px 10px;border-radius:20px;border:none;background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ เพิ่มพอร์ต</button>
+          <div class="currency-toggle">
+            <button class="currency-btn active" onclick="setCurrency('USD')">USD</button>
+            <button class="currency-btn" onclick="setCurrency('THB')">THB</button>
+          </div>
+          <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn">🌙</button>
+        </div>
+        <div class="db-rate-row">1 USD = <span id="db-rate-val">—</span> THB &nbsp;·&nbsp; <span id="db-rate-date">—</span></div>
       </div>
     </div>
-    <div style="height:16px"></div>
-    <div class="nw-card">
-      <div class="nw-label">Combined Net Worth</div>
-      <div class="nw-amount" id="nw-combined">฿—</div>
-      <div class="nw-sub" id="nw-sub">Loading...</div>
-    </div>
-    <div class="card">
-      <div class="section-header" style="margin-top:0">My Portfolio</div>
-      <div id="dashboard-my-nw" class="nw-amount" style="font-size:26px">฿—</div>
-    </div>
-    <div class="card">
-      <div class="section-header" style="margin-top:0">Partner's Portfolio</div>
-      <div id="dashboard-partner-nw" class="nw-amount" style="font-size:26px">฿—</div>
-    </div>
-    <div class="section-header">Net Worth Over Time</div>
-    <div class="card" style="padding:12px">
-      <div class="chart-wrap"><canvas id="nw-chart"></canvas></div>
+    <div style="height:14px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="db-user-cards">
+      <div class="db-user-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
+      <div class="db-user-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
     </div>
     <div class="section-header">Recent Alerts</div>
     <div id="recent-alerts"></div>
@@ -444,6 +442,17 @@ body {
   <div id="page-settings" class="page">
     <div class="top-bar"><div class="page-title">Settings</div></div>
     <div style="height:16px"></div>
+
+    <!-- Theme toggle -->
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:15px;font-weight:600">Appearance</div>
+        <div style="font-size:12px;color:var(--text-muted)" id="theme-label">Dark mode</div>
+      </div>
+      <div class="theme-toggle-track" onclick="toggleTheme()">
+        <div class="theme-toggle-thumb"></div>
+      </div>
+    </div>
 
     <!-- Profile: avatar + editable name -->
     <div class="card" style="display:flex;align-items:center;gap:16px">
@@ -649,6 +658,65 @@ body {
 }
 .holding-action-btn.edit:active  { border-color:var(--accent);color:var(--accent); }
 .holding-action-btn.del:active   { border-color:var(--danger);color:var(--danger); }
+
+/* ── Dark theme ───────────────────────────────────────────────────────────── */
+html.dark {
+  --bg: #06070a;
+  --surface: #0d0f14;
+  --surface2: #14171f;
+  --border: #1e2230;
+  --text: #eef0f4;
+  --text-muted: #6b7280;
+}
+html.dark .nw-card { background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%); }
+
+/* ── Theme toggle button ──────────────────────────────────────────────────── */
+.theme-btn {
+  width:32px;height:32px;border-radius:50%;border:1px solid var(--border);
+  background:var(--surface2);cursor:pointer;font-size:15px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.15s;
+}
+.theme-btn:active { background:var(--border); }
+
+/* ── Theme toggle row (settings) ─────────────────────────────────────────── */
+.theme-toggle-track {
+  width:44px;height:24px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);
+  position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;
+}
+html.dark .theme-toggle-track { background:var(--accent); border-color:var(--accent); }
+.theme-toggle-thumb {
+  position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:transform 0.2s;
+}
+html.dark .theme-toggle-thumb { transform:translateX(20px); }
+
+/* ── Dashboard redesign ───────────────────────────────────────────────────── */
+.db-header { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
+.db-totals { flex:1;min-width:0; }
+.db-total-lbl { font-size:11px;color:var(--text-muted);margin-bottom:1px; }
+.db-total-val { font-size:24px;font-weight:800;letter-spacing:-0.5px;line-height:1.1; }
+.db-pnl-row { font-size:13px;font-weight:600;margin-top:3px; }
+.db-header-right { display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0; }
+.db-rate-row { font-size:10px;color:var(--text-muted);text-align:right; }
+
+.db-user-card {
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px;display:flex;flex-direction:column;
+}
+.db-user-name { font-size:11px;font-weight:700;text-align:center;margin-bottom:4px;line-height:1.3; }
+.db-user-pct { color:var(--text-muted);font-weight:400;font-size:10px; }
+.db-donut-wrap { position:relative;height:140px; }
+.db-legend { display:flex;flex-wrap:wrap;gap:3px 6px;margin-top:6px;font-size:9px; }
+.db-legend-item { display:flex;align-items:center;gap:2px;color:var(--text-muted); }
+.db-card-actions { display:flex;gap:6px;margin-top:8px; }
+.db-btn-del {
+  flex:1;padding:5px;border:none;border-radius:var(--radius-sm);
+  background:var(--danger);color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+}
+.db-btn-edit {
+  flex:2;padding:5px;border:none;border-radius:var(--radius-sm);
+  background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+}
 </style>
 
 <script>
@@ -673,7 +741,8 @@ const state = {
   mfCategory: 'all',
   gasUrl: null,
   editingHoldingId: null,   // portfolio_id when editing
-  cache: {}
+  cache: {},
+  charts: {}
 };
 
 // ── PIN Auth ──────────────────────────────────────────────────────────────────
@@ -852,27 +921,113 @@ function fmtTHB(v) { return '฿' + (v || 0).toLocaleString('th-TH', { minimumFr
 function fmtVal(usdVal) { return state.currency === 'THB' ? fmtTHB(usdVal * state.usdThb) : fmtUSD(usdVal); }
 function fmtPct(v) { const s = v >= 0 ? '+' : ''; return s + (v || 0).toFixed(2) + '%'; }
 
+// ── Theme ─────────────────────────────────────────────────────────────────────
+
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  document.documentElement.classList.toggle('dark', saved === 'dark');
+  _syncThemeUI();
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  _syncThemeUI();
+}
+
+function _syncThemeUI() {
+  const isDark = document.documentElement.classList.contains('dark');
+  document.querySelectorAll('.theme-btn').forEach(b => b.textContent = isDark ? '☀️' : '🌙');
+  const lbl = document.getElementById('theme-label');
+  if (lbl) lbl.textContent = isDark ? 'Dark mode' : 'Light mode';
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
+const PORTFOLIO_COLORS = ['#ef4444','#22c55e','#f97316','#3b82f6','#a855f7','#06b6d4','#eab308','#ec4899'];
+
+Chart.register({
+  id: 'centerText',
+  afterDraw(chart) {
+    if (chart.config.type !== 'doughnut') return;
+    const opts = chart.options.plugins?.centerText;
+    if (!opts?.value) return;
+    const { ctx, chartArea: { left, right, top, bottom } } = chart;
+    const cx = (left + right) / 2, cy = (top + bottom) / 2;
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 13px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.fillStyle = opts.textColor || '#eef0f4';
+    ctx.fillText(opts.value, cx, cy - 10);
+    ctx.font = '600 10px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.fillStyle = opts.pnlColor || '#22c55e';
+    ctx.fillText(opts.pnl || '', cx, cy + 4);
+    ctx.font = '500 9px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.fillText(opts.pct || '', cx, cy + 16);
+    ctx.restore();
+  }
+});
+
 async function loadDashboard() {
-  const [myNW, partnerNW] = await Promise.all([
-    calcNetWorth(state.userId),
-    state.partnerId ? calcNetWorth(state.partnerId) : Promise.resolve(0)
+  let partnerName = 'Partner', partnerAvatar = '😊';
+  if (state.partnerId) {
+    const { data: pu } = await sb.from('users').select('name, avatar').eq('id', state.partnerId).maybeSingle();
+    if (pu) { partnerName = pu.name || partnerName; partnerAvatar = pu.avatar || partnerAvatar; }
+  }
+
+  const empty = { totalUSD: 0, costBasisUSD: 0, gainLossUSD: 0, portfolios: [], otherUSD: 0 };
+  const [myData, partnerData] = await Promise.all([
+    calcUserData(state.userId),
+    state.partnerId ? calcUserData(state.partnerId) : Promise.resolve(empty)
   ]);
 
-  const combined = myNW + partnerNW;
-  document.getElementById('nw-combined').textContent = fmtTHB(combined * state.usdThb);
-  document.getElementById('dashboard-my-nw').textContent = fmtTHB(myNW * state.usdThb);
-  document.getElementById('dashboard-partner-nw').textContent = fmtTHB(partnerNW * state.usdThb);
-  document.getElementById('nw-sub').textContent =
-    `Me: ${fmtTHB(myNW * state.usdThb)} · Partner: ${fmtTHB(partnerNW * state.usdThb)}`;
+  const combined  = myData.totalUSD + partnerData.totalUSD;
+  const pnl       = myData.gainLossUSD + partnerData.gainLossUSD;
+  const costBasis = myData.costBasisUSD + partnerData.costBasisUSD;
+  const pnlPct    = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+  const myPct     = combined > 0 ? (myData.totalUSD / combined) * 100 : 0;
+  const partPct   = combined > 0 ? (partnerData.totalUSD / combined) * 100 : 0;
+
+  const pnlSign  = pnl >= 0 ? '+' : '';
+  const pnlColor = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+  const dispPnL  = pnlSign + (state.currency === 'THB' ? fmtTHB(pnl * state.usdThb) : fmtUSD(pnl));
+
+  document.getElementById('db-total').textContent = fmtVal(combined);
+  const pnlEl = document.getElementById('db-pnl');
+  pnlEl.textContent = `กำไร/ขาดทุน: ${dispPnL} (${pnlSign}${pnlPct.toFixed(2)}%)`;
+  pnlEl.style.color = pnlColor;
+  document.getElementById('db-rate-val').textContent  = state.usdThb.toFixed(3);
+  document.getElementById('db-rate-date').textContent = new Date().toISOString().slice(0, 10);
+
+  document.getElementById('db-user-cards').innerHTML = `
+    <div class="db-user-card">
+      <div class="db-user-name">${state.userAvatar} ${state.userName}<br><span class="db-user-pct">(${myPct.toFixed(1)}% / 50%)</span></div>
+      <div class="db-donut-wrap"><canvas id="donut-my"></canvas></div>
+      <div class="db-legend" id="legend-my"></div>
+      <div class="db-card-actions">
+        <button class="db-btn-del" onclick="navigate('us')">ลบ</button>
+        <button class="db-btn-edit" onclick="navigate('us')">แก้ไข</button>
+      </div>
+    </div>
+    <div class="db-user-card">
+      <div class="db-user-name">${partnerAvatar} ${partnerName}<br><span class="db-user-pct">(${partPct.toFixed(1)}% / 50%)</span></div>
+      <div class="db-donut-wrap"><canvas id="donut-partner"></canvas></div>
+      <div class="db-legend" id="legend-partner"></div>
+      <div class="db-card-actions">
+        <button class="db-btn-del" onclick="navigate('partner')">ลบ</button>
+        <button class="db-btn-edit" onclick="navigate('partner')">แก้ไข</button>
+      </div>
+    </div>
+  `;
+
+  _renderUserDonut('donut-my', 'legend-my', myData);
+  _renderUserDonut('donut-partner', 'legend-partner', partnerData);
 
   // Recent alerts
   const { data: notifs } = await sb.from('notifications_log')
     .select('notification_type, message, sent_at')
     .eq('user_id', state.userId)
-    .order('sent_at', { ascending: false })
-    .limit(5);
+    .order('sent_at', { ascending: false }).limit(5);
 
   const alertsEl = document.getElementById('recent-alerts');
   if (!notifs || notifs.length === 0) {
@@ -887,62 +1042,105 @@ async function loadDashboard() {
   `).join('');
 }
 
-async function calcNetWorth(userId) {
-  const [portfolios, gold, mf, cash, priv] = await Promise.all([
-    sb.from('portfolios').select('id').eq('user_id', userId),
-    sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
-    sb.from('mutual_fund_holdings').select('fund_code,units').eq('user_id', userId),
-    sb.from('cash_accounts').select('currency,balance,cash_on_hand_thb').eq('user_id', userId),
-    sb.from('private_investments').select('current_valuation,currency').eq('user_id', userId)
-  ]);
+function _renderUserDonut(canvasId, legendId, data) {
+  if (state.charts[canvasId]) { state.charts[canvasId].destroy(); delete state.charts[canvasId]; }
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
 
-  let total = 0;
+  const isDark   = document.documentElement.classList.contains('dark');
+  const textColor = isDark ? '#eef0f4' : '#111827';
+  const pnlSign  = data.gainLossUSD >= 0 ? '+' : '';
+  const pnlColor = data.gainLossUSD >= 0 ? '#22c55e' : '#ef4444';
+  const pnlPct   = data.costBasisUSD > 0 ? (data.gainLossUSD / data.costBasisUSD) * 100 : 0;
 
-  // US Portfolio
-  if (portfolios.data) {
-    for (const p of portfolios.data) {
-      const { data: holdings } = await sb.from('holdings')
-        .select('ticker,shares').eq('portfolio_id', p.id);
-      if (!holdings) continue;
-      for (const h of holdings) {
-        const price = await getLatestPrice(h.ticker);
-        total += h.shares * price;
+  let segs = data.portfolios
+    .filter(p => p.valueUSD > 0)
+    .map((p, i) => ({ label: p.name, value: p.valueUSD, color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length] }));
+  if (data.otherUSD > 0) segs.push({ label: 'Other', value: data.otherUSD, color: '#94a3b8' });
+  const hasData = segs.length > 0;
+  if (!hasData) segs = [{ label: 'Default', value: 1, color: isDark ? '#1e2230' : '#e5e7eb' }];
+
+  state.charts[canvasId] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: segs.map(s => s.label),
+      datasets: [{ data: segs.map(s => s.value), backgroundColor: segs.map(s => s.color), borderWidth: 0, hoverOffset: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '70%',
+      animation: { duration: 500 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: hasData },
+        centerText: {
+          value: fmtVal(data.totalUSD),
+          pnl: pnlSign + (state.currency === 'THB' ? fmtTHB(data.gainLossUSD * state.usdThb) : fmtUSD(data.gainLossUSD)),
+          pct: `(${pnlSign}${pnlPct.toFixed(2)}%)`,
+          pnlColor, textColor
+        }
       }
     }
-  }
+  });
 
-  // Gold
-  if (gold.data) {
-    const goldPrice = await getLatestPrice('XAU');
-    gold.data.forEach(g => total += g.troy_oz * goldPrice);
+  const legendEl = document.getElementById(legendId);
+  if (legendEl) {
+    legendEl.innerHTML = segs.map(s =>
+      `<span class="db-legend-item"><span style="color:${s.color}">●</span> ${s.label}</span>`
+    ).join('');
   }
+}
 
-  // Mutual funds (THB → USD)
-  if (mf.data) {
+async function calcUserData(userId) {
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id, name').eq('user_id', userId).order('created_at');
+
+  const portList = [];
+  let costUS = 0;
+  for (const p of portfolios || []) {
+    const { data: hlds } = await sb.from('holdings')
+      .select('ticker, shares, avg_cost_usd').eq('portfolio_id', p.id);
+    let pVal = 0, pCost = 0;
+    for (const h of hlds || []) {
+      const price = await getLatestPrice(h.ticker);
+      pVal  += h.shares * price;
+      pCost += h.shares * (h.avg_cost_usd || 0);
+    }
+    portList.push({ id: p.id, name: p.name, valueUSD: pVal, costUSD: pCost });
+    costUS += pCost;
+  }
+  const usValue = portList.reduce((s, p) => s + p.valueUSD, 0);
+
+  const [gold, mf, cash, priv] = await Promise.all([
+    sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
+    sb.from('mutual_fund_holdings').select('fund_code, units').eq('user_id', userId),
+    sb.from('cash_accounts').select('currency, balance, cash_on_hand_thb').eq('user_id', userId),
+    sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId)
+  ]);
+
+  let otherUSD = 0;
+  if (gold.data?.length) {
+    const gp = await getLatestPrice('XAU');
+    gold.data.forEach(g => otherUSD += g.troy_oz * gp);
+  }
+  if (mf.data?.length) {
     for (const f of mf.data) {
       const nav = await getLatestPrice(f.fund_code);
-      total += (f.units * nav) / state.usdThb; // NAV in THB
+      otherUSD += (f.units * nav) / state.usdThb;
     }
   }
-
-  // Cash
-  if (cash.data) {
+  if (cash.data?.length) {
     cash.data.forEach(a => {
-      if (a.currency === 'THB') total += a.balance / state.usdThb;
-      else total += a.balance; // assume USD for FCD (simplified)
-      total += a.cash_on_hand_thb / state.usdThb;
+      otherUSD += a.currency === 'THB' ? a.balance / state.usdThb : a.balance;
+      otherUSD += (a.cash_on_hand_thb || 0) / state.usdThb;
     });
   }
-
-  // Private investments
-  if (priv.data) {
+  if (priv.data?.length) {
     priv.data.forEach(p => {
-      if (p.currency === 'THB') total += p.current_valuation / state.usdThb;
-      else total += p.current_valuation;
+      otherUSD += p.currency === 'THB' ? p.current_valuation / state.usdThb : p.current_valuation;
     });
   }
 
-  return total;
+  return { totalUSD: usValue + otherUSD, costBasisUSD: costUS, gainLossUSD: usValue - costUS, portfolios: portList, otherUSD };
 }
 
 // ── US Portfolio ──────────────────────────────────────────────────────────────
@@ -1441,6 +1639,7 @@ async function loadPartner() {
 const EMOJI_LIST = ['😊','😎','🦁','🐯','🦊','🐼','🐨','🦄','🐸','🐙','🦋','🌟','⭐','🔥','💎','👑','🌈','🎯','🏆','🚀','💰','📈','🎸','🌺','🍀'];
 
 async function loadSettings() {
+  _syncThemeUI();
   fetchExchangeRate();
 
   // Load profile
@@ -1652,6 +1851,7 @@ function showToast(msg) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 (function init() {
+  initTheme();
   // Check for existing session
   const saved = localStorage.getItem('session');
   if (saved) {
