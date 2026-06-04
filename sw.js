@@ -1,4 +1,4 @@
-const CACHE = 'smart-me-v5';
+const CACHE = 'smart-me-v6';
 const PRECACHE = [
   '/',
   '/index.html',

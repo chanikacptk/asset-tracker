@@ -1036,7 +1036,7 @@ async function loadUSPortfolio() {
   // Build tabs
   const tabsEl = document.getElementById('portfolio-tabs');
   tabsEl.innerHTML = portfolios.map((p, i) => `
-    <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" onclick="loadPortfolioTab('${p.id}', this)">
+    <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" data-portfolio-name="${p.name.replace(/"/g,'&quot;')}" onclick="loadPortfolioTab('${p.id}', this)">
       ${p.name}
     </button>
   `).join('') + `
@@ -1050,6 +1050,14 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   tabBtn?.classList.add('active');
 
+  const portfolioName = tabBtn?.dataset.portfolioName || tabBtn?.textContent?.trim() || '';
+  const nameHeader = `
+    <div id="port-name-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px;font-weight:700">${portfolioName}</span>
+      <button onclick="startRenamePortfolio('${portfolioId}','${portfolioName.replace(/'/g,"\\'")}')"
+        style="background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1">✏️</button>
+    </div>`;
+
   const { data: holdings } = await sb.from('holdings')
     .select('ticker, target_pct, shares, avg_cost_usd')
     .eq('portfolio_id', portfolioId)
@@ -1057,7 +1065,7 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
 
   if (!holdings || holdings.length === 0) {
     document.getElementById('portfolio-content').innerHTML =
-      '<div class="empty"><div class="empty-text">No holdings in this portfolio</div></div>';
+      `<div class="card">${nameHeader}<div class="empty" style="padding:16px 0 4px"><div class="empty-text">No holdings in this portfolio</div></div></div>`;
     return;
   }
 
@@ -1154,7 +1162,39 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
     </div>`;
   }
 
-  document.getElementById('portfolio-content').innerHTML = `<div class="card">${html}</div>`;
+  document.getElementById('portfolio-content').innerHTML = `<div class="card">${nameHeader}${html}</div>`;
+}
+
+function startRenamePortfolio(portfolioId, currentName) {
+  const row = document.getElementById('port-name-row');
+  if (!row) return;
+  row.innerHTML = `
+    <input id="rename-port-input" value="${currentName}"
+      style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600"
+      onkeydown="if(event.key==='Enter')savePortfolioName('${portfolioId}')">
+    <button onclick="savePortfolioName('${portfolioId}')"
+      style="margin-left:8px;padding:6px 14px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
+    <button onclick="loadPortfolioTab('${portfolioId}',document.querySelector('.tab-btn.active'))"
+      style="margin-left:6px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text-muted);font-size:12px;cursor:pointer">✕</button>
+  `;
+  row.style.alignItems = 'center';
+  document.getElementById('rename-port-input')?.focus();
+  document.getElementById('rename-port-input')?.select();
+}
+
+async function savePortfolioName(portfolioId) {
+  const newName = document.getElementById('rename-port-input')?.value.trim();
+  if (!newName) return;
+  const { error } = await sb.from('portfolios').update({ name: newName }).eq('id', portfolioId);
+  if (error) { showToast('Rename failed'); return; }
+  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => {
+    if (b.dataset.portfolioId === portfolioId) {
+      b.textContent = newName;
+      b.dataset.portfolioName = newName;
+    }
+  });
+  showToast('Renamed to ' + newName);
+  await loadPortfolioTab(portfolioId, document.querySelector('.tab-btn.active'));
 }
 
 // ── Gold ──────────────────────────────────────────────────────────────────────
