@@ -281,29 +281,7 @@ body {
   <div class="user-selector" id="user-selector">
     <div class="user-btn selected" style="opacity:0.4;pointer-events:none">Loading…</div>
   </div>
-  <div class="pin-dots" id="pin-dots">
-    <div class="pin-dot" id="dot-0"></div>
-    <div class="pin-dot" id="dot-1"></div>
-    <div class="pin-dot" id="dot-2"></div>
-    <div class="pin-dot" id="dot-3"></div>
-    <div class="pin-dot" id="dot-4"></div>
-    <div class="pin-dot" id="dot-5"></div>
-  </div>
   <div class="login-error" id="login-error"></div>
-  <div class="pin-keypad" id="pin-keypad">
-    <button class="pin-key" onclick="pinKey('1')">1</button>
-    <button class="pin-key" onclick="pinKey('2')">2</button>
-    <button class="pin-key" onclick="pinKey('3')">3</button>
-    <button class="pin-key" onclick="pinKey('4')">4</button>
-    <button class="pin-key" onclick="pinKey('5')">5</button>
-    <button class="pin-key" onclick="pinKey('6')">6</button>
-    <button class="pin-key" onclick="pinKey('7')">7</button>
-    <button class="pin-key" onclick="pinKey('8')">8</button>
-    <button class="pin-key" onclick="pinKey('9')">9</button>
-    <button class="pin-key" style="opacity:0" disabled></button>
-    <button class="pin-key" onclick="pinKey('0')">0</button>
-    <button class="pin-key del" onclick="pinDel()">⌫</button>
-  </div>
 </div>
 
 <!-- ── MAIN APP ───────────────────────────────────────────────────────────── -->
@@ -735,8 +713,6 @@ const state = {
   partnerId: null,
   currency: 'USD',
   usdThb: 33.5,
-  selectedUserId: null,
-  pin: '',
   currentPage: 'dashboard',
   mfCategory: 'all',
   gasUrl: null,
@@ -747,110 +723,9 @@ const state = {
 
 // ── PIN Auth ──────────────────────────────────────────────────────────────────
 
-function selectUser(btn) {
-  document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-  state.selectedUserId = btn.dataset.userId;
-  state.pin = '';
-  updatePinDots();
-  document.getElementById('login-error').textContent = '';
-}
-
-function pinKey(digit) {
-  if (state.pin.length >= 6) return;
-  state.pin += digit;
-  updatePinDots();
-  if (state.pin.length >= 4) {
-    setTimeout(attemptLogin, 150);
-  }
-}
-
-function pinDel() {
-  state.pin = state.pin.slice(0, -1);
-  updatePinDots();
-  document.getElementById('login-error').textContent = '';
-}
-
-function updatePinDots() {
-  for (let i = 0; i < 6; i++) {
-    document.getElementById(`dot-${i}`).classList.toggle('filled', i < state.pin.length);
-  }
-}
-
-async function attemptLogin() {
-  const errEl = document.getElementById('login-error');
-  errEl.textContent = '';
-
-  if (!state.selectedUserId) {
-    errEl.textContent = 'Select a user first.';
-    state.pin = ''; updatePinDots(); return;
-  }
-
-  try {
-    // Fetch only the selected user's row — no positional guessing
-    const { data: users, error } = await sb.from('users')
-      .select('id, name, pin_hash, salt')
-      .eq('id', state.selectedUserId);
-    if (error || !users || users.length === 0) {
-      errEl.textContent = 'Could not load user.';
-      state.pin = ''; updatePinDots(); return;
-    }
-
-    const user = users[0];
-
-    // First-time PIN setup
-    if (user.pin_hash === 'REPLACE_WITH_HASH') {
-      await setupPin(user);
-      return;
-    }
-
-    const hash = await sha256(state.pin + user.salt);
-    if (hash === user.pin_hash) {
-      const { data: allUsers } = await sb.from('users').select('id').neq('id', user.id);
-      state.userId = user.id;
-      state.userName = user.name;
-      state.partnerId = allUsers?.[0]?.id || null;
-      localStorage.setItem('session', JSON.stringify({ userId: user.id, userName: user.name, partnerId: state.partnerId }));
-      enterApp();
-    } else {
-      errEl.textContent = 'Incorrect PIN.';
-      state.pin = ''; updatePinDots();
-      document.getElementById('pin-dots').animate([
-        { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' },
-        { transform: 'translateX(-4px)' }, { transform: 'translateX(0)' }
-      ], { duration: 300 });
-    }
-  } catch (e) {
-    errEl.textContent = 'Login error. Check connection.';
-    console.error(e);
-    state.pin = ''; updatePinDots();
-  }
-}
-
-async function setupPin(user) {
-  if (state.pin.length < 4) return;
-  const salt = crypto.randomUUID();
-  const hash = await sha256(state.pin + salt);
-
-  await sb.from('users').update({ pin_hash: hash, salt }).eq('id', user.id);
-
-  const { data: users } = await sb.from('users').select('id, name').order('created_at');
-  state.userId = user.id;
-  state.userName = user.name;
-  state.partnerId = users?.find(u => u.id !== user.id)?.id || null;
-  localStorage.setItem('session', JSON.stringify({ userId: user.id, userName: user.name, partnerId: state.partnerId }));
-  showToast('PIN set! Welcome, ' + user.name);
-  enterApp();
-}
-
-async function sha256(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 function logout() {
   localStorage.removeItem('session');
-  state.userId = null; state.userName = null; state.pin = '';
+  state.userId = null; state.userName = null;
   document.getElementById('main-app').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
   updatePinDots();
@@ -1870,23 +1745,31 @@ function showToast(msg) {
 })();
 
 async function initLoginScreen() {
-  const { data: users } = await sb.from('users')
-    .select('id, name, avatar')
-    .order('id');   // order by id is deterministic regardless of created_at ties
-
+  const { data: users } = await sb.from('users').select('id, name, avatar').order('id');
   if (!users || users.length === 0) return;
 
   const selector = document.getElementById('user-selector');
-  selector.innerHTML = users.map((u, i) => `
-    <button class="user-btn ${i === 0 ? 'selected' : ''}"
-      data-user-id="${u.id}"
-      onclick="selectUser(this)">
+  selector.innerHTML = users.map(u => `
+    <button class="user-btn" data-user-id="${u.id}" onclick="loginAs('${u.id}','${u.name}','${u.avatar || '😊'}')">
       ${u.avatar || '😊'} ${u.name}
     </button>
   `).join('');
+}
 
-  // Pre-select the first user
-  state.selectedUserId = users[0].id;
+async function loginAs(userId, userName, userAvatar) {
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = 'Signing in…';
+  try {
+    const { data: allUsers } = await sb.from('users').select('id').neq('id', userId);
+    state.userId   = userId;
+    state.userName = userName;
+    state.userAvatar = userAvatar;
+    state.partnerId = allUsers?.[0]?.id || null;
+    localStorage.setItem('session', JSON.stringify({ userId, userName, partnerId: state.partnerId }));
+    enterApp();
+  } catch (e) {
+    errEl.textContent = 'Login error. Check connection.';
+  }
 }
 
 // Close ticker suggestions when tapping anywhere outside the input or dropdown
