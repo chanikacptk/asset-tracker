@@ -279,8 +279,7 @@ body {
     <div class="login-sub" style="margin-top:6px">Asset Tracker</div>
   </div>
   <div class="user-selector" id="user-selector">
-    <button class="user-btn selected" data-uid="1" onclick="selectUser(this)">User 1</button>
-    <button class="user-btn" data-uid="2" onclick="selectUser(this)">User 2</button>
+    <div class="user-btn selected" style="opacity:0.4;pointer-events:none">Loading…</div>
   </div>
   <div class="pin-dots" id="pin-dots">
     <div class="pin-dot" id="dot-0"></div>
@@ -667,7 +666,7 @@ const state = {
   partnerId: null,
   currency: 'USD',
   usdThb: 33.5,
-  selectedUser: 1,
+  selectedUserId: null,
   pin: '',
   currentPage: 'dashboard',
   mfCategory: 'all',
@@ -681,7 +680,7 @@ const state = {
 function selectUser(btn) {
   document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-  state.selectedUser = parseInt(btn.dataset.uid);
+  state.selectedUserId = btn.dataset.userId;
   state.pin = '';
   updatePinDots();
   document.getElementById('login-error').textContent = '';
@@ -712,18 +711,24 @@ async function attemptLogin() {
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
 
+  if (!state.selectedUserId) {
+    errEl.textContent = 'Select a user first.';
+    state.pin = ''; updatePinDots(); return;
+  }
+
   try {
-    const { data: users, error } = await sb.from('users').select('id, name, pin_hash, salt').order('created_at');
+    // Fetch only the selected user's row — no positional guessing
+    const { data: users, error } = await sb.from('users')
+      .select('id, name, pin_hash, salt')
+      .eq('id', state.selectedUserId);
     if (error || !users || users.length === 0) {
-      errEl.textContent = 'Could not load users.';
+      errEl.textContent = 'Could not load user.';
       state.pin = ''; updatePinDots(); return;
     }
 
-    const userIdx = state.selectedUser - 1;
-    const user = users[userIdx];
-    if (!user) { state.pin = ''; updatePinDots(); return; }
+    const user = users[0];
 
-    // Handle first-time setup: if placeholder hash, set the PIN
+    // First-time PIN setup
     if (user.pin_hash === 'REPLACE_WITH_HASH') {
       await setupPin(user);
       return;
@@ -731,16 +736,15 @@ async function attemptLogin() {
 
     const hash = await sha256(state.pin + user.salt);
     if (hash === user.pin_hash) {
-      const allUsers = users;
+      const { data: allUsers } = await sb.from('users').select('id').neq('id', user.id);
       state.userId = user.id;
       state.userName = user.name;
-      state.partnerId = allUsers.find(u => u.id !== user.id)?.id || null;
+      state.partnerId = allUsers?.[0]?.id || null;
       localStorage.setItem('session', JSON.stringify({ userId: user.id, userName: user.name, partnerId: state.partnerId }));
       enterApp();
     } else {
       errEl.textContent = 'Incorrect PIN.';
       state.pin = ''; updatePinDots();
-      // Shake animation
       document.getElementById('pin-dots').animate([
         { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' },
         { transform: 'translateX(-4px)' }, { transform: 'translateX(0)' }
@@ -1647,9 +1651,30 @@ function showToast(msg) {
       return;
     } catch (_) {}
   }
-  // Show login
+  // Show login and populate user selector with real names from DB
   document.getElementById('login-page').style.display = 'flex';
+  initLoginScreen();
 })();
+
+async function initLoginScreen() {
+  const { data: users } = await sb.from('users')
+    .select('id, name, avatar')
+    .order('id');   // order by id is deterministic regardless of created_at ties
+
+  if (!users || users.length === 0) return;
+
+  const selector = document.getElementById('user-selector');
+  selector.innerHTML = users.map((u, i) => `
+    <button class="user-btn ${i === 0 ? 'selected' : ''}"
+      data-user-id="${u.id}"
+      onclick="selectUser(this)">
+      ${u.avatar || '😊'} ${u.name}
+    </button>
+  `).join('');
+
+  // Pre-select the first user
+  state.selectedUserId = users[0].id;
+}
 
 // ── Service Worker registration ───────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
