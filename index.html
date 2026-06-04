@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0f0f0f">
+<meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Smart Me</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
@@ -15,20 +15,20 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <style>
-/* ── CSS Variables (dark theme) ─────────────────────────────────────────── */
+/* ── CSS Variables (light theme) ─────────────────────────────────────────── */
 :root {
-  --bg: #0f0f0f;
-  --surface: #1a1a1a;
-  --surface2: #242424;
-  --border: #2e2e2e;
-  --accent: #4f9eff;
-  --accent2: #7c5cff;
-  --text: #f0f0f0;
-  --text-muted: #888;
-  --success: #34c759;
-  --danger: #ff453a;
-  --warning: #ffd60a;
-  --orange: #ff9f0a;
+  --bg: #f5f7fa;
+  --surface: #ffffff;
+  --surface2: #f0f2f5;
+  --border: #e1e4e8;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --orange: #ea580c;
   --radius: 12px;
   --radius-sm: 8px;
   --safe-bottom: env(safe-area-inset-bottom, 16px);
@@ -55,6 +55,7 @@ body {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: var(--surface);
   border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.07);
   display: flex;
   padding-bottom: var(--safe-bottom);
   z-index: 100;
@@ -80,6 +81,7 @@ body {
 .card {
   background: var(--surface); border-radius: var(--radius);
   border: 1px solid var(--border); padding: 16px; margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 .card-sm { padding: 12px; }
 
@@ -356,11 +358,30 @@ body {
     <div id="portfolio-content"></div>
   </div>
 
-  <!-- CRYPTO -->
-  <div id="page-crypto" class="page">
-    <div class="top-bar"><div class="page-title">Crypto</div></div>
+  <!-- MORE (hub for gold, cash, insurance, private, DCA, partner) -->
+  <div id="page-more" class="page">
+    <div class="top-bar"><div class="page-title">More</div></div>
     <div style="height:12px"></div>
-    <div id="crypto-content"></div>
+    <div id="more-content">
+      <div class="more-row" onclick="navigate('gold')">
+        <span class="more-icon">🥇</span><div><div class="more-label">Gold</div><div class="more-sub">XAU/USD position</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('cash')">
+        <span class="more-icon">💵</span><div><div class="more-label">Cash</div><div class="more-sub">Savings, FD, FCD</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('insurance')">
+        <span class="more-icon">🛡️</span><div><div class="more-label">Insurance</div><div class="more-sub">Policies & surrender value</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('private')">
+        <span class="more-icon">🏢</span><div><div class="more-label">Private Investments</div><div class="more-sub">Manual valuation</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('dca')">
+        <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('partner')">
+        <span class="more-icon">👥</span><div><div class="more-label">Partner View</div><div class="more-sub">Read-only portfolio</div></div><span class="more-arrow">›</span>
+      </div>
+    </div>
   </div>
 
   <!-- GOLD -->
@@ -424,10 +445,24 @@ body {
   <div id="page-settings" class="page">
     <div class="top-bar"><div class="page-title">Settings</div></div>
     <div style="height:16px"></div>
-    <div class="card">
-      <div style="font-weight:600;margin-bottom:12px">Logged in as <span id="settings-username"></span></div>
-      <button class="btn btn-danger" onclick="logout()" style="margin-top:8px">Log Out</button>
+
+    <!-- Profile: avatar + editable name -->
+    <div class="card" style="display:flex;align-items:center;gap:16px">
+      <button class="avatar-btn" id="settings-avatar-btn" onclick="toggleEmojiPicker()" title="Change avatar">😊</button>
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Display Name</div>
+        <input id="settings-name-input" type="text" maxlength="20" placeholder="Your name"
+          style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-weight:600">
+      </div>
+      <button onclick="saveProfile()" style="padding:8px 14px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;flex-shrink:0">Save</button>
     </div>
+    <!-- Emoji picker (hidden by default) -->
+    <div id="emoji-picker" style="display:none" class="card">
+      <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+    <div id="settings-profile-status" style="font-size:12px;color:var(--text-muted);margin:-8px 0 8px;min-height:16px;padding:0 4px"></div>
+
+    <button class="btn btn-danger" onclick="logout()" style="margin-bottom:16px">Log Out</button>
 
     <div class="section-header">Google Apps Script</div>
     <div class="card">
@@ -491,9 +526,9 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       US
     </button>
-    <button class="nav-item" onclick="navigate('crypto')" id="nav-crypto">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9h4a2 2 0 0 1 0 4H9v4"/><line x1="9" y1="9" x2="9" y2="5"/><line x1="13" y1="9" x2="13" y2="5"/></svg>
-      Crypto
+    <button class="nav-item" onclick="navigate('more')" id="nav-more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+      More
     </button>
     <button class="nav-item" onclick="navigate('mf')" id="nav-mf">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
@@ -510,27 +545,34 @@ body {
 </div><!-- /app -->
 <div id="toast"></div>
 
-<!-- ── ADD HOLDING MODAL ───────────────────────────────────────────────────── -->
-<div id="modal-overlay" onclick="closeAddHolding()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;backdrop-filter:blur(4px)"></div>
-<div id="modal-add-holding" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:90dvh;overflow-y:auto">
+<!-- ── ADD / EDIT HOLDING MODAL ───────────────────────────────────────────── -->
+<div id="modal-overlay" onclick="closeAddHolding()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+<div id="modal-add-holding" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
     <div style="font-size:18px;font-weight:700" id="modal-title">Add Holding</div>
     <button onclick="closeAddHolding()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
   </div>
 
-  <!-- Portfolio type -->
-  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Portfolio</div>
-  <div style="display:flex;gap:8px;margin-bottom:16px" id="modal-type-btns">
-    <button class="modal-type-btn active" data-type="growth"   onclick="selectModalType(this)">Growth</button>
-    <button class="modal-type-btn"        data-type="dividend" onclick="selectModalType(this)">Dividend</button>
-    <button class="modal-type-btn"        data-type="etf"      onclick="selectModalType(this)">ETF</button>
+  <!-- Portfolio selector -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Portfolio</div>
+  <select id="modal-portfolio-select"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px;appearance:auto"
+    onchange="onPortfolioSelectChange()">
+  </select>
+  <div id="modal-new-portfolio-wrap" style="display:none;margin-bottom:14px">
+    <input id="modal-new-portfolio-name" type="text" placeholder="Portfolio name (e.g. Dividend 2, Core ETF…)"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:15px">
   </div>
+  <div style="height:10px"></div>
 
-  <!-- Ticker -->
+  <!-- Ticker with Yahoo autocomplete -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Ticker</div>
-  <input id="modal-ticker" type="text" placeholder="e.g. AAPL" maxlength="10"
-    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;text-transform:uppercase;margin-bottom:14px"
-    oninput="this.value=this.value.toUpperCase()">
+  <div style="position:relative;margin-bottom:4px">
+    <input id="modal-ticker" type="text" placeholder="e.g. AAPL — type to search" maxlength="12" autocomplete="off"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;font-weight:700;text-transform:uppercase">
+    <div id="ticker-suggestions" class="ticker-suggestions" style="display:none"></div>
+  </div>
+  <div id="modal-live-price" style="font-size:12px;color:var(--text-muted);margin-bottom:14px;min-height:16px"></div>
 
   <!-- Shares -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Shares</div>
@@ -540,8 +582,12 @@ body {
   <!-- Avg cost -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Average Cost (USD)</div>
   <input id="modal-cost" type="number" placeholder="0.00" min="0" step="any"
-    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:6px">
-  <div id="modal-live-price" style="font-size:12px;color:var(--text-muted);margin-bottom:16px;min-height:16px"></div>
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
+
+  <!-- Target % -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Target % <span style="font-weight:400;text-transform:none">(optional)</span></div>
+  <input id="modal-target" type="number" placeholder="e.g. 15" min="0" max="100" step="0.5"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:16px">
 
   <div id="modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
   <button class="btn btn-primary" id="modal-save-btn" onclick="saveHolding()">Add to Portfolio</button>
@@ -554,6 +600,55 @@ body {
   transition:all 0.15s;
 }
 .modal-type-btn.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+
+/* More page rows */
+.more-row {
+  display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);
+  border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;
+}
+.more-row:first-child { border-radius:var(--radius) var(--radius) 0 0; }
+.more-row:last-child  { border-radius:0 0 var(--radius) var(--radius); border-bottom:none; }
+.more-row:active { background:var(--surface2); }
+.more-icon  { font-size:24px; flex-shrink:0; }
+.more-label { font-size:15px; font-weight:600; }
+.more-sub   { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.more-arrow { margin-left:auto;color:var(--text-muted);font-size:20px;font-weight:300; }
+
+/* Ticker autocomplete */
+.ticker-suggestions {
+  position:absolute;left:0;right:0;top:100%;background:var(--surface);
+  border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);
+  z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1);overflow:hidden;
+}
+.ticker-suggestion {
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;cursor:pointer;transition:background 0.1s;border-bottom:1px solid var(--border);
+}
+.ticker-suggestion:last-child { border-bottom:none; }
+.ticker-suggestion:active { background:var(--surface2); }
+.suggestion-symbol { font-weight:700;font-size:14px; }
+.suggestion-name   { font-size:12px;color:var(--text-muted);max-width:60%;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+
+/* Profile avatar */
+.avatar-btn {
+  width:64px;height:64px;border-radius:50%;border:2px solid var(--border);
+  background:var(--surface2);font-size:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:border-color 0.15s;
+}
+.avatar-btn:active { border-color:var(--accent); }
+.emoji-grid { display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:4px 0; }
+.emoji-opt  { font-size:24px;text-align:center;padding:6px;border-radius:var(--radius-sm);cursor:pointer;transition:background 0.1s; }
+.emoji-opt:active,.emoji-opt.selected { background:var(--surface2); }
+
+/* Holding action buttons */
+.holding-actions { display:flex;gap:6px;margin-top:6px;justify-content:flex-end; }
+.holding-action-btn {
+  padding:4px 10px;border-radius:20px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;
+  transition:all 0.15s;
+}
+.holding-action-btn.edit:active  { border-color:var(--accent);color:var(--accent); }
+.holding-action-btn.del:active   { border-color:var(--danger);color:var(--danger); }
 </style>
 
 <script>
@@ -568,14 +663,16 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const state = {
   userId: null,
   userName: null,
+  userAvatar: '😊',
   partnerId: null,
   currency: 'USD',
   usdThb: 33.5,
-  selectedUser: 1,    // on login screen
+  selectedUser: 1,
   pin: '',
   currentPage: 'dashboard',
   mfCategory: 'all',
   gasUrl: null,
+  editingHoldingId: null,   // portfolio_id when editing
   cache: {}
 };
 
@@ -690,7 +787,6 @@ function logout() {
 async function enterApp() {
   document.getElementById('login-page').style.display = 'none';
   document.getElementById('main-app').style.display = 'flex';
-  document.getElementById('settings-username').textContent = state.userName;
   await Promise.all([
     fetchExchangeRate(),
     _loadGasUrl()
@@ -717,7 +813,7 @@ function navigate(page) {
 async function loadPage(page) {
   if (page === 'dashboard') await loadDashboard();
   else if (page === 'us') await loadUSPortfolio();
-  else if (page === 'crypto') await loadCrypto();
+  else if (page === 'more') { /* static HTML, nothing to load */ }
   else if (page === 'gold') await loadGold();
   else if (page === 'mf') await loadMutualFunds();
   else if (page === 'cash') await loadCash();
@@ -725,7 +821,7 @@ async function loadPage(page) {
   else if (page === 'private') await loadPrivate();
   else if (page === 'dca') await loadDCA();
   else if (page === 'partner') await loadPartner();
-  else if (page === 'settings') loadSettings();
+  else if (page === 'settings') await loadSettings();
 }
 
 // ── Currency ──────────────────────────────────────────────────────────────────
@@ -787,10 +883,8 @@ async function loadDashboard() {
 }
 
 async function calcNetWorth(userId) {
-  // Sum all asset classes for a user, return total in USD
-  const [portfolios, crypto, gold, mf, cash, priv] = await Promise.all([
+  const [portfolios, gold, mf, cash, priv] = await Promise.all([
     sb.from('portfolios').select('id').eq('user_id', userId),
-    sb.from('crypto_holdings').select('coin_id,symbol,quantity').eq('user_id', userId),
     sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
     sb.from('mutual_fund_holdings').select('fund_code,units').eq('user_id', userId),
     sb.from('cash_accounts').select('currency,balance,cash_on_hand_thb').eq('user_id', userId),
@@ -809,14 +903,6 @@ async function calcNetWorth(userId) {
         const price = await getLatestPrice(h.ticker);
         total += h.shares * price;
       }
-    }
-  }
-
-  // Crypto
-  if (crypto.data) {
-    for (const c of crypto.data) {
-      const price = await getLatestPrice(c.symbol.toUpperCase());
-      total += c.quantity * price;
     }
   }
 
@@ -872,13 +958,11 @@ async function loadUSPortfolio() {
   // Build tabs
   const tabsEl = document.getElementById('portfolio-tabs');
   tabsEl.innerHTML = portfolios.map((p, i) => `
-    <button class="tab-btn ${i === 0 ? 'active' : ''}" onclick="loadPortfolioTab('${p.id}', this)">
+    <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" onclick="loadPortfolioTab('${p.id}', this)">
       ${p.name}
     </button>
   `).join('') + `
-    <button class="tab-btn" onclick="navigate('partner')" style="color:var(--accent2)">Partner</button>
-    <button class="tab-btn" onclick="navigate('gold')">Gold</button>
-    <button class="tab-btn" onclick="navigate('dca')">DCA Plan</button>
+    <button class="tab-btn" onclick="navigate('more')" style="color:var(--accent2)">More ›</button>
   `;
 
   await loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'));
@@ -967,6 +1051,16 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
           ${analysis.resistance_level ? ` · R: $${analysis.resistance_level}` : ''}
         </div>` : ''}
         ` : ''}
+        <div class="holding-actions">
+          <button class="holding-action-btn edit"
+            onclick="openEditHolding('${portfolioId}','${h.ticker}',${h.shares},${h.avg_cost_usd},${h.target_pct || ''})">
+            ✏️ Edit
+          </button>
+          <button class="holding-action-btn del"
+            onclick="deleteHolding('${portfolioId}','${h.ticker}')">
+            🗑 Remove
+          </button>
+        </div>
       </div>
     `;
   });
@@ -983,43 +1077,6 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   }
 
   document.getElementById('portfolio-content').innerHTML = `<div class="card">${html}</div>`;
-}
-
-// ── Crypto ────────────────────────────────────────────────────────────────────
-
-async function loadCrypto() {
-  const { data: holdings } = await sb.from('crypto_holdings')
-    .select('coin_id, symbol, name, quantity, avg_cost_usd')
-    .eq('user_id', state.userId);
-
-  const el = document.getElementById('crypto-content');
-
-  if (!holdings || holdings.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">₿</div><div class="empty-text">No crypto holdings</div></div>';
-    return;
-  }
-
-  let html = '<div class="card">';
-  for (const h of holdings) {
-    const price = await getLatestPrice(h.symbol.toUpperCase());
-    const value = h.quantity * price;
-    const gainLoss = h.avg_cost_usd > 0 ? ((price - h.avg_cost_usd) / h.avg_cost_usd) * 100 : null;
-
-    html += `
-      <div class="holding-row">
-        <div class="holding-top">
-          <span class="holding-ticker">${h.symbol.toUpperCase()}</span>
-          <span class="holding-price">${fmtVal(value)}</span>
-        </div>
-        <div class="holding-meta">
-          <span>${fmtUSD(price)} · ${h.quantity} ${h.symbol}</span>
-          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
-        </div>
-      </div>
-    `;
-  }
-  html += '</div>';
-  el.innerHTML = html;
 }
 
 // ── Gold ──────────────────────────────────────────────────────────────────────
@@ -1345,17 +1402,11 @@ async function loadPartner() {
     }
   }
 
-  // Partner crypto, gold, MF totals
-  const [crypto, gold, mf] = await Promise.all([
-    sb.from('crypto_holdings').select('symbol,quantity').eq('user_id', state.partnerId),
+  // Partner gold + MF totals
+  const [gold, mf] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', state.partnerId),
     sb.from('mutual_fund_holdings').select('fund_code,units').eq('user_id', state.partnerId)
   ]);
-
-  let cryptoVal = 0;
-  for (const c of (crypto.data || [])) {
-    cryptoVal += c.quantity * (await getLatestPrice(c.symbol.toUpperCase()));
-  }
 
   const goldPrice = await getLatestPrice('XAU');
   const goldVal = (gold.data || []).reduce((s, g) => s + g.troy_oz * goldPrice, 0);
@@ -1365,12 +1416,11 @@ async function loadPartner() {
     mfVal += (f.units * (await getLatestPrice(f.fund_code))) / state.usdThb;
   }
 
-  if (cryptoVal > 0 || goldVal > 0 || mfVal > 0) {
+  if (goldVal > 0 || mfVal > 0) {
     html += `
       <div class="section-header">Other Assets</div>
       <div class="card">
         <div class="stat-row">
-          ${cryptoVal > 0 ? `<div class="stat-pill">Crypto <strong>${fmtTHB(cryptoVal * state.usdThb)}</strong></div>` : ''}
           ${goldVal > 0 ? `<div class="stat-pill">Gold <strong>${fmtTHB(goldVal * state.usdThb)}</strong></div>` : ''}
           ${mfVal > 0 ? `<div class="stat-pill">MF <strong>${fmtTHB(mfVal * state.usdThb)}</strong></div>` : ''}
         </div>
@@ -1383,9 +1433,25 @@ async function loadPartner() {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+const EMOJI_LIST = ['😊','😎','🦁','🐯','🦊','🐼','🐨','🦄','🐸','🐙','🦋','🌟','⭐','🔥','💎','👑','🌈','🎯','🏆','🚀','💰','📈','🎸','🌺','🍀'];
+
 async function loadSettings() {
-  document.getElementById('settings-username').textContent = state.userName || 'User';
   fetchExchangeRate();
+
+  // Load profile
+  const { data: me } = await sb.from('users').select('id, name, avatar, telegram_chat_id').eq('id', state.userId).single();
+  if (me) {
+    document.getElementById('settings-name-input').value = me.name || '';
+    document.getElementById('settings-avatar-btn').textContent = me.avatar || '😊';
+    state.userAvatar = me.avatar || '😊';
+    state.userName = me.name;
+  }
+
+  // Build emoji grid
+  const grid = document.getElementById('emoji-grid');
+  grid.innerHTML = EMOJI_LIST.map(e =>
+    `<div class="emoji-opt${e === state.userAvatar ? ' selected' : ''}" onclick="pickEmoji('${e}')">${e}</div>`
+  ).join('');
 
   // GAS URL
   const { data: cfg } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
@@ -1394,20 +1460,42 @@ async function loadSettings() {
   document.getElementById('settings-gas-url').value = url;
   document.getElementById('settings-gas-status').textContent = url ? 'URL loaded from Supabase' : '';
 
-  // Telegram Chat IDs — load both users
+  // Telegram Chat IDs
   const { data: users } = await sb.from('users').select('id, telegram_chat_id').order('created_at');
   if (users && users.length > 0) {
-    const me = users.find(u => u.id === state.userId);
-    const partner = users.find(u => u.id !== state.userId);
-    document.getElementById('settings-my-chat-id').value = me?.telegram_chat_id || '';
-    document.getElementById('settings-partner-chat-id').value = partner?.telegram_chat_id || '';
-    if (me?.telegram_chat_id) {
-      document.getElementById('settings-my-chat-status').textContent = 'Chat ID loaded ✓';
-    }
-    if (partner?.telegram_chat_id) {
-      document.getElementById('settings-partner-chat-status').textContent = 'Chat ID loaded ✓';
-    }
+    const myRow = users.find(u => u.id === state.userId);
+    const partnerRow = users.find(u => u.id !== state.userId);
+    document.getElementById('settings-my-chat-id').value = myRow?.telegram_chat_id || '';
+    document.getElementById('settings-partner-chat-id').value = partnerRow?.telegram_chat_id || '';
+    if (myRow?.telegram_chat_id) document.getElementById('settings-my-chat-status').textContent = 'Chat ID loaded ✓';
+    if (partnerRow?.telegram_chat_id) document.getElementById('settings-partner-chat-status').textContent = 'Chat ID loaded ✓';
   }
+}
+
+function toggleEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+}
+
+function pickEmoji(emoji) {
+  state.userAvatar = emoji;
+  document.getElementById('settings-avatar-btn').textContent = emoji;
+  document.querySelectorAll('.emoji-opt').forEach(el => el.classList.toggle('selected', el.textContent === emoji));
+  document.getElementById('emoji-picker').style.display = 'none';
+}
+
+async function saveProfile() {
+  const name = document.getElementById('settings-name-input').value.trim();
+  const statusEl = document.getElementById('settings-profile-status');
+  if (!name) { statusEl.textContent = 'Name cannot be empty.'; statusEl.style.color = 'var(--danger)'; return; }
+
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-muted)';
+  const { error } = await sb.from('users').update({ name, avatar: state.userAvatar }).eq('id', state.userId);
+  if (error) { statusEl.textContent = 'Save failed: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
+
+  state.userName = name;
+  statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--success)';
+  showToast('Profile updated');
 }
 
 async function saveChatId(who) {
@@ -1568,66 +1656,146 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-// ── Add Holding modal ─────────────────────────────────────────────────────────
+// ── Add / Edit Holding modal ──────────────────────────────────────────────────
 
-// Track which portfolio type is selected in the modal
-let _modalType = 'growth';
-// Track price fetch debounce
-let _priceDebounce = null;
+let _tickerDebounce = null;
+let _editingPortfolioId = null;  // null = add mode, set = edit mode
 
-function openAddHolding() {
-  _modalType = 'growth';
-  document.getElementById('modal-ticker').value = '';
-  document.getElementById('modal-shares').value = '';
-  document.getElementById('modal-cost').value = '';
+async function openAddHolding() {
+  _editingPortfolioId = null;
+  state.editingHoldingId = null;
+
+  // Reset fields
+  ['modal-ticker','modal-shares','modal-cost','modal-target'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
   document.getElementById('modal-error').textContent = '';
   document.getElementById('modal-live-price').textContent = '';
   document.getElementById('modal-save-btn').disabled = false;
+  document.getElementById('modal-save-btn').textContent = 'Add to Portfolio';
   document.getElementById('modal-title').textContent = 'Add Holding';
+  document.getElementById('ticker-suggestions').style.display = 'none';
 
-  // Reset type buttons
-  document.querySelectorAll('.modal-type-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.type === 'growth');
-  });
+  // Populate portfolio dropdown
+  await _populatePortfolioSelect(null);
 
   document.getElementById('modal-overlay').style.display = 'block';
   document.getElementById('modal-add-holding').style.display = 'block';
-  setTimeout(() => document.getElementById('modal-ticker').focus(), 100);
+  setTimeout(() => document.getElementById('modal-ticker').focus(), 120);
 
-  // Live price lookup on ticker input
-  document.getElementById('modal-ticker').oninput = function () {
-    this.value = this.value.toUpperCase();
-    clearTimeout(_priceDebounce);
-    const ticker = this.value.trim();
-    if (ticker.length < 1) {
-      document.getElementById('modal-live-price').textContent = '';
-      return;
-    }
-    _priceDebounce = setTimeout(async () => {
-      const price = await getLatestPrice(ticker);
-      const el = document.getElementById('modal-live-price');
-      if (price > 0) {
-        el.textContent = `Last price: ${fmtUSD(price)}`;
-        // Pre-fill cost if empty
-        if (!document.getElementById('modal-cost').value) {
-          document.getElementById('modal-cost').value = price.toFixed(4);
-        }
-      } else {
-        el.textContent = 'No price cached — will fetch on next data run';
-      }
-    }, 500);
+  // Ticker: autocomplete + live price
+  const tickerInput = document.getElementById('modal-ticker');
+  tickerInput.oninput = function() {
+    const raw = this.value.toUpperCase();
+    this.value = raw;
+    clearTimeout(_tickerDebounce);
+    document.getElementById('ticker-suggestions').style.display = 'none';
+    document.getElementById('modal-live-price').textContent = '';
+    if (!raw) return;
+    _tickerDebounce = setTimeout(() => _onTickerInput(raw), 350);
   };
+  tickerInput.onblur = () => setTimeout(() => {
+    document.getElementById('ticker-suggestions').style.display = 'none';
+  }, 200);
+}
+
+async function openEditHolding(portfolioId, ticker, shares, cost, targetPct) {
+  _editingPortfolioId = portfolioId;
+
+  document.getElementById('modal-title').textContent = 'Edit ' + ticker;
+  document.getElementById('modal-ticker').value = ticker;
+  document.getElementById('modal-ticker').readOnly = true;
+  document.getElementById('modal-ticker').style.opacity = '0.6';
+  document.getElementById('modal-shares').value = shares;
+  document.getElementById('modal-cost').value = cost;
+  document.getElementById('modal-target').value = targetPct || '';
+  document.getElementById('modal-error').textContent = '';
+  document.getElementById('modal-live-price').textContent = '';
+  document.getElementById('ticker-suggestions').style.display = 'none';
+  document.getElementById('modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('modal-save-btn').disabled = false;
+
+  await _populatePortfolioSelect(portfolioId);
+
+  document.getElementById('modal-overlay').style.display = 'block';
+  document.getElementById('modal-add-holding').style.display = 'block';
+
+  // Show cached price
+  const price = await getLatestPrice(ticker);
+  if (price > 0) document.getElementById('modal-live-price').textContent = `Last price: ${fmtUSD(price)}`;
+}
+
+async function _populatePortfolioSelect(selectedPortfolioId) {
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id, name').eq('user_id', state.userId).order('created_at');
+
+  const sel = document.getElementById('modal-portfolio-select');
+  sel.innerHTML = (portfolios || []).map(p =>
+    `<option value="${p.id}" ${p.id === selectedPortfolioId ? 'selected' : ''}>${p.name}</option>`
+  ).join('') + `<option value="__new__">+ Create new portfolio…</option>`;
+
+  // If no portfolios yet, default to new
+  if (!portfolios || portfolios.length === 0) {
+    sel.value = '__new__';
+    document.getElementById('modal-new-portfolio-wrap').style.display = 'block';
+  }
+  onPortfolioSelectChange();
+}
+
+function onPortfolioSelectChange() {
+  const val = document.getElementById('modal-portfolio-select').value;
+  document.getElementById('modal-new-portfolio-wrap').style.display =
+    val === '__new__' ? 'block' : 'none';
+}
+
+async function _onTickerInput(query) {
+  // Try Yahoo Finance search
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=0&quotesCount=6&enableFuzzyQuery=false`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    const quotes = (data.quotes || []).filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF');
+    _showSuggestions(quotes);
+  } catch (_) {
+    // CORS or network failure — show nothing, just show cached price
+  }
+
+  // Always try to show cached price
+  const price = await getLatestPrice(query);
+  if (price > 0) {
+    document.getElementById('modal-live-price').textContent = `Last price: ${fmtUSD(price)}`;
+    if (!document.getElementById('modal-cost').value) {
+      document.getElementById('modal-cost').value = price.toFixed(4);
+    }
+  }
+}
+
+function _showSuggestions(quotes) {
+  const box = document.getElementById('ticker-suggestions');
+  if (!quotes || quotes.length === 0) { box.style.display = 'none'; return; }
+  box.innerHTML = quotes.map(q => `
+    <div class="ticker-suggestion" onmousedown="pickSuggestion('${q.symbol}')">
+      <span class="suggestion-symbol">${q.symbol}</span>
+      <span class="suggestion-name">${q.shortname || q.longname || ''}</span>
+    </div>
+  `).join('');
+  box.style.display = 'block';
+}
+
+function pickSuggestion(symbol) {
+  const input = document.getElementById('modal-ticker');
+  input.value = symbol;
+  document.getElementById('ticker-suggestions').style.display = 'none';
+  _onTickerInput(symbol);
 }
 
 function closeAddHolding() {
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-add-holding').style.display = 'none';
-}
-
-function selectModalType(btn) {
-  document.querySelectorAll('.modal-type-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  _modalType = btn.dataset.type;
+  const tickerInput = document.getElementById('modal-ticker');
+  tickerInput.readOnly = false;
+  tickerInput.style.opacity = '1';
 }
 
 async function saveHolding() {
@@ -1635,79 +1803,73 @@ async function saveHolding() {
   const saveBtn = document.getElementById('modal-save-btn');
   errorEl.textContent = '';
 
-  const ticker  = document.getElementById('modal-ticker').value.trim().toUpperCase();
-  const shares  = parseFloat(document.getElementById('modal-shares').value);
-  const cost    = parseFloat(document.getElementById('modal-cost').value);
+  const ticker = document.getElementById('modal-ticker').value.trim().toUpperCase();
+  const shares = parseFloat(document.getElementById('modal-shares').value);
+  const cost   = parseFloat(document.getElementById('modal-cost').value);
+  const targetRaw = document.getElementById('modal-target').value;
+  const target = targetRaw !== '' ? parseFloat(targetRaw) : null;
 
-  // Validate
-  if (!ticker)          { errorEl.textContent = 'Ticker is required.'; return; }
+  if (!ticker) { errorEl.textContent = 'Ticker is required.'; return; }
   if (isNaN(shares) || shares < 0) { errorEl.textContent = 'Enter a valid number of shares.'; return; }
-  if (isNaN(cost)   || cost < 0)   { errorEl.textContent = 'Enter a valid average cost.'; return; }
+  if (isNaN(cost) || cost < 0)     { errorEl.textContent = 'Enter a valid average cost.'; return; }
 
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving…';
 
   try {
-    // 1. Find or create the portfolio of the selected type for this user
-    const portfolioId = await _getOrCreatePortfolio(_modalType);
+    // Resolve portfolio id
+    let portfolioId = _editingPortfolioId;
+    if (!portfolioId) {
+      const selVal = document.getElementById('modal-portfolio-select').value;
+      if (selVal === '__new__') {
+        const newName = document.getElementById('modal-new-portfolio-name').value.trim();
+        if (!newName) throw new Error('Enter a name for the new portfolio.');
+        portfolioId = await _createPortfolio(newName);
+      } else {
+        portfolioId = selVal;
+      }
+    }
 
-    // 2. Upsert the holding (update shares + avg_cost if ticker already exists)
+    // Upsert holding
     const { error } = await sb.from('holdings').upsert(
-      {
-        portfolio_id: portfolioId,
-        ticker,
-        shares,
-        avg_cost_usd: cost
-      },
+      { portfolio_id: portfolioId, ticker, shares, avg_cost_usd: cost, target_pct: target },
       { onConflict: 'portfolio_id,ticker' }
     );
-
     if (error) throw new Error(error.message);
 
-    // 3. Bust price cache so updated value shows immediately
     delete state.cache[ticker];
-
     closeAddHolding();
-    showToast(`${ticker} saved to ${_modalType}`);
-
-    // 4. Reload the portfolio view
+    showToast(`${ticker} saved`);
     await loadUSPortfolio();
 
-    // Auto-select the tab matching the type we just saved to
-    const tabs = document.querySelectorAll('#portfolio-tabs .tab-btn');
-    tabs.forEach(t => {
-      if (t.textContent.trim().toLowerCase() === _modalType ||
-          t.textContent.trim().toLowerCase().startsWith(_modalType)) {
-        t.click();
-      }
+    // Auto-select the correct tab
+    document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(t => {
+      if (t.dataset.portfolioId === portfolioId) t.click();
     });
 
   } catch (e) {
     errorEl.textContent = e.message;
     saveBtn.disabled = false;
-    saveBtn.textContent = 'Add to Portfolio';
+    saveBtn.textContent = _editingPortfolioId ? 'Save Changes' : 'Add to Portfolio';
   }
 }
 
-async function _getOrCreatePortfolio(type) {
-  // Look for existing portfolio of this type owned by the current user
-  const { data: existing } = await sb.from('portfolios')
-    .select('id')
-    .eq('user_id', state.userId)
-    .eq('type', type)
-    .order('created_at')
-    .limit(1);
-
-  if (existing && existing.length > 0) return existing[0].id;
-
-  // Create a new one with a sensible default name
-  const defaultName = { growth: 'Growth', dividend: 'Dividend', etf: 'ETF' }[type] || type;
-  const { data: created, error } = await sb.from('portfolios')
-    .insert({ user_id: state.userId, name: defaultName, type, dca_budget_usd: null })
+async function _createPortfolio(name) {
+  const { data, error } = await sb.from('portfolios')
+    .insert({ user_id: state.userId, name, type: name.toLowerCase().replace(/\s+/g,'_'), dca_budget_usd: null })
     .select('id');
-
   if (error) throw new Error('Could not create portfolio: ' + error.message);
-  return created[0].id;
+  return data[0].id;
+}
+
+async function deleteHolding(portfolioId, ticker) {
+  if (!confirm(`Remove ${ticker} from this portfolio?`)) return;
+  const { error } = await sb.from('holdings')
+    .delete().eq('portfolio_id', portfolioId).eq('ticker', ticker);
+  if (error) { showToast('Delete failed: ' + error.message); return; }
+  delete state.cache[ticker];
+  showToast(`${ticker} removed`);
+  await loadUSPortfolio();
 }
 </script>
 </body>
