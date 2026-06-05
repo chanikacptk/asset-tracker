@@ -14,6 +14,21 @@ const AnalystAgent = (() => {
     _reviewByType('etf');
   }
 
+  // Analyze every portfolio regardless of type — used by daily trigger
+  function reviewAllPortfolios() {
+    Logger.log('[AnalystAgent] Reviewing ALL portfolios');
+    const portfolios = supabaseRequest('GET',
+      'portfolios?select=id,user_id,name,type,dca_budget_usd');
+    if (!portfolios || portfolios.length === 0) return;
+    portfolios.forEach(portfolio => {
+      try {
+        _analyzePortfolio(portfolio);
+      } catch (e) {
+        Logger.log(`[AnalystAgent] Error analyzing ${portfolio.name}: ${e.message}`);
+      }
+    });
+  }
+
   function reviewPortfolioById(portfolioId) {
     const portfolios = supabaseRequest('GET',
       `portfolios?id=eq.${portfolioId}&select=id,user_id,name,type,dca_budget_usd`);
@@ -231,5 +246,5 @@ Be concise but specific. Never fabricate news. Only reference news from the cont
     return rows || [];
   }
 
-  return { reviewGrowthPortfolios, reviewDividendAndETF, reviewPortfolioById };
+  return { reviewGrowthPortfolios, reviewDividendAndETF, reviewAllPortfolios, reviewPortfolioById };
 })();

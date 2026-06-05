@@ -547,7 +547,14 @@ body {
   </select>
   <div id="modal-new-portfolio-wrap" style="display:none;margin-bottom:14px">
     <input id="modal-new-portfolio-name" type="text" placeholder="Portfolio name (e.g. Dividend 2, Core ETF…)"
-      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:15px">
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Type</div>
+    <select id="modal-new-portfolio-type"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;appearance:auto">
+      <option value="growth">Growth</option>
+      <option value="dividend">Dividend</option>
+      <option value="etf">ETF</option>
+    </select>
   </div>
   <div style="height:10px"></div>
 
@@ -1348,8 +1355,12 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
         <button onclick="startRenamePortfolio('${portfolioId}','${portfolioName.replace(/'/g,"\\'")}')"
           style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;opacity:.7">✏️</button>
       </div>
-      <button onclick="navigate('us');setTimeout(openAddHolding,80)"
-        style="padding:5px 12px;border-radius:8px;border:1px solid rgba(34,197,94,.4);background:rgba(34,197,94,.06);color:var(--success);font-size:11px;font-weight:700;cursor:pointer">+ Add</button>
+      <div style="display:flex;gap:6px">
+        <button id="analyze-btn-${portfolioId}" onclick="runPortfolioAnalysis('${portfolioId}',this)"
+          style="padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer">🤖 Analyze</button>
+        <button onclick="navigate('us');setTimeout(openAddHolding,80)"
+          style="padding:5px 12px;border-radius:8px;border:1px solid rgba(34,197,94,.4);background:rgba(34,197,94,.06);color:var(--success);font-size:11px;font-weight:700;cursor:pointer">+ Add</button>
+      </div>
     </div>`;
 
   if (!holdings || holdings.length === 0) {
@@ -1556,6 +1567,26 @@ function _srCell(a) {
   const s = a.support_level    ? `<span class="pt-sr-lbl">S</span><span class="pt-sr-s">$${a.support_level}</span>` : '';
   const r = a.resistance_level ? `<span class="pt-sr-lbl">R</span><span class="pt-sr-r">$${a.resistance_level}</span>` : '';
   return `<div class="pt-sr">${s}${r}</div>`;
+}
+
+async function runPortfolioAnalysis(portfolioId, btn) {
+  if (!state.gasUrl) { showToast('Set GAS URL in Settings first'); return; }
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  showToast('Running AI analysis — takes ~20s');
+  const result = await callGAS('analyzePortfolio', { portfolioId });
+  btn.disabled = false;
+  btn.textContent = orig;
+  if (result?.ok !== false) {
+    showToast('Analysis done — reloading');
+    await loadUSPortfolio();
+    document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => {
+      if (b.dataset.portfolioId === portfolioId) b.click();
+    });
+  } else {
+    showToast('Analysis failed: ' + (result?.error || 'check GAS logs'));
+  }
 }
 
 function startRenamePortfolio(portfolioId, currentName) {
@@ -2442,8 +2473,9 @@ async function saveHolding() {
 }
 
 async function _createPortfolio(name) {
+  const type = document.getElementById('modal-new-portfolio-type')?.value || 'growth';
   const { data, error } = await sb.from('portfolios')
-    .insert({ user_id: state.userId, name, type: name.toLowerCase().replace(/\s+/g,'_'), dca_budget_usd: null })
+    .insert({ user_id: state.userId, name, type, dca_budget_usd: null })
     .select('id');
   if (error) throw new Error('Could not create portfolio: ' + error.message);
   return data[0].id;
