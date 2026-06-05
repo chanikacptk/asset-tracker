@@ -63,12 +63,12 @@ body {
 }
 .nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
-  padding: 8px 4px; gap: 3px; background: none; border: none;
-  color: var(--text-muted); cursor: pointer; font-size: 10px;
+  padding: 8px 2px; gap: 2px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer; font-size: 9px;
   transition: color 0.15s;
 }
 .nav-item.active { color: var(--accent); }
-.nav-item svg { width: 22px; height: 22px; }
+.nav-item svg { width: 20px; height: 20px; }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 .top-bar {
@@ -333,16 +333,13 @@ body {
     <div id="portfolio-content"></div>
   </div>
 
-  <!-- MORE (hub for gold, cash, insurance, private, DCA, partner) -->
+  <!-- ASSET (hub for gold, cash, insurance, private, funds, partner) -->
   <div id="page-more" class="page">
-    <div class="top-bar"><div class="page-title">More</div></div>
+    <div class="top-bar"><div class="page-title">Asset</div></div>
     <div style="height:12px"></div>
     <div id="more-content">
       <div class="more-row" onclick="navigate('gold')">
         <span class="more-icon">🥇</span><div><div class="more-label">Gold</div><div class="more-sub">XAU/USD position</div></div><span class="more-arrow">›</span>
-      </div>
-      <div class="more-row" onclick="navigate('cash')">
-        <span class="more-icon">💵</span><div><div class="more-label">Cash</div><div class="more-sub">Savings, FD, FCD</div></div><span class="more-arrow">›</span>
       </div>
       <div class="more-row" onclick="navigate('insurance')">
         <span class="more-icon">🛡️</span><div><div class="more-label">Insurance</div><div class="more-sub">Policies & surrender value</div></div><span class="more-arrow">›</span>
@@ -350,11 +347,8 @@ body {
       <div class="more-row" onclick="navigate('private')">
         <span class="more-icon">🏢</span><div><div class="more-label">Private Investments</div><div class="more-sub">Manual valuation</div></div><span class="more-arrow">›</span>
       </div>
-      <div class="more-row" onclick="navigate('dca')">
-        <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation</div></div><span class="more-arrow">›</span>
-      </div>
-      <div class="more-row" onclick="navigate('partner')">
-        <span class="more-icon">👥</span><div><div class="more-label">Partner View</div><div class="more-sub">Read-only portfolio</div></div><span class="more-arrow">›</span>
+      <div class="more-row" onclick="navigate('mf')">
+        <span class="more-icon">📂</span><div><div class="more-label">Mutual Funds</div><div class="more-sub">RMF, ESG, other Thai funds</div></div><span class="more-arrow">›</span>
       </div>
     </div>
   </div>
@@ -414,6 +408,66 @@ body {
     </div>
     <div style="height:12px"></div>
     <div id="partner-content"></div>
+  </div>
+
+  <!-- ANALYSIS (hub for DCA, monthly review, weekly review, all portfolios) -->
+  <div id="page-analysis" class="page">
+    <div class="top-bar"><div class="page-title">Analysis</div></div>
+    <div style="height:12px"></div>
+    <div>
+      <div class="more-row" onclick="navigate('dca')">
+        <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('monthly')">
+        <span class="more-icon">🗓️</span><div><div class="more-label">Monthly Review</div><div class="more-sub">Regenerate DCA plan & summary</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('weekly')">
+        <span class="more-icon">📆</span><div><div class="more-label">Weekly Review</div><div class="more-sub">AI signals across all portfolios</div></div><span class="more-arrow">›</span>
+      </div>
+      <div class="more-row" onclick="navigate('allportfolio')">
+        <span class="more-icon">📊</span><div><div class="more-label">All Portfolio</div><div class="more-sub">Latest signals for every holding</div></div><span class="more-arrow">›</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONTHLY REVIEW -->
+  <div id="page-monthly" class="page">
+    <div class="top-bar">
+      <div class="page-title">Monthly Review</div>
+      <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
+    </div>
+    <div style="height:12px"></div>
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Regenerates the DCA plan for the current month via AI and sends a summary to Telegram.</div>
+      <button id="monthly-run-btn" class="btn btn-primary" onclick="runMonthlyReview()">🗓️ Run Monthly Review</button>
+      <div id="monthly-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
+    </div>
+    <div id="monthly-content"></div>
+  </div>
+
+  <!-- WEEKLY REVIEW -->
+  <div id="page-weekly" class="page">
+    <div class="top-bar">
+      <div class="page-title">Weekly Review</div>
+      <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
+    </div>
+    <div style="height:12px"></div>
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Runs AI analysis across all portfolios and sends the weekly review to Telegram.</div>
+      <button id="weekly-run-btn" class="btn btn-primary" onclick="runWeeklyReview()">📆 Run Weekly Review</button>
+      <div id="weekly-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
+    </div>
+    <div id="weekly-content"></div>
+  </div>
+
+  <!-- ALL PORTFOLIO -->
+  <div id="page-allportfolio" class="page">
+    <div class="top-bar">
+      <div class="page-title">All Portfolio</div>
+      <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
+    </div>
+    <div style="height:12px"></div>
+    <div id="allportfolio-content"><div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Loading…</div></div></div>
   </div>
 
   <!-- SETTINGS -->
@@ -512,17 +566,21 @@ body {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       US
     </button>
-    <button class="nav-item" onclick="navigate('more')" id="nav-more">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
-      More
+    <button class="nav-item" onclick="navigate('cash')" id="nav-cash">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg>
+      Cash
     </button>
-    <button class="nav-item" onclick="navigate('mf')" id="nav-mf">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-      Funds
+    <button class="nav-item" onclick="navigate('more')" id="nav-more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+      Asset
+    </button>
+    <button class="nav-item" onclick="navigate('analysis')" id="nav-analysis">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Analysis
     </button>
     <button class="nav-item" onclick="navigate('settings')" id="nav-settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      More
+      Setting
     </button>
   </nav>
 
@@ -898,28 +956,38 @@ async function _loadGasUrl() {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
+const _NAV_ANALYSIS_PAGES = new Set(['analysis','monthly','weekly','allportfolio','dca']);
+const _NAV_ASSET_PAGES    = new Set(['gold','mf','insurance','private']);
+
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`page-${page}`)?.classList.add('active');
-  document.getElementById(`nav-${page}`)?.classList.add('active');
+  if      (_NAV_ANALYSIS_PAGES.has(page)) document.getElementById('nav-analysis')?.classList.add('active');
+  else if (_NAV_ASSET_PAGES.has(page))    document.getElementById('nav-more')?.classList.add('active');
+  else                                    document.getElementById(`nav-${page}`)?.classList.add('active');
   state.currentPage = page;
   loadPage(page);
 }
 
 async function loadPage(page) {
-  if (page === 'dashboard') await loadDashboard();
-  else if (page === 'us') await loadUSPortfolio();
-  else if (page === 'more') { /* static HTML, nothing to load */ }
-  else if (page === 'gold') await loadGold();
-  else if (page === 'mf') await loadMutualFunds();
-  else if (page === 'cash') await loadCash();
+  if (page === 'dashboard')    await loadDashboard();
+  else if (page === 'us')      await loadUSPortfolio();
+  else if (page === 'more')    { /* static HTML */ }
+  else if (page === 'gold')    await loadGold();
+  else if (page === 'mf')      await loadMutualFunds();
+  else if (page === 'cash')    await loadCash();
   else if (page === 'insurance') await loadInsurance();
   else if (page === 'private') await loadPrivate();
-  else if (page === 'dca') await loadDCA();
+  else if (page === 'dca')     await loadDCA();
   else if (page === 'partner') await loadPartner();
   else if (page === 'settings') await loadSettings();
+  else if (page === 'analysis') { /* static hub */ }
+  else if (page === 'monthly') await loadMonthlyReview();
+  else if (page === 'weekly')  await loadWeeklyReview();
+  else if (page === 'allportfolio') await loadAllPortfolio();
 }
+
 
 // ── Currency ──────────────────────────────────────────────────────────────────
 
@@ -1417,7 +1485,7 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
     <div class="pt-stats">
       <span class="pt-stat">Value <strong>${fmtVal(totalValue)}</strong></span>
       <span class="pt-stat">Cost <strong>${fmtVal(totalCost)}</strong></span>
-      <span class="pt-stat ${totalPL >= 0 ? 'gc' : 'rc'}">P/L <strong>${totalPL >= 0 ? '+' : ''}${fmtVal(totalPL)} (${totalPLPct >= 0 ? '+' : ''}${totalPLPct.toFixed(1)}%)</strong></span>
+      <span class="pt-stat ${totalPL >= 0 ? 'gc' : 'rc'}">P/L <strong style="color:inherit">${totalPL >= 0 ? '+' : ''}${fmtVal(totalPL)} (${totalPLPct >= 0 ? '+' : ''}${totalPLPct.toFixed(1)}%)</strong></span>
       <span class="pt-stat">${holdings.length} positions</span>
     </div>`;
 
@@ -1900,6 +1968,200 @@ async function approveDCA(planId) {
   await sb.from('dca_plans').update({ status: 'approved' }).eq('id', planId);
   showToast('DCA plan approved!');
   loadDCA();
+}
+
+// ── Monthly Review ────────────────────────────────────────────────────────────
+
+async function loadMonthlyReview() {
+  const monthYear = new Date().toISOString().slice(0, 7);
+  const el = document.getElementById('monthly-content');
+  el.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Loading…</div></div>';
+
+  const { data: plans } = await sb.from('dca_plans')
+    .select('*').eq('user_id', state.userId).eq('month_year', monthYear);
+
+  if (!plans || plans.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No plan for ${monthYear} yet</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Click "Run Monthly Review" to generate one</div></div>`;
+    return;
+  }
+
+  const plan = plans[0];
+  const { data: items } = await sb.from('dca_plan_items').select('*').eq('plan_id', plan.id);
+  const statusColor = { draft: 'var(--warning)', approved: 'var(--success)', executed: 'var(--accent)' };
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-weight:700">${monthYear} — ${fmtUSD(plan.total_budget_usd)}</div>
+        <span style="background:${statusColor[plan.status]}22;color:${statusColor[plan.status]};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">${plan.status.toUpperCase()}</span>
+      </div>
+      ${(items || []).map(item => `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:700;font-size:14px">${item.ticker}</div>
+            <div style="font-size:11px;color:var(--text-muted);max-width:220px">${(item.reasoning || '').slice(0, 80)}</div>
+          </div>
+          <div style="font-weight:700;font-size:14px;color:var(--accent);white-space:nowrap">${fmtUSD(item.adjusted_amount_usd || item.suggested_amount_usd)}</div>
+        </div>`).join('')}
+      <div style="margin-top:10px;text-align:right">
+        <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="navigate('dca')">View Full Plan ›</button>
+      </div>
+    </div>`;
+}
+
+async function runMonthlyReview() {
+  if (!state.gasUrl) { showToast('Set GAS URL in Settings first'); return; }
+  const btn = document.getElementById('monthly-run-btn');
+  const status = document.getElementById('monthly-status');
+  btn.disabled = true; btn.textContent = '⏳ Generating…';
+  status.textContent = '';
+  try {
+    await callGAS('generateDCA');
+    status.style.color = 'var(--success)';
+    status.textContent = '✓ Monthly review generated and sent to Telegram';
+    await loadMonthlyReview();
+  } catch (e) {
+    status.style.color = 'var(--danger)';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🗓️ Run Monthly Review';
+  }
+}
+
+// ── Weekly Review ─────────────────────────────────────────────────────────────
+
+async function loadWeeklyReview() {
+  const el = document.getElementById('weekly-content');
+  el.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Loading…</div></div>';
+
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id,name').eq('user_id', state.userId);
+
+  if (!portfolios || portfolios.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-text">No portfolios found</div></div>';
+    return;
+  }
+
+  const portIds = portfolios.map(p => p.id);
+  const { data: analyses } = await sb.from('ai_analyses')
+    .select('ticker,signal,reasoning,created_at,portfolio_id')
+    .in('portfolio_id', portIds)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false });
+
+  if (!analyses || analyses.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📆</div><div class="empty-text">No analyses in the past 7 days</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Click "Run Weekly Review" to generate one</div></div>';
+    return;
+  }
+
+  // Dedupe: latest per ticker per portfolio
+  const seen = new Set();
+  const deduped = analyses.filter(a => {
+    const key = `${a.portfolio_id}_${a.ticker}`;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+
+  const portMap = Object.fromEntries(portfolios.map(p => [p.id, p.name]));
+  const byPort = {};
+  deduped.forEach(a => {
+    const name = portMap[a.portfolio_id] || a.portfolio_id;
+    if (!byPort[name]) byPort[name] = [];
+    byPort[name].push(a);
+  });
+
+  const SIG_COLOR = { BUY:'var(--success)', SELL:'var(--danger)', HOLD:'var(--warning)', TRIM:'#f97316' };
+  el.innerHTML = Object.entries(byPort).map(([portName, rows]) => `
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">📁 ${portName}</div>
+      ${rows.map(a => `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-weight:700">${a.ticker}</span>
+            <span style="font-size:11px;color:var(--text-muted);display:block;max-width:220px">${(a.reasoning||'').slice(0,90)}</span>
+          </div>
+          <span style="background:${SIG_COLOR[a.signal]||'var(--text-muted)'}22;color:${SIG_COLOR[a.signal]||'var(--text-muted)'};padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${a.signal||'—'}</span>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+async function runWeeklyReview() {
+  if (!state.gasUrl) { showToast('Set GAS URL in Settings first'); return; }
+  const btn = document.getElementById('weekly-run-btn');
+  const status = document.getElementById('weekly-status');
+  btn.disabled = true; btn.textContent = '⏳ Running…';
+  status.textContent = '';
+  try {
+    await callGAS('analyzeAll');
+    status.style.color = 'var(--success)';
+    status.textContent = '✓ Analysis complete — weekly review sent to Telegram';
+    await loadWeeklyReview();
+  } catch (e) {
+    status.style.color = 'var(--danger)';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '📆 Run Weekly Review';
+  }
+}
+
+// ── All Portfolio ─────────────────────────────────────────────────────────────
+
+async function loadAllPortfolio() {
+  const el = document.getElementById('allportfolio-content');
+  el.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Loading…</div></div>';
+
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id,name,type').eq('user_id', state.userId);
+
+  if (!portfolios || portfolios.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-text">No portfolios found</div></div>';
+    return;
+  }
+
+  const portIds = portfolios.map(p => p.id);
+  const { data: analyses } = await sb.from('ai_analyses')
+    .select('ticker,signal,reasoning,support_level,resistance_level,created_at,portfolio_id')
+    .in('portfolio_id', portIds)
+    .order('created_at', { ascending: false });
+
+  const seen = new Set();
+  const deduped = (analyses || []).filter(a => {
+    const key = `${a.portfolio_id}_${a.ticker}`;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+
+  const portMap = Object.fromEntries(portfolios.map(p => [p.id, p]));
+  const byPort = {};
+  deduped.forEach(a => {
+    const p = portMap[a.portfolio_id];
+    const key = p ? p.name : a.portfolio_id;
+    if (!byPort[key]) byPort[key] = [];
+    byPort[key].push(a);
+  });
+
+  const SIG_COLOR = { BUY:'var(--success)', SELL:'var(--danger)', HOLD:'var(--warning)', TRIM:'#f97316' };
+  const SIG_EMOJI = { BUY:'🟢', SELL:'🔴', HOLD:'🟡', TRIM:'🟠' };
+
+  if (Object.keys(byPort).length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No AI analyses yet</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Run Weekly Review to generate signals</div></div>';
+    return;
+  }
+
+  el.innerHTML = Object.entries(byPort).map(([portName, rows]) => `
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">📁 ${portName}</div>
+      ${rows.map(a => `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-weight:700">${SIG_EMOJI[a.signal]||'⚪'} ${a.ticker}</span>
+            ${a.support_level || a.resistance_level ? `<span style="font-size:10px;color:var(--text-muted);display:block">S:$${a.support_level||'—'} · R:$${a.resistance_level||'—'}</span>` : ''}
+            <span style="font-size:11px;color:var(--text-muted);display:block;max-width:230px">${(a.reasoning||'').slice(0,80)}</span>
+          </div>
+          <span style="background:${SIG_COLOR[a.signal]||'var(--text-muted)'}22;color:${SIG_COLOR[a.signal]||'var(--text-muted)'};padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">${a.signal||'—'}</span>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
 // ── Partner View ──────────────────────────────────────────────────────────────

@@ -201,22 +201,32 @@ const DataAgent = (() => {
   }
 
   function _checkSRProximityAlerts(alerts) {
-    // Check if any stock price is within 2% of its latest support or resistance
     const srRows = supabaseRequest('GET', 'sr_levels?select=ticker,support,resistance,created_at&order=created_at.desc');
     if (!srRows || srRows.length === 0) return;
 
-    // Deduplicate: latest S/R per ticker
     const srMap = {};
-    srRows.forEach(r => {
-      if (!srMap[r.ticker]) srMap[r.ticker] = r;
-    });
+    srRows.forEach(r => { if (!srMap[r.ticker]) srMap[r.ticker] = r; });
+
+    // Use CacheService to track last-check prices for minimum price move filter
+    const cache = CacheService.getScriptCache();
 
     Object.entries(srMap).forEach(([ticker, sr]) => {
       const data = _yahooQuote(ticker);
       if (!data) return;
       const price = data.regularMarketPrice;
-      const nearSupport = sr.support && Math.abs((price - sr.support) / sr.support) <= 0.02;
-      const nearResistance = sr.resistance && Math.abs((price - sr.resistance) / sr.resistance) <= 0.02;
+
+      // Require >1% price move since last 5-min check to avoid repeat firing
+      const cacheKey = `sr_lastprice_${ticker}`;
+      const lastPriceStr = cache.get(cacheKey);
+      cache.put(cacheKey, String(price), 3600);
+      if (lastPriceStr) {
+        const lastPrice = parseFloat(lastPriceStr);
+        if (Math.abs((price - lastPrice) / lastPrice) < 0.01) return;
+      }
+
+      // Alert when price is within ±1% of S/R level
+      const nearSupport    = sr.support    && Math.abs((price - sr.support)    / sr.support)    <= 0.01;
+      const nearResistance = sr.resistance && Math.abs((price - sr.resistance) / sr.resistance) <= 0.01;
 
       if (nearSupport || nearResistance) {
         alerts.push({
@@ -275,7 +285,109 @@ const DataAgent = (() => {
     _upsertMarketData(symbol, assetType || 'stock', price, currency || 'USD');
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice };
+  // ── Dynamic S/R calculation ─────────────────────────────────────────────────
+
+  function _yahoo90DayData(ticker) {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
+      const resp = _fetchJSON(url);
+      const result = resp?.chart?.result?.[0];
+      if (!result) return null;
+      return {
+        meta:   result.meta,
+        highs:  (result.indicators?.quote?.[0]?.high  || []).filter(p => p != null),
+        lows:   (result.indicators?.quote?.[0]?.low   || []).filter(p => p != null)
+      };
+    } catch (e) {
+      Logger.log(`[DataAgent] 90-day data failed for ${ticker}: ${e.message}`);
+      return null;
+    }
+  }
+
+  function _getRoundLevels(price) {
+    let step;
+    if      (price < 10)   step = 1;
+    else if (price < 50)   step = 5;
+    else if (price < 200)  step = 10;
+    else if (price < 500)  step = 25;
+    else if (price < 2000) step = 50;
+    else                   step = 100;
+    const base = Math.floor(price / step) * step;
+    return [base - step, base, base + step, base + step * 2].filter(l => l > 0);
+  }
+
+  function _calculateDynamicSR(ticker) {
+    const hist = _yahoo90DayData(ticker);
+    if (!hist || hist.highs.length < 10) return null;
+
+    const { meta, highs, lows } = hist;
+    const price      = meta.regularMarketPrice;
+    const week52High = meta.fiftyTwoWeekHigh;
+    const week52Low  = meta.fiftyTwoWeekLow;
+
+    // Swing highs/lows with a 3-candle window on each side
+    const WIN = 3;
+    const swingHighs = [];
+    const swingLows  = [];
+    for (let i = WIN; i < highs.length - WIN; i++) {
+      if (highs.slice(i - WIN, i).every(h => h <= highs[i]) &&
+          highs.slice(i + 1, i + WIN + 1).every(h => h <= highs[i])) {
+        swingHighs.push(highs[i]);
+      }
+      if (lows.slice(i - WIN, i).every(l => l >= lows[i]) &&
+          lows.slice(i + 1, i + WIN + 1).every(l => l >= lows[i])) {
+        swingLows.push(lows[i]);
+      }
+    }
+
+    const roundLevels = _getRoundLevels(price);
+
+    // Nearest level strictly above / below current price (+0.5% buffer to exclude current)
+    const resistanceCandidates = [
+      ...swingHighs.filter(h => h > price * 1.005),
+      (week52High > price * 1.005 ? week52High : null),
+      ...roundLevels.filter(l => l > price)
+    ].filter(Boolean).sort((a, b) => a - b);
+
+    const supportCandidates = [
+      ...swingLows.filter(l => l < price * 0.995),
+      (week52Low  < price * 0.995 ? week52Low  : null),
+      ...roundLevels.filter(l => l < price)
+    ].filter(Boolean).sort((a, b) => b - a);
+
+    return {
+      support:    supportCandidates[0]    != null ? parseFloat(supportCandidates[0].toFixed(2))    : null,
+      resistance: resistanceCandidates[0] != null ? parseFloat(resistanceCandidates[0].toFixed(2)) : null
+    };
+  }
+
+  // Called weekly to refresh S/R for all held tickers using dynamic calculation
+  function updateDynamicSRLevels() {
+    const rows = supabaseRequest('GET', 'holdings?select=ticker');
+    if (!rows || rows.length === 0) return;
+
+    const tickers = [...new Set(rows.map(r => r.ticker))];
+    Logger.log(`[DataAgent] Updating dynamic S/R for ${tickers.length} tickers`);
+
+    tickers.forEach(ticker => {
+      const sr = _calculateDynamicSR(ticker);
+      if (!sr || (!sr.support && !sr.resistance)) return;
+      try {
+        supabaseRequest('POST', 'sr_levels', {
+          ticker:     ticker,
+          support:    sr.support,
+          resistance: sr.resistance,
+          timeframe:  'weekly',
+          created_at: new Date().toISOString()
+        });
+        Logger.log(`[DataAgent] ${ticker}: S=${sr.support}, R=${sr.resistance}`);
+      } catch (e) {
+        Logger.log(`[DataAgent] S/R update failed for ${ticker}: ${e.message}`);
+      }
+    });
+  }
+
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
@@ -286,3 +398,4 @@ function testRealtimeAlerts()    {
   const alerts = DataAgent.checkRealtimeAlerts();
   Logger.log('[test] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
 }
+function testUpdateSRLevels()    { DataAgent.updateDynamicSRLevels(); }

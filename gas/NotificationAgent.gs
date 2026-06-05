@@ -96,7 +96,12 @@ const NotificationAgent = (() => {
   }
 
   // Called after NewsAgent.fetchForAllHoldings() — sends only articles from the last 6h
+  // Skipped during quiet hours (10PM–7AM Bangkok)
   function sendHighImpactNewsAlerts() {
+    if (_isQuietHours()) {
+      Logger.log('[NotificationAgent] Quiet hours — skipping news alerts');
+      return;
+    }
     const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const news = supabaseRequest('GET',
       `news_items?is_high_impact=eq.true&created_at=gte.${since}&order=published_at.desc&limit=20`);
@@ -130,16 +135,42 @@ const NotificationAgent = (() => {
   }
 
   function sendRealtimeAlerts(alerts) {
+    if (_isQuietHours()) {
+      Logger.log('[NotificationAgent] Quiet hours — skipping realtime alerts');
+      return;
+    }
+
     const users = _getUsersWithTelegram();
+
+    // Higher number = lower priority (crypto most urgent, gold least)
+    const PRIORITY = { crypto_alert: 0, sr_alert: 1, gold_alert: 2 };
+    alerts.sort((a, b) => (PRIORITY[a.type] ?? 99) - (PRIORITY[b.type] ?? 99));
+
     alerts.forEach(alert => {
       const targets = alert.user_id
         ? users.filter(u => u.id === alert.user_id)
         : users;
       const msg = _formatAlert(alert);
       if (!msg) return;
+
+      const ticker = alert.symbol || 'GENERAL';
+
       targets.forEach(user => {
-        _send(user.telegram_chat_id, msg);
-        _logNotification(user.id, 'realtime_alert', msg);
+        try {
+          if (_getAlertCountToday(user.id) >= 5) {
+            Logger.log(`[NotificationAgent] Daily cap (5) reached for ${user.id}`);
+            return;
+          }
+          if (_isCooldown(user.id, ticker, alert.type)) {
+            Logger.log(`[NotificationAgent] 24h cooldown: ${ticker} ${alert.type} for ${user.id}`);
+            return;
+          }
+          _send(user.telegram_chat_id, msg);
+          _logNotification(user.id, 'realtime_alert', msg);
+          _markCooldown(user.id, ticker, alert.type);
+        } catch (e) {
+          Logger.log(`[NotificationAgent] sendRealtimeAlerts error (${user.id}): ${e.message}`);
+        }
       });
     });
   }
@@ -148,6 +179,53 @@ const NotificationAgent = (() => {
     if (!user.telegram_chat_id) return;
     _send(user.telegram_chat_id, message);
     _logNotification(user.id, 'dca_notification', message);
+  }
+
+  // ── Noise-reduction helpers ──────────────────────────────────────────────────
+
+  // Returns true between 10PM and 7AM Bangkok time (UTC+7)
+  function _isQuietHours() {
+    const bangkokHour = (new Date().getUTCHours() + 7) % 24;
+    return bangkokHour >= 22 || bangkokHour < 7;
+  }
+
+  // Check if a same alert was already sent within the last 24 hours
+  function _isCooldown(userId, ticker, alertType) {
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const rows = supabaseRequest('GET',
+        `alert_cooldowns?user_id=eq.${userId}&ticker=eq.${encodeURIComponent(ticker)}&alert_type=eq.${alertType}&last_sent_at=gte.${cutoff}`);
+      return rows && rows.length > 0;
+    } catch (e) {
+      return false; // fail open so alerts still go through on DB error
+    }
+  }
+
+  // Upsert the cooldown timestamp for this user+ticker+type
+  function _markCooldown(userId, ticker, alertType) {
+    try {
+      supabaseUpsert('alert_cooldowns?on_conflict=user_id,ticker,alert_type', {
+        user_id:      userId,
+        ticker:       ticker,
+        alert_type:   alertType,
+        last_sent_at: new Date().toISOString()
+      });
+    } catch (e) {
+      Logger.log('[NotificationAgent] _markCooldown failed: ' + e.message);
+    }
+  }
+
+  // Count realtime alerts sent to this user today (UTC midnight boundary)
+  function _getAlertCountToday(userId) {
+    try {
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const rows = supabaseRequest('GET',
+        `notifications_log?user_id=eq.${userId}&notification_type=eq.realtime_alert&sent_at=gte.${todayStart.toISOString()}&select=id`);
+      return rows ? rows.length : 0;
+    } catch (e) {
+      return 0; // fail open
+    }
   }
 
   // ── Alert formatters ────────────────────────────────────────────────────────

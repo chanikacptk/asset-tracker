@@ -65,6 +65,8 @@ function doGet(e) {
     } else if (action === 'testTelegram') {
       const userId = e?.parameter?.userId;
       result.sent = _sendTestTelegram(userId);
+    } else if (action === 'updateSRLevels') {
+      DataAgent.updateDynamicSRLevels();
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
@@ -210,6 +212,7 @@ function onWeeklyTrigger() {
   Logger.log('[Orchestrator] Weekly trigger fired');
   try {
     DataAgent.fetchAll();
+    DataAgent.updateDynamicSRLevels(); // Recalculate S/R from 90-day history + 52wk levels weekly
     AnalystAgent.reviewAllPortfolios();
     NewsAgent.fetchForAllHoldings();
     NotificationAgent.sendHighImpactNewsAlerts();
@@ -350,6 +353,9 @@ function testDailyTrigger() {
 
 function testWeeklyTrigger() {
   onWeeklyTrigger();
+}
+function testUpdateSRLevels() {
+  DataAgent.updateDynamicSRLevels();
 }
 
 function testMonthlyTrigger() {
