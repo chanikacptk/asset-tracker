@@ -40,7 +40,7 @@ git push origin main
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS in one file (~2400 lines)
+index.html              Main app — all HTML/CSS/JS in one file (~2800 lines)
 manifest.json           PWA manifest
 sw.js                   Service worker (cache-first CDN/shell, network-first Supabase)
 assets/icons/           PWA icons (192px, 512px)
@@ -49,11 +49,11 @@ portfolio_tracker.html  Prototype/reference — NOT the active app
 gas/
   Code.gs               Orchestrator + doGet web app entry + trigger setup
   Config.gs             Script Properties wrapper (secrets)
-  DataAgent.gs          Market data: Yahoo Finance, CoinGecko, AIMC NAV scrape
+  DataAgent.gs          Market data: Yahoo Finance, CoinGecko, AIMC NAV scrape + dynamic S/R
   AnalystAgent.gs       Claude API → BUY/SELL/HOLD/TRIM signals + S/R levels
   DCAAgent.gs           Monthly DCA plan generation via Claude API
   NewsAgent.gs          News fetching via NewsAPI.org
-  NotificationAgent.gs  Telegram: per-user per-portfolio daily/weekly/breaking
+  NotificationAgent.gs  Telegram: per-user per-portfolio daily/weekly/breaking + noise controls
   ScriptProperties.md   GAS secrets setup guide
 
 supabase/
@@ -64,6 +64,7 @@ supabase/
     002_user_profile.sql            avatar + name columns on users
     003_frontend_write_policies.sql RLS: holdings CRUD, portfolio INSERT, watchlist
     004_portfolio_target_pct.sql    portfolios.target_pct + UPDATE policy ✓ applied
+    005_alert_cooldowns.sql         alert_cooldowns table for 24h notification cooldown ✓ applied
 ```
 
 ## Authentication
@@ -76,7 +77,7 @@ Custom PIN-based auth — **not** Supabase Auth. `users` table stores `pin_hash`
 
 - **All tables**: `anon_read_all` SELECT policy — frontend reads everything, filters by `user_id` in JS
 - **Frontend writes** (anon key): holdings CRUD, portfolio INSERT + UPDATE (incl. `target_pct`), DCA approval, private investments, cash accounts, watchlist
-- **GAS writes** (service_role): market data, AI analyses, DCA plans, notifications log, exchange rates, news — bypasses RLS entirely
+- **GAS writes** (service_role): market data, AI analyses, DCA plans, notifications log, exchange rates, news, alert_cooldowns — bypasses RLS entirely
 
 **Never put `SUPABASE_SERVICE_KEY` in index.html.**
 
@@ -100,7 +101,7 @@ Save the URL via Settings page in the app (stored in `app_config` table, key: `g
 - Daily @ 8AM → `onDailyTrigger` (fetch data → analysis → news → notifications, weekdays only)
 - Every 5 min → `onRealtimeTrigger` (crypto/gold ±5%, S/R proximity alerts)
 - 1st of month (inside daily) → DCA plan generation
-- Monday (inside daily) → weekly review
+- Monday (inside daily) → weekly review + `updateDynamicSRLevels()`
 
 ## GAS web app actions
 
@@ -111,8 +112,9 @@ Called from frontend via `callGAS(action, params)`:
 | `fetchData` | DataAgent.fetchAll() | manual / daily trigger |
 | `analyzeAll` | AnalystAgent.reviewAllPortfolios() | daily + weekly trigger |
 | `analyzePortfolio` | AnalystAgent.reviewPortfolioById(portfolioId) | auto after saveHolding() + 🤖 Analyze button |
-| `generateDCA` | DCAAgent.generatePlans() | monthly trigger |
+| `generateDCA` | DCAAgent.generatePlans() | monthly trigger + Monthly Review page |
 | `fetchNews` | NewsAgent.fetchForAllHoldings() | daily/weekly trigger |
+| `updateSRLevels` | DataAgent.updateDynamicSRLevels() | weekly trigger + manual |
 | `getPrice` | Yahoo Finance single quote | ticker autocomplete |
 | `savePrice` | DataAgent.savePrice() | after saveHolding() |
 | `searchTicker` | Yahoo Finance search | ticker autocomplete |
@@ -130,7 +132,28 @@ Called from frontend via `callGAS(action, params)`:
   - High-impact news (last 2 days) for that user's tickers
 - **Weekly** (Monday, same structure for Dividend + ETF portfolios, last 7 days news)
 - **Breaking news** (`sendHighImpactNewsAlerts`): fires after each `fetchNews`, sends only articles where the ticker is held by that user (last 6h)
-- **Realtime alerts**: crypto ±5% (1h), gold ±5% (1d), S/R proximity ±2% — routed to user who holds the asset
+- **Realtime alerts**: crypto ±5% (1h), gold ±5% (1d), S/R proximity ±1% — routed to user who holds the asset
+
+### Notification noise controls
+
+All realtime alerts and breaking news are subject to:
+- **Quiet hours**: no alerts 10PM–7AM Bangkok time (UTC+7)
+- **24h cooldown**: same ticker + alert type cannot fire again within 24 hours — tracked in `alert_cooldowns` table (persists across GAS restarts)
+- **Daily cap**: max 5 realtime alerts per user per day — counted from `notifications_log`; priority order: crypto > S/R > gold
+- **Min price move**: S/R alerts only fire if price moved >1% since the last 5-min check (tracked via GAS `CacheService`)
+
+## Dynamic S/R levels
+
+`DataAgent.updateDynamicSRLevels()` runs weekly (Monday trigger) and on-demand via `updateSRLevels` action:
+- Fetches 90-day daily OHLC from Yahoo Finance (`range=3mo`)
+- Finds swing highs/lows (3-candle window)
+- Combines with 52-week high/low from Yahoo meta
+- Adds psychological round-number levels (step size scales with price)
+- Writes nearest support (below price) and resistance (above price) to `sr_levels` table
+
+S/R proximity check threshold: **±1%** of level (tightened from ±2%).
+
+Run `testUpdateSRLevels` from GAS IDE to seed initial data after deployment.
 
 ## Important data model notes
 
@@ -140,6 +163,7 @@ Called from frontend via `callGAS(action, params)`:
 - `market_data` — no unique constraint, rows appended. Always query `order=fetched_at.desc&limit=1`.
 - `exchange_rates` unique on `(from_currency, to_currency, date)`.
 - `dca_plans` unique on `(user_id, month_year)`.
+- `alert_cooldowns` unique on `(user_id, ticker, alert_type)` — upserted by GAS after each realtime alert sent.
 - `users.avatar`, `users.name` added via migration 002 — not in base `schema.sql`.
 
 ## Home dashboard (`.uc-card`)
@@ -183,6 +207,8 @@ Scrollable table with 13 columns — inherits body font (no monospace override).
 | S/R | `ai_analyses.support_level` / `resistance_level` |
 | Actions | ✏️ edit, 🗑 delete |
 
+**Stats bar** (below portfolio name): Value · Cost · P/L (green if positive, red if negative) · positions count.
+
 **Sorting**: click any column header → sort asc (▲); click again → desc (▼); other columns show ⇅. Sort state in `_sortState = { col, dir }`. Data precomputed into `_portTableData[]` — no re-fetch on sort.
 
 **Key functions**:
@@ -217,8 +243,36 @@ _sortState         // { col: string|null, dir: 1|-1 }
 
 ## Pages / navigation
 
-`navigate(page)` — shows/hides `.page` divs:
-`dashboard` | `us` | `more` | `gold` | `mf` | `cash` | `insurance` | `private` | `dca` | `partner` | `settings`
+6-tab bottom nav: **Home · US · Cash · Asset · Analysis · Setting**
+
+`navigate(page)` — shows/hides `.page` divs. Nav highlight logic:
+- `nav-analysis` lights up for: `analysis`, `monthly`, `weekly`, `allportfolio`, `dca`
+- `nav-more` (Asset) lights up for: `gold`, `mf`, `insurance`, `private`
+- `nav-cash` lights up for: `cash` (direct tab)
+- All other pages: `nav-${page}` matches directly
+
+```
+dashboard   Home tab
+us          US Portfolio tab
+cash        Cash tab (direct nav — savings, FD, FCD)
+more        Asset hub → gold | mf | insurance | private
+analysis    Analysis hub → dca | monthly | weekly | allportfolio
+settings    Setting tab
+```
+
+### Analysis hub pages
+
+| Page | Description |
+|---|---|
+| `dca` | DCA Plan — view/edit/approve current month's allocation |
+| `monthly` | Monthly Review — trigger `generateDCA`, view plan summary |
+| `weekly` | Weekly Review — trigger `analyzeAll`, view 7-day signals by portfolio |
+| `allportfolio` | All Portfolio — read-only view of every holding's latest AI signal |
+
+**Key functions**:
+- `loadMonthlyReview()` / `runMonthlyReview()` — calls GAS `generateDCA`
+- `loadWeeklyReview()` / `runWeeklyReview()` — calls GAS `analyzeAll`
+- `loadAllPortfolio()` — reads `ai_analyses` for all user portfolios, groups by portfolio name
 
 ## Service worker cache
 
@@ -229,3 +283,4 @@ Cache name: `smart-me-v6`. **Bump the version string in `sw.js`** whenever `inde
 - Crypto holdings (`crypto_holdings` table)
 - Thai bonds (`thai_bonds` table)
 - Watchlist UI (`watchlist` table)
+- Partner View (page + `page-partner` HTML exist but no nav entry — accessible via direct `navigate('partner')` call only)
