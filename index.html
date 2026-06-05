@@ -308,9 +308,8 @@ body {
       </div>
     </div>
     <div style="height:14px"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="db-user-cards">
-      <div class="db-user-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
-      <div class="db-user-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
+    <div id="db-user-cards">
+      <div class="uc-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
     </div>
     <div class="section-header">Recent Alerts</div>
     <div id="recent-alerts"></div>
@@ -668,8 +667,7 @@ html.dark .theme-toggle-track { background:var(--accent); border-color:var(--acc
 }
 html.dark .theme-toggle-thumb { transform:translateX(20px); }
 
-/* ── Dashboard redesign ───────────────────────────────────────────────────── */
-.db-header { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
+/* ── Dashboard top bar ────────────────────────────────────────────────────── */
 .db-totals { flex:1;min-width:0; }
 .db-total-lbl { font-size:11px;color:var(--text-muted);margin-bottom:1px; }
 .db-total-val { font-size:24px;font-weight:800;letter-spacing:-0.5px;line-height:1.1; }
@@ -677,23 +675,82 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .db-header-right { display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0; }
 .db-rate-row { font-size:10px;color:var(--text-muted);text-align:right; }
 
-.db-user-card {
+/* ── User card (new) ──────────────────────────────────────────────────────── */
+.uc-card {
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:10px;display:flex;flex-direction:column;
+  padding:14px;margin-bottom:12px;
 }
-.db-user-name { font-size:11px;font-weight:700;text-align:center;margin-bottom:4px;line-height:1.3; }
-.db-user-pct { color:var(--text-muted);font-weight:400;font-size:10px; }
-.db-donut-wrap { position:relative;height:180px; }
-.db-legend { display:flex;flex-wrap:wrap;gap:3px 6px;margin-top:6px;font-size:9px; }
-.db-legend-item { display:flex;align-items:center;gap:2px;color:var(--text-muted); }
-.db-card-actions { display:flex;gap:6px;margin-top:8px; }
-.db-btn-del {
-  flex:1;padding:5px;border:none;border-radius:var(--radius-sm);
-  background:var(--danger);color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+.uc-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--border);
 }
-.db-btn-edit {
-  flex:2;padding:5px;border:none;border-radius:var(--radius-sm);
-  background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+.uc-name-row { display:flex;align-items:center;gap:8px; }
+.uc-avatar { font-size:22px;line-height:1; }
+.uc-name { font-size:15px;font-weight:700; }
+.uc-total-val { font-size:18px;font-weight:800;text-align:right;letter-spacing:-0.3px; }
+.uc-total-pnl { font-size:11px;text-align:right;margin-top:2px; }
+
+.uc-body { display:flex;gap:14px;align-items:flex-start; }
+.uc-donut-col { flex-shrink:0;width:130px; }
+.uc-donut-wrap { position:relative;height:130px; }
+.uc-legend { display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:7px;font-size:9px;line-height:1.5; }
+.uc-legend-item { display:flex;align-items:center;gap:2px;color:var(--text-muted); }
+
+.uc-slices-col { flex:1;min-width:0; }
+
+/* Overall target allocation bar */
+.uc-alloc-wrap { margin-bottom:8px; }
+.uc-alloc-label {
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--text-muted);margin-bottom:3px;
+}
+.uc-alloc-track { height:4px;background:var(--surface2);border-radius:2px;overflow:hidden; }
+.uc-alloc-fill { height:100%;border-radius:2px;transition:width 0.4s; }
+
+/* Slice rows */
+.slice-row { padding:7px 0;border-bottom:1px solid var(--border); }
+.slice-row:last-child { border-bottom:none; }
+.slice-top { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
+.slice-left { flex:1;min-width:0; }
+.slice-name { font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.slice-count { font-size:10px;font-weight:400;color:var(--text-muted); }
+.slice-sub { font-size:10px;margin-top:1px; }
+.slice-right { text-align:right;flex-shrink:0; }
+.slice-val { font-size:13px;font-weight:700; }
+.slice-pct-badge {
+  display:inline-block;margin-top:2px;
+  font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;
+}
+.slice-bar-row { display:flex;align-items:center;gap:6px;margin-top:5px; }
+.slice-mini-bar {
+  flex:1;height:4px;background:var(--surface2);border-radius:2px;
+  position:relative;overflow:visible;
+}
+.slice-mini-fill { height:100%;border-radius:2px;transition:width 0.4s; }
+.slice-mini-marker {
+  position:absolute;top:-3px;right:0;width:2px;height:10px;
+  background:var(--text-muted);border-radius:1px;opacity:0.5;
+}
+.slice-target-lbl { font-size:10px;color:var(--text-muted);white-space:nowrap;flex-shrink:0; }
+.slice-edit-btn {
+  padding:2px 7px;border-radius:10px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:10px;font-weight:600;
+  cursor:pointer;flex-shrink:0;line-height:1.4;
+}
+.slice-edit-btn:active { border-color:var(--accent);color:var(--accent); }
+
+/* Responsive: narrow mobile stacks donut above slices */
+@media (max-width: 400px) {
+  .uc-body { flex-direction:column; }
+  .uc-donut-col { width:100%; }
+  .uc-donut-wrap { height:160px; }
+  .uc-legend { justify-content:center; }
+}
+/* Desktop: slightly larger donut */
+@media (min-width: 640px) {
+  .uc-card { padding:18px; }
+  .uc-donut-col { width:160px; }
+  .uc-donut-wrap { height:160px; }
 }
 </style>
 
@@ -860,12 +917,9 @@ async function loadDashboard() {
   const pnl       = myData.gainLossUSD + partnerData.gainLossUSD;
   const costBasis = myData.costBasisUSD + partnerData.costBasisUSD;
   const pnlPct    = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
-  const myPct     = combined > 0 ? (myData.totalUSD / combined) * 100 : 0;
-  const partPct   = combined > 0 ? (partnerData.totalUSD / combined) * 100 : 0;
-
-  const pnlSign  = pnl >= 0 ? '+' : '';
-  const pnlColor = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
-  const dispPnL  = pnlSign + (state.currency === 'THB' ? fmtTHB(pnl * state.usdThb) : fmtUSD(pnl));
+  const pnlSign   = pnl >= 0 ? '+' : '';
+  const pnlColor  = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+  const dispPnL   = pnlSign + (state.currency === 'THB' ? fmtTHB(pnl * state.usdThb) : fmtUSD(pnl));
 
   document.getElementById('db-total').textContent = fmtVal(combined);
   const pnlEl = document.getElementById('db-pnl');
@@ -874,29 +928,12 @@ async function loadDashboard() {
   document.getElementById('db-rate-val').textContent  = state.usdThb.toFixed(3);
   document.getElementById('db-rate-date').textContent = new Date().toISOString().slice(0, 10);
 
-  document.getElementById('db-user-cards').innerHTML = `
-    <div class="db-user-card">
-      <div class="db-user-name">${state.userAvatar} ${state.userName}</div>
-      <div class="db-donut-wrap"><canvas id="donut-my"></canvas></div>
-      <div class="db-legend" id="legend-my"></div>
-      <div class="db-card-actions">
-        <button class="db-btn-del" onclick="navigate('us')">ลบ</button>
-        <button class="db-btn-edit" onclick="navigate('us')">แก้ไข</button>
-      </div>
-    </div>
-    <div class="db-user-card">
-      <div class="db-user-name">${partnerAvatar} ${partnerName}</div>
-      <div class="db-donut-wrap"><canvas id="donut-partner"></canvas></div>
-      <div class="db-legend" id="legend-partner"></div>
-      <div class="db-card-actions">
-        <button class="db-btn-del" onclick="navigate('partner')">ลบ</button>
-        <button class="db-btn-edit" onclick="navigate('partner')">แก้ไข</button>
-      </div>
-    </div>
-  `;
-
-  _renderUserDonut('donut-my', 'legend-my', myData);
-  _renderUserDonut('donut-partner', 'legend-partner', partnerData);
+  const cardsEl = document.getElementById('db-user-cards');
+  cardsEl.innerHTML = '';
+  _buildUserCard(cardsEl, 'my', state.userId, state.userAvatar, state.userName, myData, true);
+  if (state.partnerId) {
+    _buildUserCard(cardsEl, 'partner', state.partnerId, partnerAvatar, partnerName, partnerData, false);
+  }
 
   // Recent alerts
   const { data: notifs } = await sb.from('notifications_log')
@@ -917,23 +954,73 @@ async function loadDashboard() {
   `).join('');
 }
 
-function _renderUserDonut(canvasId, legendId, data) {
+function _buildUserCard(container, key, userId, avatar, name, data, isOwn) {
+  const pnlSign  = data.gainLossUSD >= 0 ? '+' : '';
+  const pnlColor = data.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+  const pnlPct   = data.costBasisUSD > 0 ? (data.gainLossUSD / data.costBasisUSD) * 100 : 0;
+
+  const totalTarget = data.portfolios.reduce((s, p) => s + (p.targetPct || 0), 0);
+  const tFill   = Math.min(100, totalTarget);
+  const tColor  = Math.abs(totalTarget - 100) <= 2 ? 'var(--success)' :
+                  Math.abs(totalTarget - 100) <= 15 ? 'var(--warning)' : 'var(--danger)';
+
+  const card = document.createElement('div');
+  card.className = 'uc-card';
+  card.innerHTML = `
+    <div class="uc-header">
+      <div class="uc-name-row">
+        <span class="uc-avatar">${avatar}</span>
+        <span class="uc-name">${name}</span>
+      </div>
+      <div>
+        <div class="uc-total-val">${fmtVal(data.totalUSD)}</div>
+        <div class="uc-total-pnl" style="color:${pnlColor}">
+          ${pnlSign}${state.currency === 'THB' ? fmtTHB(data.gainLossUSD * state.usdThb) : fmtUSD(data.gainLossUSD)}
+          &nbsp;(${pnlSign}${pnlPct.toFixed(2)}%)
+        </div>
+      </div>
+    </div>
+    <div class="uc-body">
+      <div class="uc-donut-col">
+        <div class="uc-donut-wrap"><canvas id="donut-${key}"></canvas></div>
+        <div class="uc-legend" id="legend-${key}"></div>
+      </div>
+      <div class="uc-slices-col">
+        <div class="uc-alloc-wrap">
+          <div class="uc-alloc-label">
+            <span>Target allocated</span>
+            <span style="font-weight:700;color:${tColor}">${totalTarget.toFixed(0)}% / 100%</span>
+          </div>
+          <div class="uc-alloc-track">
+            <div class="uc-alloc-fill" style="width:${tFill}%;background:${tColor}"></div>
+          </div>
+        </div>
+        <div id="slices-${key}"></div>
+      </div>
+    </div>
+  `;
+  container.appendChild(card);
+  _renderDonut(`donut-${key}`, `legend-${key}`, data);
+  _renderSlices(`slices-${key}`, data, isOwn);
+}
+
+function _renderDonut(canvasId, legendId, data) {
   if (state.charts[canvasId]) { state.charts[canvasId].destroy(); delete state.charts[canvasId]; }
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
 
-  const isDark   = document.documentElement.classList.contains('dark');
+  const isDark    = document.documentElement.classList.contains('dark');
   const textColor = isDark ? '#eef0f4' : '#111827';
-  const pnlSign  = data.gainLossUSD >= 0 ? '+' : '';
-  const pnlColor = data.gainLossUSD >= 0 ? '#22c55e' : '#ef4444';
-  const pnlPct   = data.costBasisUSD > 0 ? (data.gainLossUSD / data.costBasisUSD) * 100 : 0;
+  const pnlSign   = data.gainLossUSD >= 0 ? '+' : '';
+  const pnlColor  = data.gainLossUSD >= 0 ? '#22c55e' : '#ef4444';
+  const pnlPct    = data.costBasisUSD > 0 ? (data.gainLossUSD / data.costBasisUSD) * 100 : 0;
 
   let segs = data.portfolios
     .filter(p => p.valueUSD > 0)
     .map((p, i) => ({ label: p.name, value: p.valueUSD, color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length] }));
   if (data.otherUSD > 0) segs.push({ label: 'Other', value: data.otherUSD, color: '#94a3b8' });
   const hasData = segs.length > 0;
-  if (!hasData) segs = [{ label: 'Default', value: 1, color: isDark ? '#1e2230' : '#e5e7eb' }];
+  if (!hasData) segs = [{ label: 'Empty', value: 1, color: isDark ? '#1e2230' : '#e5e7eb' }];
 
   state.charts[canvasId] = new Chart(canvas, {
     type: 'doughnut',
@@ -942,7 +1029,7 @@ function _renderUserDonut(canvasId, legendId, data) {
       datasets: [{ data: segs.map(s => s.value), backgroundColor: segs.map(s => s.color), borderWidth: 0, hoverOffset: 4 }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: '70%',
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
       animation: { duration: 500 },
       plugins: {
         legend: { display: false },
@@ -960,14 +1047,120 @@ function _renderUserDonut(canvasId, legendId, data) {
   const legendEl = document.getElementById(legendId);
   if (legendEl) {
     legendEl.innerHTML = segs.map(s =>
-      `<span class="db-legend-item"><span style="color:${s.color}">●</span> ${s.label}</span>`
+      `<span class="uc-legend-item"><span style="color:${s.color}">●</span>&nbsp;${s.label}</span>`
     ).join('');
   }
 }
 
+function _renderSlices(containerId, data, isOwn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (!data.portfolios || data.portfolios.length === 0) {
+    el.innerHTML = '<div class="empty" style="padding:10px 0"><div class="empty-text">No portfolios yet</div></div>';
+    return;
+  }
+
+  let html = '';
+  data.portfolios.forEach((p, i) => {
+    const color     = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
+    const currentPct = data.totalUSD > 0 ? (p.valueUSD / data.totalUSD) * 100 : 0;
+    const target    = p.targetPct || 0;
+    const gap       = target - currentPct;
+    const barColor  = target === 0 ? 'var(--text-muted)' :
+                      Math.abs(gap) <= 2 ? 'var(--success)' :
+                      Math.abs(gap) <= 5 ? 'var(--warning)' : 'var(--danger)';
+    const fillPct   = target > 0 ? Math.min(100, (currentPct / target) * 100) : 0;
+    const pSign     = p.gainLossUSD >= 0 ? '+' : '';
+    const pColor    = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+    const portPnlPct = p.costUSD > 0 ? (p.gainLossUSD / p.costUSD) * 100 : 0;
+
+    html += `
+      <div class="slice-row" id="slice-${p.id}">
+        <div class="slice-top">
+          <div class="slice-left">
+            <div class="slice-name">
+              <span style="color:${color}">●</span>
+              ${p.name}
+              <span class="slice-count">${p.holdingsCount} holdings</span>
+            </div>
+            <div class="slice-sub" style="color:${pColor}">
+              ${pSign}${fmtUSD(p.gainLossUSD)} &nbsp;(${pSign}${portPnlPct.toFixed(2)}%)
+            </div>
+          </div>
+          <div class="slice-right">
+            <div class="slice-val">${fmtVal(p.valueUSD)}</div>
+            <span class="slice-pct-badge" style="background:${barColor}22;color:${barColor}">
+              ${currentPct.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+        <div class="slice-bar-row" id="slice-bar-${p.id}">
+          <div class="slice-mini-bar">
+            <div class="slice-mini-fill" style="width:${fillPct}%;background:${target > 0 ? barColor : 'var(--surface2)'}"></div>
+            ${target > 0 ? '<div class="slice-mini-marker"></div>' : ''}
+          </div>
+          <span class="slice-target-lbl">→ ${target > 0 ? target.toFixed(0) + '%' : '—'}</span>
+          ${isOwn ? `<button class="slice-edit-btn" onclick="editSliceTarget('${p.id}',${target})">✏️ target</button>` : ''}
+        </div>
+      </div>`;
+  });
+
+  if (data.otherUSD > 0) {
+    const otherPct = data.totalUSD > 0 ? (data.otherUSD / data.totalUSD) * 100 : 0;
+    html += `
+      <div class="slice-row">
+        <div class="slice-top">
+          <div class="slice-left">
+            <div class="slice-name">🏦 Other Assets <span class="slice-count">Gold · MF · Cash</span></div>
+          </div>
+          <div class="slice-right">
+            <div class="slice-val">${fmtVal(data.otherUSD)}</div>
+            <span class="slice-pct-badge" style="background:var(--surface2);color:var(--text-muted)">${otherPct.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function editSliceTarget(portfolioId, currentTarget) {
+  const barRow = document.getElementById(`slice-bar-${portfolioId}`);
+  if (!barRow) return;
+  barRow.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;width:100%;padding:2px 0">
+      <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">Target %</span>
+      <input id="tgt-${portfolioId}" type="number" value="${currentTarget || ''}"
+        placeholder="e.g. 30" min="0" max="100" step="1"
+        style="width:64px;padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--accent);
+               background:var(--surface2);color:var(--text);font-size:13px;font-weight:700"
+        onkeydown="if(event.key==='Enter')saveSliceTarget('${portfolioId}')">
+      <button onclick="saveSliceTarget('${portfolioId}')"
+        style="padding:4px 14px;border:none;border-radius:var(--radius-sm);
+               background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
+      <button onclick="loadDashboard()"
+        style="padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
+               background:var(--surface2);color:var(--text-muted);font-size:12px;cursor:pointer">✕</button>
+    </div>`;
+  document.getElementById(`tgt-${portfolioId}`)?.focus();
+  document.getElementById(`tgt-${portfolioId}`)?.select();
+}
+
+async function saveSliceTarget(portfolioId) {
+  const input = document.getElementById(`tgt-${portfolioId}`);
+  if (!input) return;
+  const val = input.value.trim();
+  const targetPct = val === '' ? null : parseFloat(val);
+  const { error } = await sb.from('portfolios').update({ target_pct: targetPct }).eq('id', portfolioId);
+  if (error) { showToast('Save failed: ' + error.message); return; }
+  showToast('Target saved');
+  loadDashboard();
+}
+
 async function calcUserData(userId) {
   const { data: portfolios } = await sb.from('portfolios')
-    .select('id, name').eq('user_id', userId).order('created_at');
+    .select('id, name, type, target_pct').eq('user_id', userId).order('created_at');
 
   const portList = [];
   let costUS = 0;
@@ -980,7 +1173,13 @@ async function calcUserData(userId) {
       pVal  += h.shares * price;
       pCost += h.shares * (h.avg_cost_usd || 0);
     }
-    portList.push({ id: p.id, name: p.name, valueUSD: pVal, costUSD: pCost });
+    portList.push({
+      id: p.id, name: p.name, type: p.type,
+      valueUSD: pVal, costUSD: pCost,
+      gainLossUSD: pVal - pCost,
+      holdingsCount: (hlds || []).length,
+      targetPct: p.target_pct || 0
+    });
     costUS += pCost;
   }
   const usValue = portList.reduce((s, p) => s + p.valueUSD, 0);
