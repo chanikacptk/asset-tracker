@@ -109,9 +109,8 @@ Called from frontend via `callGAS(action, params)`:
 | action | handler | when called |
 |---|---|---|
 | `fetchData` | DataAgent.fetchAll() | manual / daily trigger |
-| `analyzeGrowth` | AnalystAgent.reviewGrowthPortfolios() | daily trigger |
-| `analyzeWeekly` | AnalystAgent.reviewDividendAndETF() | weekly trigger |
-| `analyzePortfolio` | AnalystAgent.reviewPortfolioById(portfolioId) | **auto after every saveHolding()** |
+| `analyzeAll` | AnalystAgent.reviewAllPortfolios() | daily + weekly trigger |
+| `analyzePortfolio` | AnalystAgent.reviewPortfolioById(portfolioId) | auto after saveHolding() + 🤖 Analyze button |
 | `generateDCA` | DCAAgent.generatePlans() | monthly trigger |
 | `fetchNews` | NewsAgent.fetchForAllHoldings() | daily/weekly trigger |
 | `getPrice` | Yahoo Finance single quote | ticker autocomplete |
@@ -119,11 +118,13 @@ Called from frontend via `callGAS(action, params)`:
 | `searchTicker` | Yahoo Finance search | ticker autocomplete |
 | `testTelegram` | send test message to all users | Settings page |
 
+`analyzeGrowth` and `analyzeWeekly` still exist in AnalystAgent but are no longer called by triggers — superseded by `analyzeAll`.
+
 ## Telegram notification flow
 
 `NotificationAgent.gs` sends personalized messages per user per portfolio:
 
-- **Daily** (weekdays after `analyzeGrowth` + `fetchNews`):
+- **Daily** (weekdays after `analyzeAll` + `fetchNews`):
   - Groups by Growth portfolio name
   - Each holding: signal emoji + ticker + BUY/HOLD/TRIM/SELL + reasoning + S/R levels
   - High-impact news (last 2 days) for that user's tickers
@@ -133,7 +134,7 @@ Called from frontend via `callGAS(action, params)`:
 
 ## Important data model notes
 
-- `portfolios.type` CHECK constraint: `IN ('growth', 'dividend', 'etf')`. `_createPortfolio()` sets type from slugified name — **will fail** if name doesn't map to one of those three. Known bug, not yet fixed.
+- `portfolios.type` CHECK constraint: `IN ('growth', 'dividend', 'etf')`. **Fixed**: new portfolio modal now has a Type selector (Growth / Dividend / ETF) so `_createPortfolio()` always inserts a valid type. Legacy portfolios created before this fix may have invalid types — edit them in Supabase if needed.
 - `portfolios.target_pct` — nullable numeric, set from Home dashboard slices panel. Used in the target bar and Gap column.
 - `holdings` unique on `(portfolio_id, ticker)` — frontend upserts on conflict.
 - `market_data` — no unique constraint, rows appended. Always query `order=fetched_at.desc&limit=1`.
@@ -185,15 +186,19 @@ Scrollable table with 13 columns — inherits body font (no monospace override).
 **Sorting**: click any column header → sort asc (▲); click again → desc (▼); other columns show ⇅. Sort state in `_sortState = { col, dir }`. Data precomputed into `_portTableData[]` — no re-fetch on sort.
 
 **Key functions**:
-- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + analyses, precomputes `_portTableData`, renders table shell, calls `_renderPortTbody()`
+- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + analyses, precomputes `_portTableData`, renders table shell + header with 🤖 Analyze button, calls `_renderPortTbody()`
 - `_sortPortCol(col)` — toggles sort direction, calls `_renderPortTbody()`
 - `_renderPortTbody()` — sorts `_portTableData`, re-renders `<tbody>` + header indicators
-- `_gapCell(gap, target)` — returns colored badge: TRIM / DCA / ≈ok / —
+- `_gapCell(gap, target)` — colored badge: TRIM (overweight) / DCA (underweight) / ≈ok / —
 - `_signalBadge(signal)` — BUY/SELL/HOLD/TRIM badge
-- `_srCell(analysis)` — green S + red R display
-- `savePortfolioName(portfolioId)` — updates DB, calls `loadUSPortfolio()` then re-clicks tab (fixes stale-name bug)
+- `_srCell(analysis)` — green S + red R from `ai_analyses`
+- `runPortfolioAnalysis(portfolioId, btn)` — calls `analyzePortfolio` GAS action, shows loading state on button, reloads tab on completion
+- `savePortfolioName(portfolioId)` — updates DB, calls `loadUSPortfolio()` then re-clicks tab
 
-**Auto-analysis**: after every `saveHolding()`, fires `callGAS('analyzePortfolio', { portfolioId })` — Claude generates signals + S/R levels for that portfolio immediately.
+**Analysis triggers**:
+- Auto: fires `callGAS('analyzePortfolio', { portfolioId })` after every `saveHolding()`
+- Manual: 🤖 Analyze button in each portfolio tab header — useful for portfolios that had no prior analysis
+- Scheduled: GAS daily trigger runs `reviewAllPortfolios()` every weekday @ 8AM covering all portfolios regardless of type
 
 ## Frontend state
 
@@ -224,4 +229,3 @@ Cache name: `smart-me-v6`. **Bump the version string in `sw.js`** whenever `inde
 - Crypto holdings (`crypto_holdings` table)
 - Thai bonds (`thai_bonds` table)
 - Watchlist UI (`watchlist` table)
-- Fix `_createPortfolio()` type bug — slugified name must produce `growth`, `dividend`, or `etf`
