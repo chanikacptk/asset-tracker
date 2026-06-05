@@ -826,6 +826,12 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .live-dot { width:5px;height:5px;border-radius:50%;background:var(--success);
   animation:pulse 2s infinite;display:inline-block;vertical-align:middle; }
 @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+/* Sort */
+.pt-th-sort { cursor:pointer;user-select:none; }
+.pt-th-sort:hover { color:var(--text); }
+.pt-sort-ind { display:inline-block;margin-left:3px;font-size:9px;opacity:.5; }
+.pt-sort-ind.active { opacity:1;color:var(--accent); }
 </style>
 
 <script>
@@ -847,10 +853,14 @@ const state = {
   currentPage: 'dashboard',
   mfCategory: 'all',
   gasUrl: null,
-  editingHoldingId: null,   // portfolio_id when editing
+  editingHoldingId: null,
   cache: {},
   charts: {}
 };
+
+// ── Portfolio table sort state ─────────────────────────────────────────────────
+let _portTableData = [];
+let _sortState = { col: null, dir: 1 }; // dir: 1=asc, -1=desc
 
 // ── PIN Auth ──────────────────────────────────────────────────────────────────
 
@@ -1322,6 +1332,7 @@ async function loadUSPortfolio() {
 async function loadPortfolioTab(portfolioId, tabBtn) {
   document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   tabBtn?.classList.add('active');
+  _sortState = { col: null, dir: 1 }; // reset sort on tab switch
 
   const portfolioName = tabBtn?.dataset.portfolioName || tabBtn?.textContent?.trim() || '';
 
@@ -1365,6 +1376,32 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   const totalPLPct      = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
   const allocatedTarget = holdings.reduce((s, h) => s + (h.target_pct || 0), 0);
 
+  // Precompute all row values into sortable data
+  _portTableData = holdings.map((h, i) => {
+    const price   = prices[h.ticker] || 0;
+    const value   = h.shares * price;
+    const cost    = h.shares * (h.avg_cost_usd || 0);
+    const pl      = value - cost;
+    const plPct   = cost > 0 ? (pl / cost) * 100 : 0;
+    const weight  = totalValue > 0 ? (value / totalValue) * 100 : 0;
+    const target  = h.target_pct || 0;
+    const a       = latestAnalysis[h.ticker];
+    return {
+      portfolioId,
+      ticker: h.ticker,
+      shares: h.shares,
+      avg_cost_usd: h.avg_cost_usd || 0,
+      target_pct: h.target_pct,
+      price, value, cost, pl, plPct, weight,
+      target, gap: weight - target,
+      signal: a?.signal || '',
+      support_level: a?.support_level || 0,
+      resistance_level: a?.resistance_level || 0,
+      analysis: a,
+      color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length]
+    };
+  });
+
   const statsBar = `
     <div class="pt-stats">
       <span class="pt-stat">Value <strong>${fmtVal(totalValue)}</strong></span>
@@ -1373,70 +1410,131 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
       <span class="pt-stat">${holdings.length} positions</span>
     </div>`;
 
-  let rows = '';
-  holdings.forEach((h, i) => {
-    const price    = prices[h.ticker] || 0;
-    const value    = h.shares * price;
-    const cost     = h.shares * (h.avg_cost_usd || 0);
-    const pl       = value - cost;
-    const plPct    = cost > 0 ? (pl / cost) * 100 : 0;
-    const weight   = totalValue > 0 ? (value / totalValue) * 100 : 0;
-    const target   = h.target_pct || 0;
-    const gap      = weight - target;
-    const a        = latestAnalysis[h.ticker];
-    const color    = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
-    const barFill  = Math.min(weight / 20 * 100, 100);
+  const COLS = [
+    { key:'ticker',   label:'Ticker',                         align:'left'  },
+    { key:'shares',   label:'Shares',                         align:'right' },
+    { key:'avgCost',  label:'Avg Cost',                       align:'right' },
+    { key:'price',    label:'Price <span class="live-dot"></span>', align:'right' },
+    { key:'value',    label:'Value',                          align:'right' },
+    { key:'pl',       label:'P/L $',                         align:'right' },
+    { key:'plPct',    label:'P/L %',                         align:'right' },
+    { key:'weight',   label:'Weight',                         align:'right' },
+    { key:'target',   label:'Target',                         align:'right' },
+    { key:'gap',      label:'Gap',                            align:'right' },
+    { key:'signal',   label:'Signal',                         align:'right' },
+    { key:'support',  label:'S / R',                         align:'right' },
+    { key:'',         label:'',                               align:'center'},
+  ];
 
-    rows += `<tr>
-      <td><span class="pt-ticker">${h.ticker}</span></td>
-      <td class="pt-mono">${parseFloat(h.shares.toPrecision(7))}</td>
-      <td class="pt-mono">${fmtUSD(h.avg_cost_usd || 0)}</td>
-      <td class="pt-mono">${price > 0 ? fmtUSD(price) : '—'}</td>
-      <td class="pt-mono">${price > 0 ? fmtVal(value) : '—'}</td>
-      <td class="pt-mono ${pl >= 0 ? 'gc' : 'rc'}">${pl >= 0 ? '+' : ''}${fmtUSD(pl)}</td>
-      <td class="pt-mono ${plPct >= 0 ? 'gc' : 'rc'}">${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%</td>
-      <td>
-        <div class="pt-bar-wrap">
-          <div class="pt-bar-bg"><div class="pt-bar-fill" style="width:${barFill.toFixed(0)}%;background:${color}"></div></div>
-          <span class="pt-mono">${weight.toFixed(1)}%</span>
-        </div>
-      </td>
-      <td class="pt-mono">${target > 0 ? target + '%' : '—'}</td>
-      <td>${_gapCell(gap, target)}</td>
-      <td>${a ? _signalBadge(a.signal) : '<span style="color:var(--text-muted)">—</span>'}</td>
-      <td>${_srCell(a)}</td>
-      <td>
-        <button class="pt-act-btn" onclick="openEditHolding('${portfolioId}','${h.ticker}',${h.shares},${h.avg_cost_usd},${h.target_pct || ''})">✏️</button>
-        <button class="pt-act-btn pt-act-del" onclick="deleteHolding('${portfolioId}','${h.ticker}')">🗑</button>
-      </td>
-    </tr>`;
-  });
-
-  const unallocated = 100 - allocatedTarget;
-  const unallocRow = (unallocated > 0 && allocatedTarget > 0) ? `
-    <tr>
-      <td colspan="9" class="pt-mono" style="color:var(--text-muted);font-style:italic;text-align:left">Unallocated</td>
-      <td colspan="4" class="pt-mono" style="color:var(--text-muted)">${unallocated.toFixed(0)}% remaining</td>
-    </tr>` : '';
+  const thead = COLS.map(c => c.key
+    ? `<th class="pt-th-sort" style="text-align:${c.align}" onclick="_sortPortCol('${c.key}')">
+         ${c.label} <span id="pt-si-${c.key}" class="pt-sort-ind">⇅</span>
+       </th>`
+    : `<th></th>`
+  ).join('');
 
   document.getElementById('portfolio-content').innerHTML = `
     <div class="pt-card">
       ${nameHeader}
       ${statsBar}
       <div class="tbl-wrap">
-        <table class="pt-table">
-          <thead><tr>
-            <th style="text-align:left">Ticker</th>
-            <th>Shares</th><th>Avg Cost</th>
-            <th>Price <span class="live-dot"></span></th>
-            <th>Value</th><th>P/L $</th><th>P/L %</th>
-            <th>Weight</th><th>Target</th><th>Gap</th>
-            <th>Signal</th><th>S / R</th><th></th>
-          </tr></thead>
-          <tbody>${rows}${unallocRow}</tbody>
+        <table class="pt-table" id="pt-table">
+          <thead><tr>${thead}</tr></thead>
+          <tbody id="pt-tbody"></tbody>
         </table>
       </div>
     </div>`;
+
+  // Footer row for unallocated
+  _portTableData._allocatedTarget = allocatedTarget;
+  _renderPortTbody();
+}
+
+function _sortPortCol(col) {
+  _sortState.dir = _sortState.col === col ? _sortState.dir * -1 : 1;
+  _sortState.col = col;
+  _renderPortTbody();
+}
+
+function _renderPortTbody() {
+  const tbody = document.getElementById('pt-tbody');
+  if (!tbody || !_portTableData.length) return;
+
+  // Update all header indicators
+  document.querySelectorAll('.pt-sort-ind').forEach(el => {
+    el.textContent = '⇅';
+    el.classList.remove('active');
+  });
+  if (_sortState.col) {
+    const ind = document.getElementById(`pt-si-${_sortState.col}`);
+    if (ind) {
+      ind.textContent = _sortState.dir === 1 ? '▲' : '▼';
+      ind.classList.add('active');
+    }
+  }
+
+  const keyFn = {
+    ticker:  r => r.ticker,
+    shares:  r => r.shares,
+    avgCost: r => r.avg_cost_usd,
+    price:   r => r.price,
+    value:   r => r.value,
+    pl:      r => r.pl,
+    plPct:   r => r.plPct,
+    weight:  r => r.weight,
+    target:  r => r.target,
+    gap:     r => r.gap,
+    signal:  r => r.signal,
+    support: r => r.support_level,
+  };
+
+  const sorted = _sortState.col
+    ? [..._portTableData].sort((a, b) => {
+        const va = keyFn[_sortState.col]?.(a) ?? 0;
+        const vb = keyFn[_sortState.col]?.(b) ?? 0;
+        return typeof va === 'string'
+          ? va.localeCompare(vb) * _sortState.dir
+          : (va - vb) * _sortState.dir;
+      })
+    : _portTableData;
+
+  let rows = '';
+  sorted.forEach(r => {
+    const barFill = Math.min(r.weight / 20 * 100, 100);
+    rows += `<tr>
+      <td><span class="pt-ticker">${r.ticker}</span></td>
+      <td class="pt-mono">${parseFloat(r.shares.toPrecision(7))}</td>
+      <td class="pt-mono">${fmtUSD(r.avg_cost_usd)}</td>
+      <td class="pt-mono">${r.price > 0 ? fmtUSD(r.price) : '—'}</td>
+      <td class="pt-mono">${r.price > 0 ? fmtVal(r.value) : '—'}</td>
+      <td class="pt-mono ${r.pl >= 0 ? 'gc' : 'rc'}">${r.pl >= 0 ? '+' : ''}${fmtUSD(r.pl)}</td>
+      <td class="pt-mono ${r.plPct >= 0 ? 'gc' : 'rc'}">${r.plPct >= 0 ? '+' : ''}${r.plPct.toFixed(1)}%</td>
+      <td>
+        <div class="pt-bar-wrap">
+          <div class="pt-bar-bg"><div class="pt-bar-fill" style="width:${barFill.toFixed(0)}%;background:${r.color}"></div></div>
+          <span class="pt-mono">${r.weight.toFixed(1)}%</span>
+        </div>
+      </td>
+      <td class="pt-mono">${r.target > 0 ? r.target + '%' : '—'}</td>
+      <td>${_gapCell(r.gap, r.target)}</td>
+      <td>${r.signal ? _signalBadge(r.signal) : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${_srCell(r.analysis)}</td>
+      <td>
+        <button class="pt-act-btn" onclick="openEditHolding('${r.portfolioId}','${r.ticker}',${r.shares},${r.avg_cost_usd},${r.target_pct || ''})">✏️</button>
+        <button class="pt-act-btn pt-act-del" onclick="deleteHolding('${r.portfolioId}','${r.ticker}')">🗑</button>
+      </td>
+    </tr>`;
+  });
+
+  const unallocated = 100 - (_portTableData._allocatedTarget || 0);
+  if (unallocated > 0 && (_portTableData._allocatedTarget || 0) > 0) {
+    rows += `<tr>
+      <td colspan="9" class="pt-mono" style="color:var(--text-muted);font-style:italic;text-align:left">Unallocated</td>
+      <td colspan="4" class="pt-mono" style="color:var(--text-muted)">${unallocated.toFixed(0)}% remaining</td>
+    </tr>`;
+  }
+
+  tbody.innerHTML = rows;
 }
 
 function _gapCell(gap, target) {
