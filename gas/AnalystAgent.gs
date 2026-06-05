@@ -14,6 +14,13 @@ const AnalystAgent = (() => {
     _reviewByType('etf');
   }
 
+  function reviewPortfolioById(portfolioId) {
+    const portfolios = supabaseRequest('GET',
+      `portfolios?id=eq.${portfolioId}&select=id,user_id,name,type,dca_budget_usd`);
+    if (!portfolios || portfolios.length === 0) return;
+    _analyzePortfolio(portfolios[0]);
+  }
+
   // ── Core review flow ────────────────────────────────────────────────────────
 
   function _reviewByType(portfolioType) {
@@ -224,5 +231,5 @@ Be concise but specific. Never fabricate news. Only reference news from the cont
     return rows || [];
   }
 
-  return { reviewGrowthPortfolios, reviewDividendAndETF };
+  return { reviewGrowthPortfolios, reviewDividendAndETF, reviewPortfolioById };
 })();

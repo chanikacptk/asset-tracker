@@ -56,6 +56,10 @@ function doGet(e) {
       const q = e?.parameter?.q || '';
       if (!q) throw new Error('q required');
       result.quotes = _yahooSearch(q);
+    } else if (action === 'analyzePortfolio') {
+      const portfolioId = e?.parameter?.portfolioId;
+      if (!portfolioId) throw new Error('portfolioId required');
+      AnalystAgent.reviewPortfolioById(portfolioId);
     } else if (action === 'testTelegram') {
       const userId = e?.parameter?.userId;
       result.sent = _sendTestTelegram(userId);
@@ -190,6 +194,7 @@ function onDailyTrigger() {
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         AnalystAgent.reviewGrowthPortfolios();
         NewsAgent.fetchForAllHoldings();
+        NotificationAgent.sendHighImpactNewsAlerts();
         NotificationAgent.sendDailyGrowthReview();
       }
     }
@@ -205,6 +210,7 @@ function onWeeklyTrigger() {
     DataAgent.fetchAll();
     AnalystAgent.reviewDividendAndETF();
     NewsAgent.fetchForAllHoldings();
+    NotificationAgent.sendHighImpactNewsAlerts();
     NotificationAgent.sendWeeklyReview();
   } catch (e) {
     Logger.log('[Orchestrator] Weekly trigger error: ' + e.message);

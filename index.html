@@ -1386,14 +1386,11 @@ async function savePortfolioName(portfolioId) {
   if (!newName) return;
   const { error } = await sb.from('portfolios').update({ name: newName }).eq('id', portfolioId);
   if (error) { showToast('Rename failed'); return; }
-  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => {
-    if (b.dataset.portfolioId === portfolioId) {
-      b.textContent = newName;
-      b.dataset.portfolioName = newName;
-    }
-  });
   showToast('Renamed to ' + newName);
-  await loadPortfolioTab(portfolioId, document.querySelector('.tab-btn.active'));
+  await loadUSPortfolio();
+  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => {
+    if (b.dataset.portfolioId === portfolioId) b.click();
+  });
 }
 
 // ── Gold ──────────────────────────────────────────────────────────────────────
@@ -2226,12 +2223,12 @@ async function saveHolding() {
     );
     if (error) throw new Error(error.message);
 
-    // Seed market_data so price survives page reloads (GAS uses service role to write)
-    // Fire-and-forget — don't block the UI on this
+    // Fire-and-forget: persist price + trigger AI analysis for this portfolio
     const livePrice = state.cache[ticker] || cost;
     state.cache[ticker] = livePrice;
-    if (state.gasUrl && livePrice > 0) {
-      callGAS('savePrice', { symbol: ticker, price: livePrice, asset_type: 'stock', currency: 'USD' });
+    if (state.gasUrl) {
+      if (livePrice > 0) callGAS('savePrice', { symbol: ticker, price: livePrice, asset_type: 'stock', currency: 'USD' });
+      callGAS('analyzePortfolio', { portfolioId });
     }
 
     closeAddHolding();
