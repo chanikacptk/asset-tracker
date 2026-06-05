@@ -4,6 +4,10 @@
 
 A personal finance PWA for 2 users (partners). Tracks US stocks, gold, Thai mutual funds, cash, insurance, and private investments. Includes AI-powered portfolio analysis and monthly DCA plan generation via Claude API.
 
+## Live URL
+
+**https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
+
 ## Stack
 
 | Layer | Technology |
@@ -20,6 +24,18 @@ A personal finance PWA for 2 users (partners). Tracks US stocks, gold, Thai mutu
 **CDN dependencies loaded in `index.html`:**
 - `@supabase/supabase-js@2`
 - `chart.js@4.4.0`
+
+## Deployment
+
+Push to `main` → GitHub Pages deploys automatically (~30–60s).
+
+```bash
+git add <files>
+git commit -m "..."
+git push origin main
+```
+
+No build step. The repo root is served directly as the site.
 
 ## Project structure
 
@@ -44,9 +60,10 @@ supabase/
   schema.sql            Full schema — run once to bootstrap
   seed.sql              Sample data
   migrations/
-    001_app_config.sql        app_config table (stores GAS URL)
-    002_user_profile.sql      avatar + name columns on users
-    003_frontend_write_policies.sql  RLS policies for frontend CRUD
+    001_app_config.sql              app_config table (stores GAS URL)
+    002_user_profile.sql            avatar + name columns on users
+    003_frontend_write_policies.sql RLS policies for frontend CRUD (holdings, portfolios, watchlist)
+    004_portfolio_target_pct.sql    portfolios.target_pct column + UPDATE policy ✓ applied
 ```
 
 ## Authentication
@@ -58,7 +75,7 @@ The anon key (`SUPABASE_ANON_KEY`) is intentionally hardcoded in `index.html` �
 ## RLS design
 
 - **All tables**: `anon_read_all` SELECT policy (frontend reads anything, filters by `user_id` in JS)
-- **Frontend writes** (anon key): holdings CRUD, portfolio INSERT, DCA plan approval, private investments/cash updates, watchlist CRUD
+- **Frontend writes** (anon key): holdings CRUD, portfolio INSERT+UPDATE, DCA plan approval, private investments/cash updates, watchlist CRUD
 - **GAS writes** (service_role key): all market data, AI analyses, DCA plan creation, notifications log, exchange rates, news — service role bypasses RLS entirely
 
 **Never put the `SUPABASE_SERVICE_KEY` in index.html.**
@@ -101,12 +118,33 @@ Called from the frontend via `callGAS(action, params)`:
 
 ## Important data model notes
 
-- `portfolios.type` has a DB constraint: `CHECK (type IN ('growth', 'dividend', 'etf'))`. The frontend `_createPortfolio()` sets `type` from the slugified name — this **will fail** if the name doesn't produce one of those three values. Fix: always pass a valid type explicitly.
+- `portfolios.type` has a DB constraint: `CHECK (type IN ('growth', 'dividend', 'etf'))`. The frontend `_createPortfolio()` sets `type` from the slugified name — this **will fail** if the name doesn't produce one of those three values. Known bug, not yet fixed.
+- `portfolios.target_pct` — nullable numeric, set by the user from the Home dashboard. Used to show the target allocation bar per portfolio slice.
 - `holdings` unique on `(portfolio_id, ticker)` — upsert on conflict.
 - `market_data` has no unique constraint; prices are appended as rows. Always query with `order=fetched_at.desc&limit=1` to get the latest.
 - `exchange_rates` unique on `(from_currency, to_currency, date)`.
 - `dca_plans` unique on `(user_id, month_year)`.
-- There is no `avatar` column in `schema.sql` — it was added via `migrations/002_user_profile.sql`.
+- `users.avatar` and `users.name` (editable) were added via `migrations/002_user_profile.sql` — not in base schema.
+
+## Home dashboard layout
+
+Each user gets a full-width `.uc-card`:
+- **Header**: avatar + name (left) / total value + G/L (right)
+- **Body** (flex row on ≥640px, stacked on ≤400px):
+  - **Donut chart** (left) — one segment per portfolio, colored by `PORTFOLIO_COLORS`, center text shows value + G/L
+  - **Slices panel** (right):
+    - "Target allocated X% / 100%" bar — green near 100%, yellow/red otherwise
+    - One row per portfolio: name + holdings count / value / G/L / current % badge / mini progress bar → target % / ✏️ edit button (own user only)
+    - "Other Assets" row (gold, MF, cash, private) if non-zero
+
+Key functions:
+- `loadDashboard()` — entry point, fetches both users' data, builds cards, loads recent alerts
+- `_buildUserCard(container, key, userId, avatar, name, data, isOwn)` — creates `.uc-card` DOM node
+- `_renderDonut(canvasId, legendId, data)` — draws Chart.js doughnut (canvas ids: `donut-my`, `donut-partner`)
+- `_renderSlices(containerId, data, isOwn)` — renders portfolio rows (no emoji prefix, just `p.name`)
+- `editSliceTarget(portfolioId, currentTarget)` — replaces bar row with inline input
+- `saveSliceTarget(portfolioId)` — upserts `portfolios.target_pct`, then re-runs `loadDashboard()`
+- `calcUserData(userId)` — aggregates all asset values; returns `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], otherUSD }` where each portfolio has `{ id, name, type, valueUSD, costUSD, gainLossUSD, holdingsCount, targetPct }`
 
 ## Frontend state
 
@@ -132,6 +170,7 @@ Cache name is `smart-me-v6`. **Bump the version string in `sw.js`** whenever you
 
 ## What's NOT implemented yet (schema exists, no UI)
 
-- Crypto holdings (table exists: `crypto_holdings`)
-- Thai bonds (table exists: `thai_bonds`)
-- Watchlist UI
+- Crypto holdings (table: `crypto_holdings`)
+- Thai bonds (table: `thai_bonds`)
+- Watchlist UI (table: `watchlist`)
+- Fix: `_createPortfolio()` type bug — hardcoded slug can violate DB CHECK constraint
