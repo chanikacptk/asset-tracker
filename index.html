@@ -9,6 +9,7 @@
 <title>Smart Me</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Instrument+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <!-- CDN Dependencies -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -37,7 +38,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100dvh;
@@ -640,10 +641,10 @@ body {
 html.dark {
   --bg: #06070a;
   --surface: #0d0f14;
-  --surface2: #14171f;
-  --border: #1e2230;
-  --text: #eef0f4;
-  --text-muted: #6b7280;
+  --surface2: #13161e;
+  --border: rgba(255,255,255,.07);
+  --text: #e2e6f0;
+  --text-muted: #5a6278;
 }
 html.dark .nw-card { background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%); }
 
@@ -752,6 +753,79 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
   .uc-donut-col { width:160px; }
   .uc-donut-wrap { height:160px; }
 }
+
+/* ── Portfolio table (portfolio_tracker style) ────────────────────────────── */
+.pt-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;margin-bottom:12px;
+}
+.pt-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.pt-title { font-family:'Syne',sans-serif;font-weight:700;font-size:15px; }
+.pt-stats {
+  display:flex;gap:16px;padding:8px 16px;border-bottom:1px solid var(--border);
+  flex-wrap:wrap;background:var(--surface2);
+}
+.pt-stat { font-size:11px;color:var(--text-muted); }
+.pt-stat strong { font-family:'JetBrains Mono',monospace;color:var(--text);font-size:12px; }
+
+.tbl-wrap { overflow-x:auto;-webkit-overflow-scrolling:touch; }
+.pt-table { width:100%;border-collapse:collapse;font-size:12px;min-width:760px; }
+.pt-table thead th {
+  font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--text-muted);padding:7px 10px;text-align:right;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+  background:var(--surface);position:sticky;top:0;
+}
+.pt-table thead th:first-child { text-align:left;padding-left:16px; }
+.pt-table thead th:last-child  { text-align:center; }
+.pt-table tbody td {
+  padding:9px 10px;border-bottom:1px solid var(--border);
+  text-align:right;vertical-align:middle;
+}
+.pt-table tbody td:first-child { text-align:left;padding-left:16px; }
+.pt-table tbody td:last-child  { text-align:center; }
+.pt-table tbody tr:last-child td { border-bottom:none; }
+.pt-table tbody tr:hover td { background:rgba(255,255,255,.018); }
+
+.pt-ticker { font-family:'Syne',sans-serif;font-weight:700;font-size:13px; }
+.pt-mono   { font-family:'JetBrains Mono',monospace;font-size:11px; }
+.gc { color:var(--success); } .rc { color:var(--danger); }
+
+/* Badges */
+.pt-badge { display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px; }
+.b-buy  { background:rgba(22,163,74,.15);  color:var(--success); }
+.b-sell { background:rgba(220,38,38,.15);  color:var(--danger);  }
+.b-hold { background:rgba(96,165,250,.15); color:#60a5fa; }
+.b-trim { background:rgba(217,119,6,.15);  color:var(--warning); }
+.b-dca  { background:rgba(168,85,247,.15); color:#c084fc; }
+
+/* Weight bar */
+.pt-bar-wrap { display:flex;align-items:center;gap:5px;justify-content:flex-end; }
+.pt-bar-bg   { width:36px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;flex-shrink:0; }
+.pt-bar-fill { height:100%;border-radius:2px; }
+
+/* S/R */
+.pt-sr     { display:flex;gap:3px;align-items:center;justify-content:flex-end;flex-wrap:wrap; }
+.pt-sr-lbl { font-size:8px;color:var(--text-muted);text-transform:uppercase; }
+.pt-sr-s   { font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--success); }
+.pt-sr-r   { font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--danger); }
+
+/* Action buttons in table */
+.pt-act-btn {
+  padding:3px 7px;border-radius:5px;border:1px solid var(--border);
+  background:transparent;color:var(--text-muted);font-size:10px;cursor:pointer;
+  transition:all .12s;margin:0 1px;
+}
+.pt-act-btn:hover    { border-color:var(--accent);color:var(--accent); }
+.pt-act-del:hover    { border-color:var(--danger);color:var(--danger); }
+
+/* Live dot */
+.live-dot { width:5px;height:5px;border-radius:50%;background:var(--success);
+  animation:pulse 2s infinite;display:inline-block;vertical-align:middle; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
 </style>
 
 <script>
@@ -1250,29 +1324,32 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   tabBtn?.classList.add('active');
 
   const portfolioName = tabBtn?.dataset.portfolioName || tabBtn?.textContent?.trim() || '';
-  const nameHeader = `
-    <div id="port-name-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
-      <span style="font-size:13px;font-weight:700">${portfolioName}</span>
-      <button onclick="startRenamePortfolio('${portfolioId}','${portfolioName.replace(/'/g,"\\'")}')"
-        style="background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1">✏️</button>
-    </div>`;
 
   const { data: holdings } = await sb.from('holdings')
     .select('ticker, target_pct, shares, avg_cost_usd')
     .eq('portfolio_id', portfolioId)
     .order('target_pct', { ascending: false, nullsFirst: false });
 
+  const nameHeader = `
+    <div id="port-name-row" class="pt-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="pt-title">${portfolioName}</span>
+        <button onclick="startRenamePortfolio('${portfolioId}','${portfolioName.replace(/'/g,"\\'")}')"
+          style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;opacity:.7">✏️</button>
+      </div>
+      <button onclick="navigate('us');setTimeout(openAddHolding,80)"
+        style="padding:5px 12px;border-radius:8px;border:1px solid rgba(34,197,94,.4);background:rgba(34,197,94,.06);color:var(--success);font-size:11px;font-weight:700;cursor:pointer">+ Add</button>
+    </div>`;
+
   if (!holdings || holdings.length === 0) {
     document.getElementById('portfolio-content').innerHTML =
-      `<div class="card">${nameHeader}<div class="empty" style="padding:16px 0 4px"><div class="empty-text">No holdings in this portfolio</div></div></div>`;
+      `<div class="pt-card">${nameHeader}<div class="empty" style="padding:32px"><div class="empty-icon">📂</div><div class="empty-text">No holdings yet</div></div></div>`;
     return;
   }
 
-  // Get prices and latest analysis
+  // Prices + analyses
   const prices = {};
-  for (const h of holdings) {
-    prices[h.ticker] = await getLatestPrice(h.ticker);
-  }
+  for (const h of holdings) prices[h.ticker] = await getLatestPrice(h.ticker);
 
   const { data: analyses } = await sb.from('ai_analyses')
     .select('ticker, signal, reasoning, support_level, resistance_level, created_at')
@@ -1280,88 +1357,107 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
     .order('created_at', { ascending: false });
 
   const latestAnalysis = {};
-  if (analyses) {
-    analyses.forEach(a => { if (!latestAnalysis[a.ticker]) latestAnalysis[a.ticker] = a; });
-  }
+  if (analyses) analyses.forEach(a => { if (!latestAnalysis[a.ticker]) latestAnalysis[a.ticker] = a; });
 
-  // Calculate total portfolio value for current weight
-  const totalValue = holdings.reduce((s, h) => s + h.shares * (prices[h.ticker] || 0), 0);
+  const totalValue      = holdings.reduce((s, h) => s + h.shares * (prices[h.ticker] || 0), 0);
+  const totalCost       = holdings.reduce((s, h) => s + h.shares * (h.avg_cost_usd || 0), 0);
+  const totalPL         = totalValue - totalCost;
+  const totalPLPct      = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
   const allocatedTarget = holdings.reduce((s, h) => s + (h.target_pct || 0), 0);
 
-  let html = '';
+  const statsBar = `
+    <div class="pt-stats">
+      <span class="pt-stat">Value <strong>${fmtVal(totalValue)}</strong></span>
+      <span class="pt-stat">Cost <strong>${fmtVal(totalCost)}</strong></span>
+      <span class="pt-stat ${totalPL >= 0 ? 'gc' : 'rc'}">P/L <strong>${totalPL >= 0 ? '+' : ''}${fmtVal(totalPL)} (${totalPLPct >= 0 ? '+' : ''}${totalPLPct.toFixed(1)}%)</strong></span>
+      <span class="pt-stat">${holdings.length} positions</span>
+    </div>`;
 
-  holdings.forEach(h => {
-    const currentPrice = prices[h.ticker] || 0;
-    const currentValue = h.shares * currentPrice;
-    const currentPct = totalValue > 0 ? (currentValue / totalValue) * 100 : 0;
-    const target = h.target_pct || 0;
-    const gainLoss = h.avg_cost_usd > 0 ? ((currentPrice - h.avg_cost_usd) / h.avg_cost_usd) * 100 : null;
-    const displayVal = currentPrice > 0 ? fmtVal(currentValue) : 'Price pending';
-    const analysis = latestAnalysis[h.ticker];
+  let rows = '';
+  holdings.forEach((h, i) => {
+    const price    = prices[h.ticker] || 0;
+    const value    = h.shares * price;
+    const cost     = h.shares * (h.avg_cost_usd || 0);
+    const pl       = value - cost;
+    const plPct    = cost > 0 ? (pl / cost) * 100 : 0;
+    const weight   = totalValue > 0 ? (value / totalValue) * 100 : 0;
+    const target   = h.target_pct || 0;
+    const gap      = weight - target;
+    const a        = latestAnalysis[h.ticker];
+    const color    = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
+    const barFill  = Math.min(weight / 20 * 100, 100);
 
-    // Bar color: green if within 2%, red if off by more than 5%
-    const gap = target - currentPct;
-    const barColor = Math.abs(gap) <= 2 ? 'var(--success)' : Math.abs(gap) <= 5 ? 'var(--warning)' : 'var(--danger)';
-    const fillPct = target > 0 ? Math.min(100, (currentPct / target) * 100) : 0;
-
-    html += `
-      <div class="holding-row">
-        <div class="holding-top">
-          <span class="holding-ticker">${h.ticker}</span>
-          <span class="holding-price">${displayVal}</span>
+    rows += `<tr>
+      <td><span class="pt-ticker">${h.ticker}</span></td>
+      <td class="pt-mono">${parseFloat(h.shares.toPrecision(7))}</td>
+      <td class="pt-mono">${fmtUSD(h.avg_cost_usd || 0)}</td>
+      <td class="pt-mono">${price > 0 ? fmtUSD(price) : '—'}</td>
+      <td class="pt-mono">${price > 0 ? fmtVal(value) : '—'}</td>
+      <td class="pt-mono ${pl >= 0 ? 'gc' : 'rc'}">${pl >= 0 ? '+' : ''}${fmtUSD(pl)}</td>
+      <td class="pt-mono ${plPct >= 0 ? 'gc' : 'rc'}">${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%</td>
+      <td>
+        <div class="pt-bar-wrap">
+          <div class="pt-bar-bg"><div class="pt-bar-fill" style="width:${barFill.toFixed(0)}%;background:${color}"></div></div>
+          <span class="pt-mono">${weight.toFixed(1)}%</span>
         </div>
-        <div class="holding-meta">
-          <span>${currentPrice > 0 ? fmtVal(currentPrice) : '—'} · ${parseFloat(h.shares.toPrecision(8))} shares</span>
-          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
-        </div>
-        ${target > 0 ? `
-        <div class="target-bar-wrap">
-          <div class="target-bar-label">
-            <span>${currentPct.toFixed(1)}% current</span>
-            <span style="color:var(--text-muted)">target ${target}%</span>
-          </div>
-          <div class="target-bar-track">
-            <div class="target-bar-fill" style="width:${fillPct}%;background:${barColor}"></div>
-            <div class="target-bar-target" style="left:100%"></div>
-          </div>
-        </div>` : ''}
-        ${analysis ? `
-        <div style="margin-top:6px;display:flex;align-items:flex-start;gap:8px">
-          <span class="signal signal-${analysis.signal}">${analysis.signal}</span>
-          <span style="font-size:12px;color:var(--text-muted);flex:1">${analysis.reasoning || ''}</span>
-        </div>
-        ${analysis.support_level || analysis.resistance_level ? `
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
-          ${analysis.support_level ? `S: $${analysis.support_level}` : ''}
-          ${analysis.resistance_level ? ` · R: $${analysis.resistance_level}` : ''}
-        </div>` : ''}
-        ` : ''}
-        <div class="holding-actions">
-          <button class="holding-action-btn edit"
-            onclick="openEditHolding('${portfolioId}','${h.ticker}',${h.shares},${h.avg_cost_usd},${h.target_pct || ''})">
-            ✏️ Edit
-          </button>
-          <button class="holding-action-btn del"
-            onclick="deleteHolding('${portfolioId}','${h.ticker}')">
-            🗑 Remove
-          </button>
-        </div>
-      </div>
-    `;
+      </td>
+      <td class="pt-mono">${target > 0 ? target + '%' : '—'}</td>
+      <td>${_gapCell(gap, target)}</td>
+      <td>${a ? _signalBadge(a.signal) : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td>${_srCell(a)}</td>
+      <td>
+        <button class="pt-act-btn" onclick="openEditHolding('${portfolioId}','${h.ticker}',${h.shares},${h.avg_cost_usd},${h.target_pct || ''})">✏️</button>
+        <button class="pt-act-btn pt-act-del" onclick="deleteHolding('${portfolioId}','${h.ticker}')">🗑</button>
+      </td>
+    </tr>`;
   });
 
-  // Unallocated bar
   const unallocated = 100 - allocatedTarget;
-  if (unallocated > 0) {
-    html += `<div class="holding-row">
-      <div class="holding-top">
-        <span style="color:var(--text-muted);font-style:italic">Unallocated target</span>
-        <span style="color:var(--text-muted)">${unallocated.toFixed(0)}%</span>
+  const unallocRow = (unallocated > 0 && allocatedTarget > 0) ? `
+    <tr>
+      <td colspan="9" class="pt-mono" style="color:var(--text-muted);font-style:italic;text-align:left">Unallocated</td>
+      <td colspan="4" class="pt-mono" style="color:var(--text-muted)">${unallocated.toFixed(0)}% remaining</td>
+    </tr>` : '';
+
+  document.getElementById('portfolio-content').innerHTML = `
+    <div class="pt-card">
+      ${nameHeader}
+      ${statsBar}
+      <div class="tbl-wrap">
+        <table class="pt-table">
+          <thead><tr>
+            <th style="text-align:left">Ticker</th>
+            <th>Shares</th><th>Avg Cost</th>
+            <th>Price <span class="live-dot"></span></th>
+            <th>Value</th><th>P/L $</th><th>P/L %</th>
+            <th>Weight</th><th>Target</th><th>Gap</th>
+            <th>Signal</th><th>S / R</th><th></th>
+          </tr></thead>
+          <tbody>${rows}${unallocRow}</tbody>
+        </table>
       </div>
     </div>`;
-  }
+}
 
-  document.getElementById('portfolio-content').innerHTML = `<div class="card">${nameHeader}${html}</div>`;
+function _gapCell(gap, target) {
+  if (target === 0) return '<span style="color:var(--text-muted);font-size:11px">—</span>';
+  if (Math.abs(gap) < 0.5) return '<span class="pt-badge" style="background:var(--surface2);color:var(--text-muted)">≈ ok</span>';
+  return gap > 0
+    ? `<span class="pt-badge b-trim">+${gap.toFixed(1)}%</span>`
+    : `<span class="pt-badge b-dca">${gap.toFixed(1)}%</span>`;
+}
+
+function _signalBadge(signal) {
+  const cls = { BUY:'b-buy', SELL:'b-sell', HOLD:'b-hold', TRIM:'b-trim' }[signal] || '';
+  return `<span class="pt-badge ${cls}">${signal}</span>`;
+}
+
+function _srCell(a) {
+  if (!a || (!a.support_level && !a.resistance_level))
+    return '<span style="color:var(--text-muted);font-size:11px">—</span>';
+  const s = a.support_level    ? `<span class="pt-sr-lbl">S</span><span class="pt-sr-s">$${a.support_level}</span>` : '';
+  const r = a.resistance_level ? `<span class="pt-sr-lbl">R</span><span class="pt-sr-r">$${a.resistance_level}</span>` : '';
+  return `<div class="pt-sr">${s}${r}</div>`;
 }
 
 function startRenamePortfolio(portfolioId, currentName) {
