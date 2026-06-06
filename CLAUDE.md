@@ -13,14 +13,14 @@ A personal finance PWA for 2 users (partners). Tracks US stocks, gold, Thai mutu
 | Layer | Technology |
 |---|---|
 | Frontend | Single HTML file (`index.html`) — vanilla JS, no build step, no npm |
-| Fonts | Instrument Sans (body), Google Fonts CDN — Syne/JetBrains Mono loaded but not used in table |
-| Styling | CSS variables, light/dark theme via `html.dark` class |
+| Fonts | Instrument Sans (body), Syne (headings/tickers), JetBrains Mono (table numbers only) — **do not change** |
+| Styling | CSS variables, light/dark theme via `html.dark` class (default: dark) |
 | Charts | Chart.js 4.4.0 (CDN) |
 | Database | Supabase (PostgreSQL + REST API) |
 | Backend logic | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user, per-portfolio) |
-| PWA | `manifest.json` + `sw.js` (cache-v6) |
+| PWA | `manifest.json` + `sw.js` (cache-v13) |
 
 **CDN dependencies in `index.html`:**
 - `@supabase/supabase-js@2`
@@ -37,14 +37,22 @@ git commit -m "..."
 git push origin main
 ```
 
+**Always bump `sw.js` cache version** (currently `smart-me-v13`) when `index.html` changes — stale cache will serve old JS otherwise.
+
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS in one file (~2800 lines)
+index.html              Main app — all HTML/CSS/JS in one file (~3400 lines)
 manifest.json           PWA manifest
 sw.js                   Service worker (cache-first CDN/shell, network-first Supabase)
-assets/icons/           PWA icons (192px, 512px)
-portfolio_tracker.html  Prototype/reference — NOT the active app
+assets/
+  icons/                PWA icons (192px, 512px)
+  banks/                Thai bank logo PNGs (21 files: KBANK.png, SCB.png, BBL.png …)
+src/
+  config/
+    banks.js            THAI_BANKS export — bank codes → { name, nameEN, color, logo }
+                        (reference only; the inline THAI_BANKS const in index.html is the live version)
+portfolio_tracker.html  Design reference — NOT the active app
 
 gas/
   Code.gs               Orchestrator + doGet web app entry + trigger setup
@@ -65,6 +73,8 @@ supabase/
     003_frontend_write_policies.sql RLS: holdings CRUD, portfolio INSERT, watchlist
     004_portfolio_target_pct.sql    portfolios.target_pct + UPDATE policy ✓ applied
     005_alert_cooldowns.sql         alert_cooldowns table for 24h notification cooldown ✓ applied
+    006_cash_accounts_extended.sql  New columns on cash_accounts ✓ applied
+    007_cash_accounts_rls_insert_delete.sql  INSERT + DELETE policies for cash_accounts ✓ applied
 ```
 
 ## Authentication
@@ -76,7 +86,7 @@ Custom PIN-based auth — **not** Supabase Auth. `users` table stores `pin_hash`
 ## RLS design
 
 - **All tables**: `anon_read_all` SELECT policy — frontend reads everything, filters by `user_id` in JS
-- **Frontend writes** (anon key): holdings CRUD, portfolio INSERT + UPDATE (incl. `target_pct`), DCA approval, private investments, cash accounts, watchlist
+- **Frontend writes** (anon key): holdings CRUD, portfolio INSERT + UPDATE (incl. `target_pct`), DCA approval, private investments, cash accounts (INSERT + UPDATE + DELETE), watchlist
 - **GAS writes** (service_role): market data, AI analyses, DCA plans, notifications log, exchange rates, news, alert_cooldowns — bypasses RLS entirely
 
 **Never put `SUPABASE_SERVICE_KEY` in index.html.**
@@ -157,39 +167,120 @@ Run `testUpdateSRLevels` from GAS IDE to seed initial data after deployment.
 
 ## Important data model notes
 
-- `portfolios.type` CHECK constraint: `IN ('growth', 'dividend', 'etf')`. **Fixed**: new portfolio modal now has a Type selector (Growth / Dividend / ETF) so `_createPortfolio()` always inserts a valid type. Legacy portfolios created before this fix may have invalid types — edit them in Supabase if needed.
-- `portfolios.target_pct` — nullable numeric, set from Home dashboard slices panel. Used in the target bar and Gap column.
+- `portfolios.type` CHECK constraint: `IN ('growth', 'dividend', 'etf')`. New portfolio modal has a Type selector so `_createPortfolio()` always inserts a valid type.
+- `portfolios.target_pct` — nullable numeric, set from Home dashboard. Used in Gap column.
 - `holdings` unique on `(portfolio_id, ticker)` — frontend upserts on conflict.
 - `market_data` — no unique constraint, rows appended. Always query `order=fetched_at.desc&limit=1`.
-- `exchange_rates` unique on `(from_currency, to_currency, date)`.
+- `exchange_rates` unique on `(from_currency, to_currency, date)`. `fetchExchangeRate()` loads **all** currencies into `state.fxRates` (not just USD/THB).
 - `dca_plans` unique on `(user_id, month_year)`.
 - `alert_cooldowns` unique on `(user_id, ticker, alert_type)` — upserted by GAS after each realtime alert sent.
 - `users.avatar`, `users.name` added via migration 002 — not in base `schema.sql`.
 
-## Home dashboard (`.uc-card`)
+### cash_accounts columns (after migration 006)
 
-Each user gets a full-width card. Layout: header → flex body (donut left, slices right). Stacks on ≤400px.
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` | uuid | FK → users |
+| `name` | text | Account name |
+| `sub_type` | text | `'saving'` / `'fixed_deposit'` / `'fcd'` |
+| `bank` | text | Bank code (e.g. `'KBANK'`) — links to `THAI_BANKS` |
+| `account_number` | text | Optional, display only |
+| `currency` | text | `'THB'` for saving/FD; foreign code (USD/EUR/…) for FCD |
+| `balance` | numeric | **Always THB principal** for all types. For FCD: `fcd_amount × fcd_purchase_rate` |
+| `interest_rate` | numeric | Annual %, nullable |
+| `start_date` | date | FD start / FCD purchase date |
+| `maturity_date` | date | FD/FCD end/maturity date |
+| `duration_months` | integer | FD/FCD duration (auto-calc or manual) |
+| `status` | text | `'active'` / `'matured'` (FD only) |
+| `fcd_amount` | numeric | Foreign currency units held (FCD only) |
+| `fcd_purchase_rate` | numeric | THB per 1 FC unit at purchase (FCD only) |
+| `cash_on_hand_thb` | numeric | Physical cash (legacy, not in new form) |
 
-**Donut chart**: one segment per portfolio (`PORTFOLIO_COLORS`), center text = value + G/L.
+## Thai bank config
 
-**Slices panel**:
-- "Target allocated X% / 100%" bar (green ≈100%, yellow/red otherwise)
-- One row per portfolio: name · holdings count · value · G/L · current % badge · mini bar → target % · ✏️ (own user only)
-- "Other Assets" row (gold + MF + cash + private) if > 0
+`THAI_BANKS` constant is embedded inline in `index.html` (and mirrored in `src/config/banks.js`):
 
-**Key functions**:
-- `loadDashboard()` — fetches both users, builds cards, recent alerts
-- `_buildUserCard(container, key, userId, avatar, name, data, isOwn)`
-- `_renderDonut(canvasId, legendId, data)` — canvas ids `donut-my` / `donut-partner`
-- `_renderSlices(containerId, data, isOwn)` — portfolio rows, no emoji, just `p.name`
-- `editSliceTarget(portfolioId, currentTarget)` — inline input in bar row
-- `saveSliceTarget(portfolioId)` — updates `portfolios.target_pct`, reloads dashboard
-- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], otherUSD }`
-  - each portfolio: `{ id, name, type, valueUSD, costUSD, gainLossUSD, holdingsCount, targetPct }`
+```js
+THAI_BANKS = {
+  KBANK: { name: 'กสิกรไทย', nameEN: 'Kasikorn',  color: '#138f2d' },
+  SCB:   { name: 'ไทยพาณิชย์', nameEN: 'SCB',     color: '#4e2d8c' },
+  BBL:   { name: 'กรุงเทพ',    nameEN: 'Bangkok Bank', color: '#1b3f7a' },
+  // … 18 more banks
+}
+```
 
-## US Portfolio page (holdings table)
+Logo PNGs live in `assets/banks/{CODE}.png` (e.g. `assets/banks/KBANK.png`).
 
-Scrollable table with 13 columns — inherits body font (no monospace override).
+Helper: `_bankLogoImg(code, size)` — returns `<img>` tag with circular crop + brand-color border.
+
+## Home dashboard
+
+Simplified single-page net worth overview. Always dark-style.
+
+**Layout (top → bottom):**
+1. Header row — avatar · name · rate · **USD/THB toggle** · theme toggle
+2. Hero — "Combined Net Worth" label + large value (`fmtVal`) + US P/L
+3. Per-user row — 2 `card2` tiles side by side: Me | Partner (each: avatar, name, total, P/L %)
+4. Allocation donut with **Me / Combined toggle** in the card header
+5. 2×2 `card2` metric grid — US Portfolio · Cash · Gold · Other (MF+Private+Insurance); tapping US/Cash navigates there
+6. Rate updated date
+
+**Donut:**
+- Segments: US Portfolio (#3b82f6) · Cash (#06b6d4) · Gold (#fbbf24) · Mutual Fund (#a855f7) · Crypto (#f97316) · Insurance (#ec4899) · Private (#94a3b8)
+- Me/Combined toggle switches without re-fetching — uses `_dbCache`
+- Center text and tooltips use `fmtVal()` (respects USD/THB toggle)
+
+**Key functions:**
+- `loadDashboard()` — fetches both users in parallel, sets `_dbCache`, renders all sections
+- `switchDonutMode(mode)` — 'me' | 'combined', re-renders donut from cache
+- `_refreshDonut()` — builds segment array from `_dbCache` per current mode, calls `_renderHomeDonut()`
+- `_renderHomeDonut(canvasId, legendId, segments, totalUSD)` — creates/replaces Chart.js doughnut
+- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, cryptoUSD, otherUSD }`
+  - `cashBreakdown: { savingTHB, fdTHB, fcdTHB }`
+  - `otherUSD = goldUSD + mfUSD + privateUSD + insuranceUSD`
+  - fetches insurance `surrender_value_thb` and converts to USD
+
+## Cash page
+
+3 account types with full Add/Edit/Delete via modal. Bank logos displayed on cards.
+
+**Account types:**
+
+| Type | Key fields |
+|---|---|
+| Savings | balance (THB), optional interest rate |
+| Fixed Deposit | balance (principal THB), start/end date ↔ duration months (bidirectional), interest rate, expected interest (auto: principal × rate × days/365), status (Active/Matured) |
+| FCD | foreign currency + amount + purchase rate → THB principal auto-calc; current rate from `exchange_rates` table; FX gain/loss shown on card |
+
+**Modal UX:**
+- Type toggle shown first
+- Bank picker: grid of logos with brand-color highlight on selection
+- Balance field: `type="text"` with `formatCashBalance()` comma formatter (e.g. `1,000,000`); read-only for FCD (auto-filled from amount × rate)
+- FD: start date ↔ end date ↔ duration bidirectional auto-calc; live expected interest updates as you type
+- FCD: changing currency pre-fills purchase rate from `state.fxRates` if available
+
+**Key functions:**
+- `loadCash()` — fetches accounts, pre-loads FX rates for FCD currencies, renders cards by sub_type
+- `openAddCash()` / `openEditCash(id)` — edit fetches full record from DB by ID
+- `saveCashAccount()` — validates per type, computes FCD balance as `fcd_amount × fcd_purchase_rate`
+- `_renderSavingCard()` / `_renderFdCard()` / `_renderFcdCard()` — per-type card HTML
+- `_getCashFxRate(currency)` — returns rate from `state.fxRates`, falls back to `state.usdThb` for USD
+- `calcFdDuration()` / `calcFdEndFromDuration()` / `calcFdInterest()` — FD auto-calc helpers
+- `calcFcdThbEquiv()` / `calcFcdDuration()` / `calcFcdEndFromDuration()` — FCD auto-calc helpers
+- `formatCashBalance()` — formats balance input with thousands commas; `_parseCashBal()` strips them for saving
+
+## US Portfolio page
+
+**Layout:**
+1. Top bar — "US Portfolio" title + USD/THB toggle + Add (+) button
+2. **Allocation donut card** — compact 90px donut + legend (portfolio name, value, P/L, %) — rendered by `_renderUSAllocDonut()`
+3. Tab bar — one tab per portfolio
+4. Holdings table for selected tab
+
+**Allocation donut** (`_renderUSAllocDonut()`): calls `calcUserData` to get portfolio values, renders a small doughnut showing relative weight of each portfolio. Non-blocking (runs after tabs are built).
+
+**Holdings table (13 columns):**
 
 | Column | Source |
 |---|---|
@@ -207,24 +298,19 @@ Scrollable table with 13 columns — inherits body font (no monospace override).
 | S/R | `ai_analyses.support_level` / `resistance_level` |
 | Actions | ✏️ edit, 🗑 delete |
 
-**Stats bar** (below portfolio name): Value · Cost · P/L (green if positive, red if negative) · positions count.
+**Sorting**: click column header → asc ▲ / desc ▼. Sort state in `_sortState = { col, dir }`. Data precomputed into `_portTableData[]`.
 
-**Sorting**: click any column header → sort asc (▲); click again → desc (▼); other columns show ⇅. Sort state in `_sortState = { col, dir }`. Data precomputed into `_portTableData[]` — no re-fetch on sort.
+**Key functions:**
+- `loadUSPortfolio()` — builds tabs, calls `_renderUSAllocDonut()`, loads first tab
+- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + analyses, builds table
+- `_renderPortTbody()` — sorts and renders `<tbody>`; uses `.b-buy/.b-sell/.b-hold/.b-trim` badges
+- `_gapCell(gap, target)` / `_signalBadge(signal)` / `_srCell(analysis)`
+- `runPortfolioAnalysis(portfolioId, btn)` — calls GAS `analyzePortfolio`, reloads tab on done
 
-**Key functions**:
-- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + analyses, precomputes `_portTableData`, renders table shell + header with 🤖 Analyze button, calls `_renderPortTbody()`
-- `_sortPortCol(col)` — toggles sort direction, calls `_renderPortTbody()`
-- `_renderPortTbody()` — sorts `_portTableData`, re-renders `<tbody>` + header indicators
-- `_gapCell(gap, target)` — colored badge: TRIM (overweight) / DCA (underweight) / ≈ok / —
-- `_signalBadge(signal)` — BUY/SELL/HOLD/TRIM badge
-- `_srCell(analysis)` — green S + red R from `ai_analyses`
-- `runPortfolioAnalysis(portfolioId, btn)` — calls `analyzePortfolio` GAS action, shows loading state on button, reloads tab on completion
-- `savePortfolioName(portfolioId)` — updates DB, calls `loadUSPortfolio()` then re-clicks tab
-
-**Analysis triggers**:
+**Analysis triggers:**
 - Auto: fires `callGAS('analyzePortfolio', { portfolioId })` after every `saveHolding()`
-- Manual: 🤖 Analyze button in each portfolio tab header — useful for portfolios that had no prior analysis
-- Scheduled: GAS daily trigger runs `reviewAllPortfolios()` every weekday @ 8AM covering all portfolios regardless of type
+- Manual: 🤖 Analyze button per tab
+- Scheduled: GAS daily trigger @ 8AM covers all portfolios
 
 ## Frontend state
 
@@ -232,14 +318,44 @@ Scrollable table with 13 columns — inherits body font (no monospace override).
 state.userId       // UUID of logged-in user
 state.partnerId    // UUID of the other user
 state.currency     // 'USD' | 'THB'
-state.usdThb       // current exchange rate
+state.usdThb       // current USD/THB rate
+state.fxRates      // { [currency]: rate } — all rates vs THB from exchange_rates table
 state.gasUrl       // GAS web app URL (from app_config)
 state.cache        // in-memory price cache { [symbol]: price }
 state.charts       // Chart.js instances { [canvasId]: chart }
 
 _portTableData     // precomputed holdings rows for current portfolio tab
 _sortState         // { col: string|null, dir: 1|-1 }
+_dbCache           // { my: calcUserData result, partner: calcUserData result } — home donut cache
+_dbDonutMode       // 'me' | 'combined' — current home donut scope
+_cashEditId        // ID of cash account being edited (null = add mode)
+_cashSelectedBank  // currently selected bank code in cash modal
+_cashType          // 'saving' | 'fixed_deposit' | 'fcd'
+_cashFdStatus      // 'active' | 'matured'
 ```
+
+## CSS design system
+
+Dark theme variables (active by default via `html.dark` on `<html>`):
+```css
+--bg: #06070a       /* page background */
+--surface: #0d0f14  /* card background */
+--surface2: #13161e /* card2 / input background */
+--border: rgba(255,255,255,.07)
+--text: #e2e6f0
+--text-muted: #5a6278
+--success: #16a34a  --danger: #dc2626  --warning: #d97706
+--accent: #2563eb (light) / #4f9eff (dark)
+```
+
+Reference design system classes (from `portfolio_tracker.html`):
+- `.card2` — secondary card (darker background, 9px radius)
+- `.g2x` / `.g4x` — 2 or 4 column grid layouts
+- `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font, no monospace)
+- `.b-buy` / `.b-sell` / `.b-hold` / `.b-trim` / `.b-dca` — signal badges
+- `.gc` / `.rc` / `.ac` — green/red/amber color utility classes
+- `.mono` — JetBrains Mono (table numbers only)
+- `.pt-badge` — base badge class for portfolio table
 
 ## Pages / navigation
 
@@ -248,13 +364,13 @@ _sortState         // { col: string|null, dir: 1|-1 }
 `navigate(page)` — shows/hides `.page` divs. Nav highlight logic:
 - `nav-analysis` lights up for: `analysis`, `monthly`, `weekly`, `allportfolio`, `dca`
 - `nav-more` (Asset) lights up for: `gold`, `mf`, `insurance`, `private`
-- `nav-cash` lights up for: `cash` (direct tab)
+- `nav-cash` lights up for: `cash`
 - All other pages: `nav-${page}` matches directly
 
 ```
 dashboard   Home tab
 us          US Portfolio tab
-cash        Cash tab (direct nav — savings, FD, FCD)
+cash        Cash tab (savings, FD, FCD)
 more        Asset hub → gold | mf | insurance | private
 analysis    Analysis hub → dca | monthly | weekly | allportfolio
 settings    Setting tab
@@ -269,14 +385,9 @@ settings    Setting tab
 | `weekly` | Weekly Review — trigger `analyzeAll`, view 7-day signals by portfolio |
 | `allportfolio` | All Portfolio — read-only view of every holding's latest AI signal |
 
-**Key functions**:
-- `loadMonthlyReview()` / `runMonthlyReview()` — calls GAS `generateDCA`
-- `loadWeeklyReview()` / `runWeeklyReview()` — calls GAS `analyzeAll`
-- `loadAllPortfolio()` — reads `ai_analyses` for all user portfolios, groups by portfolio name
-
 ## Service worker cache
 
-Cache name: `smart-me-v6`. **Bump the version string in `sw.js`** whenever `index.html`, `manifest.json`, or CDN deps change — stale cache will serve old JS otherwise.
+Cache name: **`smart-me-v13`**. Bump whenever `index.html`, `manifest.json`, or CDN deps change.
 
 ## What's NOT implemented yet (schema exists, no UI)
 
