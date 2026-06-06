@@ -1368,6 +1368,7 @@ function _renderDonut(canvasId, legendId, data) {
   let segs = data.portfolios
     .filter(p => p.valueUSD > 0)
     .map((p, i) => ({ label: p.name, value: p.valueUSD, color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length] }));
+  if (data.cashUSD  > 0) segs.push({ label: 'Cash',  value: data.cashUSD,  color: '#06b6d4' });
   if (data.otherUSD > 0) segs.push({ label: 'Other', value: data.otherUSD, color: '#94a3b8' });
   const hasData = segs.length > 0;
   if (!hasData) segs = [{ label: 'Empty', value: 1, color: isDark ? '#1e2230' : '#e5e7eb' }];
@@ -1456,13 +1457,36 @@ function _renderSlices(containerId, data, isOwn) {
       </div>`;
   });
 
+  if (data.cashUSD > 0) {
+    const cashPct = data.totalUSD > 0 ? (data.cashUSD / data.totalUSD) * 100 : 0;
+    const cb = data.cashBreakdown;
+    const parts = [];
+    if (cb.savingTHB > 0) parts.push(`Savings ${fmtTHB(cb.savingTHB)}`);
+    if (cb.fdTHB     > 0) parts.push(`FD ${fmtTHB(cb.fdTHB)}`);
+    if (cb.fcdTHB    > 0) parts.push(`FCD ${fmtTHB(cb.fcdTHB)}`);
+    html += `
+      <div class="slice-row" style="cursor:pointer" onclick="navigate('cash')">
+        <div class="slice-top">
+          <div class="slice-left">
+            <div class="slice-name"><span style="color:#06b6d4">●</span> Cash
+              ${parts.length ? `<span class="slice-count">${parts.join(' · ')}</span>` : ''}
+            </div>
+          </div>
+          <div class="slice-right">
+            <div class="slice-val">${fmtVal(data.cashUSD)}</div>
+            <span class="slice-pct-badge" style="background:#06b6d422;color:#06b6d4">${cashPct.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
   if (data.otherUSD > 0) {
     const otherPct = data.totalUSD > 0 ? (data.otherUSD / data.totalUSD) * 100 : 0;
     html += `
       <div class="slice-row">
         <div class="slice-top">
           <div class="slice-left">
-            <div class="slice-name">🏦 Other Assets <span class="slice-count">Gold · MF · Cash</span></div>
+            <div class="slice-name">🏦 Other Assets <span class="slice-count">Gold · MF · Private</span></div>
           </div>
           <div class="slice-right">
             <div class="slice-val">${fmtVal(data.otherUSD)}</div>
@@ -1537,7 +1561,7 @@ async function calcUserData(userId) {
   const [gold, mf, cash, priv] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
     sb.from('mutual_fund_holdings').select('fund_code, units').eq('user_id', userId),
-    sb.from('cash_accounts').select('currency, balance, cash_on_hand_thb').eq('user_id', userId),
+    sb.from('cash_accounts').select('sub_type, balance, cash_on_hand_thb').eq('user_id', userId),
     sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId)
   ]);
 
@@ -1552,19 +1576,26 @@ async function calcUserData(userId) {
       otherUSD += (f.units * nav) / state.usdThb;
     }
   }
-  if (cash.data?.length) {
-    cash.data.forEach(a => {
-      otherUSD += a.balance / state.usdThb;  // balance is always THB
-      otherUSD += (a.cash_on_hand_thb || 0) / state.usdThb;
-    });
-  }
   if (priv.data?.length) {
     priv.data.forEach(p => {
       otherUSD += p.currency === 'THB' ? p.current_valuation / state.usdThb : p.current_valuation;
     });
   }
 
-  return { totalUSD: usValue + otherUSD, costBasisUSD: costUS, gainLossUSD: usValue - costUS, portfolios: portList, otherUSD };
+  // Cash is tracked separately for the dashboard breakdown
+  let cashUSD = 0;
+  const cashBreakdown = { savingTHB: 0, fdTHB: 0, fcdTHB: 0 };
+  if (cash.data?.length) {
+    cash.data.forEach(a => {
+      const thb = (a.balance || 0) + (a.cash_on_hand_thb || 0);
+      cashUSD += thb / state.usdThb;
+      if (a.sub_type === 'saving')        cashBreakdown.savingTHB += thb;
+      else if (a.sub_type === 'fixed_deposit') cashBreakdown.fdTHB += thb;
+      else if (a.sub_type === 'fcd')      cashBreakdown.fcdTHB  += thb;
+    });
+  }
+
+  return { totalUSD: usValue + cashUSD + otherUSD, costBasisUSD: costUS, gainLossUSD: usValue - costUS, portfolios: portList, cashUSD, cashBreakdown, otherUSD };
 }
 
 // ── US Portfolio ──────────────────────────────────────────────────────────────
