@@ -290,27 +290,33 @@ body {
 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page active">
-    <!-- Minimal header row -->
+    <!-- Header row -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0 0">
       <div style="display:flex;align-items:center;gap:10px">
         <span id="db-avatar" style="font-size:26px;line-height:1">😊</span>
         <div>
           <div style="font-size:14px;font-weight:700;line-height:1.2" id="db-username">—</div>
-          <div style="font-size:10px;color:var(--text-muted)">Smart Me</div>
+          <div style="font-size:10px;color:var(--text-muted)">1 USD = <span id="db-rate-val">—</span> THB</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:10px;color:var(--text-muted)">1 USD = <span id="db-rate-val">—</span> THB</span>
+        <div class="currency-toggle">
+          <button class="currency-btn" onclick="setCurrency('USD')">USD</button>
+          <button class="currency-btn active" onclick="setCurrency('THB')">THB</button>
+        </div>
         <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn">🌙</button>
       </div>
     </div>
 
     <!-- Net worth hero -->
-    <div style="text-align:center;padding:22px 0 14px">
-      <div class="m-lbl" style="margin-bottom:10px">Total Net Worth</div>
-      <div id="db-total" style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;letter-spacing:-1.5px;line-height:1">฿—</div>
+    <div style="text-align:center;padding:20px 0 14px">
+      <div class="m-lbl" style="margin-bottom:10px">Combined Net Worth</div>
+      <div id="db-total" style="font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1">—</div>
       <div id="db-pnl" style="font-size:13px;margin-top:10px;min-height:18px"></div>
     </div>
+
+    <!-- Per-user row -->
+    <div id="db-users-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px"></div>
 
     <!-- Allocation donut -->
     <div class="card" style="padding:16px 16px 18px;margin-bottom:14px">
@@ -319,7 +325,7 @@ body {
       <div id="db-legend" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:11px;justify-content:center"></div>
     </div>
 
-    <!-- 2×2 metric cards -->
+    <!-- 2×2 category cards -->
     <div class="g2x" id="db-metrics" style="margin-bottom:14px"></div>
 
     <!-- Rate date -->
@@ -1034,7 +1040,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .g2x   { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
 .g4x   { display:grid;grid-template-columns:repeat(4,1fr);gap:10px; }
 .m-lbl { font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px; }
-.m-val { font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:500;line-height:1.2; }
+.m-val { font-size:19px;font-weight:700;line-height:1.2; }
 .m-sub { font-size:11px;color:var(--text-muted);margin-top:3px; }
 .mono  { font-family:'JetBrains Mono',monospace; }
 
@@ -1280,54 +1286,86 @@ Chart.register({
 });
 
 async function loadDashboard() {
+  // Sync toggle state
+  document.querySelectorAll('.currency-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent === state.currency));
   document.getElementById('db-avatar').textContent   = state.userAvatar || '😊';
-  document.getElementById('db-username').textContent = state.userName   || 'Me';
+  document.getElementById('db-username').textContent = state.userName || 'Me';
   document.getElementById('db-rate-val').textContent = state.usdThb.toFixed(2);
-  document.getElementById('db-total').textContent    = '฿ loading…';
-  document.getElementById('db-pnl').textContent      = '';
+  document.getElementById('db-total').textContent    = 'Loading…';
 
-  const d = await calcUserData(state.userId);
+  // Fetch both users in parallel
+  const empty = { totalUSD: 0, costBasisUSD: 0, gainLossUSD: 0, portfolios: [],
+                  cashUSD: 0, goldUSD: 0, mfUSD: 0, privateUSD: 0, insuranceUSD: 0, cryptoUSD: 0, otherUSD: 0 };
+  let partnerName = 'Partner', partnerAvatar = '😊';
+  if (state.partnerId) {
+    const { data: pu } = await sb.from('users').select('name, avatar').eq('id', state.partnerId).maybeSingle();
+    if (pu) { partnerName = pu.name || partnerName; partnerAvatar = pu.avatar || partnerAvatar; }
+  }
+  const [myData, partnerData] = await Promise.all([
+    calcUserData(state.userId),
+    state.partnerId ? calcUserData(state.partnerId) : Promise.resolve(empty)
+  ]);
 
-  // Net worth in THB
-  const nwTHB  = d.totalUSD * state.usdThb;
-  const pnlTHB = d.gainLossUSD * state.usdThb;
-  const pnlPct = d.costBasisUSD > 0 ? (d.gainLossUSD / d.costBasisUSD) * 100 : 0;
-  const pSign  = pnlTHB >= 0 ? '+' : '';
-  const pColor = pnlTHB >= 0 ? 'var(--success)' : 'var(--danger)';
+  // Combined totals
+  const combUSD  = myData.totalUSD + partnerData.totalUSD;
+  const combPnl  = myData.gainLossUSD + partnerData.gainLossUSD;
+  const combCost = myData.costBasisUSD + partnerData.costBasisUSD;
+  const pnlPct   = combCost > 0 ? (combPnl / combCost) * 100 : 0;
+  const pSign    = combPnl >= 0 ? '+' : '';
+  const pColor   = combPnl >= 0 ? 'var(--success)' : 'var(--danger)';
 
-  document.getElementById('db-total').textContent = fmtTHB(nwTHB);
+  document.getElementById('db-total').textContent = fmtVal(combUSD);
   document.getElementById('db-pnl').innerHTML =
-    `<span style="color:${pColor};font-weight:600">${pSign}${fmtTHB(pnlTHB)} (${pSign}${pnlPct.toFixed(2)}%)</span>`
-    + ` <span style="color:var(--text-muted);font-size:11px">US P/L</span>`;
+    `<span style="color:${pColor};font-weight:600">${pSign}${fmtVal(combPnl)} (${pSign}${pnlPct.toFixed(2)}%)</span>`
+    + `<span style="color:var(--text-muted);font-size:11px"> US P/L</span>`;
   document.getElementById('db-rate-date').textContent =
-    `Rate updated: ${new Date().toLocaleDateString('th-TH')}`;
+    `Rate updated: ${new Date().toLocaleDateString()}`;
 
-  // Donut segments — top-level categories
-  const usPortUSD = d.portfolios.reduce((s, p) => s + p.valueUSD, 0);
-  const segments  = [
-    { label: 'US Portfolio', value: usPortUSD,     color: '#3b82f6' },
-    { label: 'Cash',         value: d.cashUSD,     color: '#06b6d4' },
-    { label: 'Gold',         value: d.goldUSD,     color: '#fbbf24' },
-    { label: 'Mutual Fund',  value: d.mfUSD,       color: '#a855f7' },
-    { label: 'Crypto',       value: d.cryptoUSD,   color: '#f97316' },
-    { label: 'Insurance',    value: d.insuranceUSD, color: '#ec4899' },
-    { label: 'Private',      value: d.privateUSD,  color: '#94a3b8' },
+  // Per-user compact cards
+  const _userCard = (avatar, name, d) => {
+    const pSign = d.gainLossUSD >= 0 ? '+' : '';
+    const pClr  = d.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+    const pct   = d.costBasisUSD > 0 ? (d.gainLossUSD / d.costBasisUSD) * 100 : 0;
+    return `<div class="card2">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px">
+        <span style="font-size:20px;line-height:1">${avatar}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text-muted)">${name}</span>
+      </div>
+      <div style="font-size:18px;font-weight:800;letter-spacing:-.5px">${fmtVal(d.totalUSD)}</div>
+      <div style="font-size:11px;margin-top:3px;color:${pClr}">${pSign}${fmtVal(d.gainLossUSD)} (${pSign}${pct.toFixed(1)}%)</div>
+    </div>`;
+  };
+  const usersRow = document.getElementById('db-users-row');
+  usersRow.innerHTML = _userCard(state.userAvatar || '😊', state.userName || 'Me', myData)
+    + (state.partnerId ? _userCard(partnerAvatar, partnerName, partnerData) : '');
+
+  // Combined donut segments
+  const addUSD = (k) => (myData[k] || 0) + (partnerData[k] || 0);
+  const combUsPort = [...myData.portfolios, ...partnerData.portfolios].reduce((s, p) => s + p.valueUSD, 0);
+  const segments = [
+    { label: 'US Portfolio', value: combUsPort,            color: '#3b82f6' },
+    { label: 'Cash',         value: addUSD('cashUSD'),     color: '#06b6d4' },
+    { label: 'Gold',         value: addUSD('goldUSD'),     color: '#fbbf24' },
+    { label: 'Mutual Fund',  value: addUSD('mfUSD'),       color: '#a855f7' },
+    { label: 'Crypto',       value: addUSD('cryptoUSD'),   color: '#f97316' },
+    { label: 'Insurance',    value: addUSD('insuranceUSD'),color: '#ec4899' },
+    { label: 'Private',      value: addUSD('privateUSD'),  color: '#94a3b8' },
   ].filter(s => s.value > 0);
 
-  _renderHomeDonut('db-donut', 'db-legend', segments, d.totalUSD);
+  _renderHomeDonut('db-donut', 'db-legend', segments, combUSD);
 
-  // 2×2 metric cards
+  // 2×2 category cards (combined, respects currency toggle)
   const safeDiv = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—';
+  const otherUSD = addUSD('mfUSD') + addUSD('privateUSD') + addUSD('insuranceUSD') + addUSD('cryptoUSD');
   const cards = [
-    { label: 'US Portfolio', val: fmtTHB(usPortUSD * state.usdThb),     sub: safeDiv(usPortUSD, d.totalUSD),     dot: '#3b82f6' },
-    { label: 'Cash',         val: fmtTHB(d.cashUSD * state.usdThb),     sub: safeDiv(d.cashUSD, d.totalUSD),     dot: '#06b6d4' },
-    { label: 'Gold',         val: fmtTHB(d.goldUSD * state.usdThb),     sub: safeDiv(d.goldUSD, d.totalUSD),     dot: '#fbbf24' },
-    { label: 'Other',        val: fmtTHB((d.mfUSD + d.privateUSD + d.insuranceUSD + d.cryptoUSD) * state.usdThb),
-                             sub: 'MF · Private · Insurance',            dot: '#94a3b8' },
+    { label: 'US Portfolio', val: fmtVal(combUsPort),           sub: safeDiv(combUsPort, combUSD),           dot: '#3b82f6', nav: 'us'   },
+    { label: 'Cash',         val: fmtVal(addUSD('cashUSD')),    sub: safeDiv(addUSD('cashUSD'), combUSD),    dot: '#06b6d4', nav: 'cash' },
+    { label: 'Gold',         val: fmtVal(addUSD('goldUSD')),    sub: safeDiv(addUSD('goldUSD'), combUSD),    dot: '#fbbf24', nav: ''     },
+    { label: 'Other',        val: fmtVal(otherUSD),             sub: 'MF · Private · Insurance',             dot: '#94a3b8', nav: ''     },
   ];
   document.getElementById('db-metrics').innerHTML = cards.map(c => `
-    <div class="card2" style="cursor:${c.label==='Cash'?'pointer':c.label==='US Portfolio'?'pointer':'default'}"
-         onclick="${c.label==='Cash'?'navigate(\'cash\')':c.label==='US Portfolio'?'navigate(\'us\')':''}">
+    <div class="card2"${c.nav ? ` style="cursor:pointer" onclick="navigate('${c.nav}')"` : ''}>
       <div class="m-lbl"><span style="color:${c.dot}">●</span> ${c.label}</div>
       <div class="m-val">${c.val}</div>
       <div class="m-sub">${c.sub}</div>
