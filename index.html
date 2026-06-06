@@ -691,7 +691,7 @@ body {
 
   <!-- Balance / Principal THB (all types; read-only for FCD) -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="cash-balance-label">Balance (THB)</div>
-  <input id="cash-balance" type="number" placeholder="0.00" min="0" step="any" oninput="calcFdInterest()"
+  <input id="cash-balance" type="text" inputmode="decimal" placeholder="0.00" oninput="formatCashBalance()"
     style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:4px">
   <div id="cash-balance-hint" style="font-size:11px;color:var(--text-muted);margin-bottom:14px;display:none">Auto-calculated from amount × rate</div>
   <div id="cash-balance-spacer" style="height:14px"></div>
@@ -2199,7 +2199,7 @@ async function openEditCash(id) {
   document.getElementById('cash-modal-error').textContent = '';
   document.getElementById('cash-acct-num').value  = a.account_number || '';
   document.getElementById('cash-name').value       = a.name || '';
-  document.getElementById('cash-balance').value    = a.balance || '';
+  document.getElementById('cash-balance').value    = a.balance ? Number(a.balance).toLocaleString('en-US', {maximumFractionDigits:2}) : '';
 
   // FD fields
   document.getElementById('cash-fd-start').value    = a.start_date || '';
@@ -2334,8 +2334,24 @@ function calcFdEndFromDuration() {
   calcFdInterest();
 }
 
+function formatCashBalance() {
+  const el = document.getElementById('cash-balance');
+  const pos = el.selectionStart;
+  const oldLen = el.value.length;
+  const raw = el.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+  const parts = raw.split('.');
+  parts[0] = parts[0] ? Number(parts[0]).toLocaleString('en-US') : '';
+  el.value = parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+  try { el.setSelectionRange(pos + el.value.length - oldLen, pos + el.value.length - oldLen); } catch(e) {}
+  calcFdInterest();
+}
+
+function _parseCashBal() {
+  return parseFloat((document.getElementById('cash-balance').value || '').replace(/,/g, '')) || 0;
+}
+
 function calcFdInterest() {
-  const principal = parseFloat(document.getElementById('cash-balance').value) || 0;
+  const principal = _parseCashBal();
   const rate      = parseFloat(document.getElementById('cash-fd-rate').value) || 0;
   const start     = document.getElementById('cash-fd-start').value;
   const end       = document.getElementById('cash-fd-end').value;
@@ -2354,7 +2370,7 @@ function calcFcdThbEquiv() {
   const thb = amount * rate;
   document.getElementById('cash-fcd-thb-equiv').textContent =
     thb > 0 ? `฿${thb.toLocaleString('th-TH', { maximumFractionDigits: 2 })}` : '฿0';
-  if (thb > 0) document.getElementById('cash-balance').value = thb.toFixed(2);
+  if (thb > 0) document.getElementById('cash-balance').value = thb.toLocaleString('en-US', {maximumFractionDigits:2});
 }
 
 function calcFcdDuration() {
@@ -2404,15 +2420,15 @@ async function saveCashAccount() {
   };
 
   if (_cashType === 'saving') {
-    const bal = parseFloat(document.getElementById('cash-balance').value);
-    if (isNaN(bal) || bal < 0) { errEl.textContent = 'Enter a valid balance.'; return; }
+    const bal = _parseCashBal();
+    if (!bal || bal < 0) { errEl.textContent = 'Enter a valid balance.'; return; }
     payload.balance       = bal;
     payload.currency      = 'THB';
     payload.interest_rate = parseFloat(document.getElementById('cash-saving-rate').value) || null;
 
   } else if (_cashType === 'fixed_deposit') {
-    const bal = parseFloat(document.getElementById('cash-balance').value);
-    if (isNaN(bal) || bal < 0) { errEl.textContent = 'Enter a valid principal amount.'; return; }
+    const bal = _parseCashBal();
+    if (!bal || bal < 0) { errEl.textContent = 'Enter a valid principal amount.'; return; }
     payload.balance         = bal;
     payload.currency        = 'THB';
     payload.start_date      = document.getElementById('cash-fd-start').value || null;
