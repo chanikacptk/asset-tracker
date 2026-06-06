@@ -1448,11 +1448,11 @@ function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
           callbacks: {
             label: ctx => {
               const pct = totalUSD > 0 ? ((ctx.raw / totalUSD) * 100).toFixed(1) : '0';
-              return ` ${ctx.label}: ${fmtTHB(ctx.raw * state.usdThb)} (${pct}%)`;
+              return ` ${ctx.label}: ${fmtVal(ctx.raw)} (${pct}%)`;
             }
           }
         },
-        centerText: { value: fmtTHB(totalUSD * state.usdThb), textColor: textClr }
+        centerText: { value: fmtVal(totalUSD), textColor: textClr }
       }
     }
   });
