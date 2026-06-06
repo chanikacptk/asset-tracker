@@ -320,7 +320,13 @@ body {
 
     <!-- Allocation donut -->
     <div class="card" style="padding:16px 16px 18px;margin-bottom:14px">
-      <div class="m-lbl" style="margin-bottom:12px">Allocation</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="m-lbl" style="margin-bottom:0">Allocation</div>
+        <div style="display:flex;background:var(--surface2);border-radius:20px;padding:3px;gap:2px">
+          <button id="donut-mode-me"       onclick="switchDonutMode('me')"       style="padding:3px 12px;border-radius:16px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s">Me</button>
+          <button id="donut-mode-combined" onclick="switchDonutMode('combined')" style="padding:3px 12px;border-radius:16px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s">Combined</button>
+        </div>
+      </div>
       <div style="position:relative;height:200px"><canvas id="db-donut"></canvas></div>
       <div id="db-legend" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:11px;justify-content:center"></div>
     </div>
@@ -1143,6 +1149,8 @@ const state = {
 // ── Portfolio table sort state ─────────────────────────────────────────────────
 let _portTableData = [];
 let _sortState = { col: null, dir: 1 }; // dir: 1=asc, -1=desc
+let _dbCache = { my: null, partner: null };  // cached for donut mode switch
+let _dbDonutMode = 'me';
 
 // ── PIN Auth ──────────────────────────────────────────────────────────────────
 
@@ -1340,20 +1348,11 @@ async function loadDashboard() {
   usersRow.innerHTML = _userCard(state.userAvatar || '😊', state.userName || 'Me', myData)
     + (state.partnerId ? _userCard(partnerAvatar, partnerName, partnerData) : '');
 
-  // Combined donut segments
-  const addUSD = (k) => (myData[k] || 0) + (partnerData[k] || 0);
-  const combUsPort = [...myData.portfolios, ...partnerData.portfolios].reduce((s, p) => s + p.valueUSD, 0);
-  const segments = [
-    { label: 'US Portfolio', value: combUsPort,            color: '#3b82f6' },
-    { label: 'Cash',         value: addUSD('cashUSD'),     color: '#06b6d4' },
-    { label: 'Gold',         value: addUSD('goldUSD'),     color: '#fbbf24' },
-    { label: 'Mutual Fund',  value: addUSD('mfUSD'),       color: '#a855f7' },
-    { label: 'Crypto',       value: addUSD('cryptoUSD'),   color: '#f97316' },
-    { label: 'Insurance',    value: addUSD('insuranceUSD'),color: '#ec4899' },
-    { label: 'Private',      value: addUSD('privateUSD'),  color: '#94a3b8' },
-  ].filter(s => s.value > 0);
-
-  _renderHomeDonut('db-donut', 'db-legend', segments, combUSD);
+  // Cache data for donut mode switching
+  _dbCache = { my: myData, partner: partnerData };
+  _dbDonutMode = 'me';
+  _syncDonutToggleUI();
+  _refreshDonut();
 
   // 2×2 category cards (combined, respects currency toggle)
   const safeDiv = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—';
@@ -1370,6 +1369,57 @@ async function loadDashboard() {
       <div class="m-val">${c.val}</div>
       <div class="m-sub">${c.sub}</div>
     </div>`).join('');
+}
+
+function switchDonutMode(mode) {
+  _dbDonutMode = mode;
+  _syncDonutToggleUI();
+  _refreshDonut();
+}
+
+function _syncDonutToggleUI() {
+  const meBtn  = document.getElementById('donut-mode-me');
+  const comBtn = document.getElementById('donut-mode-combined');
+  if (!meBtn || !comBtn) return;
+  const isMe = _dbDonutMode === 'me';
+  meBtn.style.background  = isMe ? 'var(--accent)' : 'none';
+  meBtn.style.color       = isMe ? '#fff' : 'var(--text-muted)';
+  comBtn.style.background = isMe ? 'none' : 'var(--accent)';
+  comBtn.style.color      = isMe ? 'var(--text-muted)' : '#fff';
+}
+
+function _refreshDonut() {
+  const my  = _dbCache.my;
+  const prt = _dbCache.partner;
+  if (!my) return;
+
+  const _seg = (d) => [
+    { label: 'US Portfolio', value: d.portfolios.reduce((s, p) => s + p.valueUSD, 0), color: '#3b82f6' },
+    { label: 'Cash',         value: d.cashUSD,      color: '#06b6d4' },
+    { label: 'Gold',         value: d.goldUSD,      color: '#fbbf24' },
+    { label: 'Mutual Fund',  value: d.mfUSD,        color: '#a855f7' },
+    { label: 'Crypto',       value: d.cryptoUSD,    color: '#f97316' },
+    { label: 'Insurance',    value: d.insuranceUSD, color: '#ec4899' },
+    { label: 'Private',      value: d.privateUSD,   color: '#94a3b8' },
+  ].filter(s => s.value > 0);
+
+  if (_dbDonutMode === 'me') {
+    _renderHomeDonut('db-donut', 'db-legend', _seg(my), my.totalUSD);
+  } else {
+    const empty = { portfolios: [], cashUSD: 0, goldUSD: 0, mfUSD: 0, cryptoUSD: 0, insuranceUSD: 0, privateUSD: 0 };
+    const p = prt || empty;
+    const combined = {
+      portfolios: [...my.portfolios, ...p.portfolios],
+      cashUSD:      my.cashUSD      + (p.cashUSD      || 0),
+      goldUSD:      my.goldUSD      + (p.goldUSD      || 0),
+      mfUSD:        my.mfUSD        + (p.mfUSD        || 0),
+      cryptoUSD:    my.cryptoUSD    + (p.cryptoUSD    || 0),
+      insuranceUSD: my.insuranceUSD + (p.insuranceUSD || 0),
+      privateUSD:   my.privateUSD   + (p.privateUSD   || 0),
+      totalUSD:     my.totalUSD     + (p.totalUSD     || 0),
+    };
+    _renderHomeDonut('db-donut', 'db-legend', _seg(combined), combined.totalUSD);
+  }
 }
 
 function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
