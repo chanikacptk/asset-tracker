@@ -290,30 +290,40 @@ body {
 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page active">
-    <div class="top-bar" style="padding-top:12px">
-      <div class="db-totals">
-        <div class="db-total-lbl">Total Value</div>
-        <div class="db-total-val" id="db-total">$—</div>
-        <div class="db-pnl-row" id="db-pnl">Gain / Loss: —</div>
-      </div>
-      <div class="db-header-right">
-        <div style="display:flex;gap:6px;align-items:center">
-          <button onclick="navigate('us');setTimeout(openAddHolding,120)" style="padding:5px 10px;border-radius:20px;border:none;background:#d97706;color:#fff;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ Add Portfolio</button>
-          <div class="currency-toggle">
-            <button class="currency-btn active" onclick="setCurrency('USD')">USD</button>
-            <button class="currency-btn" onclick="setCurrency('THB')">THB</button>
-          </div>
-          <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn">🌙</button>
+    <!-- Minimal header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0 0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="db-avatar" style="font-size:26px;line-height:1">😊</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;line-height:1.2" id="db-username">—</div>
+          <div style="font-size:10px;color:var(--text-muted)">Smart Me</div>
         </div>
-        <div class="db-rate-row">1 USD = <span id="db-rate-val">—</span> THB &nbsp;·&nbsp; <span id="db-rate-date">—</span></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:10px;color:var(--text-muted)">1 USD = <span id="db-rate-val">—</span> THB</span>
+        <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn">🌙</button>
       </div>
     </div>
-    <div style="height:14px"></div>
-    <div id="db-user-cards">
-      <div class="uc-card"><div style="text-align:center;padding:40px 0;font-size:11px;color:var(--text-muted)">Loading…</div></div>
+
+    <!-- Net worth hero -->
+    <div style="text-align:center;padding:22px 0 14px">
+      <div class="m-lbl" style="margin-bottom:10px">Total Net Worth</div>
+      <div id="db-total" style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;letter-spacing:-1.5px;line-height:1">฿—</div>
+      <div id="db-pnl" style="font-size:13px;margin-top:10px;min-height:18px"></div>
     </div>
-    <div class="section-header">Recent Alerts</div>
-    <div id="recent-alerts"></div>
+
+    <!-- Allocation donut -->
+    <div class="card" style="padding:16px 16px 18px;margin-bottom:14px">
+      <div class="m-lbl" style="margin-bottom:12px">Allocation</div>
+      <div style="position:relative;height:200px"><canvas id="db-donut"></canvas></div>
+      <div id="db-legend" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:11px;justify-content:center"></div>
+    </div>
+
+    <!-- 2×2 metric cards -->
+    <div class="g2x" id="db-metrics" style="margin-bottom:14px"></div>
+
+    <!-- Rate date -->
+    <div id="db-rate-date" style="font-size:10px;color:var(--text-muted);text-align:center;padding-bottom:4px"></div>
   </div>
 
   <!-- US PORTFOLIO -->
@@ -329,6 +339,16 @@ body {
       </div>
     </div>
     <div style="height:12px"></div>
+    <!-- Allocation donut across sub-portfolios -->
+    <div id="us-alloc-wrap" style="display:none;margin-bottom:12px">
+      <div class="card" style="padding:14px">
+        <div class="m-lbl" style="margin-bottom:10px">Portfolio Allocation</div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="position:relative;height:90px;width:90px;flex-shrink:0"><canvas id="us-alloc-chart"></canvas></div>
+          <div id="us-alloc-legend" style="flex:1;display:flex;flex-direction:column;gap:7px;font-size:12px"></div>
+        </div>
+      </div>
+    </div>
     <div class="tabs" id="portfolio-tabs"></div>
     <div id="portfolio-content"></div>
   </div>
@@ -1007,7 +1027,16 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 
 .pt-ticker { font-weight:700;font-size:13px; }
 .pt-mono   { font-size:12px; }
-.gc { color:var(--success); } .rc { color:var(--danger); }
+.gc { color:var(--success); } .rc { color:var(--danger); } .ac { color:var(--warning); }
+
+/* ── Reference design system classes ────────────────────────────────────── */
+.card2 { background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:13px 15px; }
+.g2x   { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+.g4x   { display:grid;grid-template-columns:repeat(4,1fr);gap:10px; }
+.m-lbl { font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px; }
+.m-val { font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:500;line-height:1.2; }
+.m-sub { font-size:11px;color:var(--text-muted);margin-top:3px; }
+.mono  { font-family:'JetBrains Mono',monospace; }
 
 /* Badges */
 .pt-badge { display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px; }
@@ -1251,57 +1280,104 @@ Chart.register({
 });
 
 async function loadDashboard() {
-  let partnerName = 'Partner', partnerAvatar = '😊';
-  if (state.partnerId) {
-    const { data: pu } = await sb.from('users').select('name, avatar').eq('id', state.partnerId).maybeSingle();
-    if (pu) { partnerName = pu.name || partnerName; partnerAvatar = pu.avatar || partnerAvatar; }
+  document.getElementById('db-avatar').textContent   = state.userAvatar || '😊';
+  document.getElementById('db-username').textContent = state.userName   || 'Me';
+  document.getElementById('db-rate-val').textContent = state.usdThb.toFixed(2);
+  document.getElementById('db-total').textContent    = '฿ loading…';
+  document.getElementById('db-pnl').textContent      = '';
+
+  const d = await calcUserData(state.userId);
+
+  // Net worth in THB
+  const nwTHB  = d.totalUSD * state.usdThb;
+  const pnlTHB = d.gainLossUSD * state.usdThb;
+  const pnlPct = d.costBasisUSD > 0 ? (d.gainLossUSD / d.costBasisUSD) * 100 : 0;
+  const pSign  = pnlTHB >= 0 ? '+' : '';
+  const pColor = pnlTHB >= 0 ? 'var(--success)' : 'var(--danger)';
+
+  document.getElementById('db-total').textContent = fmtTHB(nwTHB);
+  document.getElementById('db-pnl').innerHTML =
+    `<span style="color:${pColor};font-weight:600">${pSign}${fmtTHB(pnlTHB)} (${pSign}${pnlPct.toFixed(2)}%)</span>`
+    + ` <span style="color:var(--text-muted);font-size:11px">US P/L</span>`;
+  document.getElementById('db-rate-date').textContent =
+    `Rate updated: ${new Date().toLocaleDateString('th-TH')}`;
+
+  // Donut segments — top-level categories
+  const usPortUSD = d.portfolios.reduce((s, p) => s + p.valueUSD, 0);
+  const segments  = [
+    { label: 'US Portfolio', value: usPortUSD,     color: '#3b82f6' },
+    { label: 'Cash',         value: d.cashUSD,     color: '#06b6d4' },
+    { label: 'Gold',         value: d.goldUSD,     color: '#fbbf24' },
+    { label: 'Mutual Fund',  value: d.mfUSD,       color: '#a855f7' },
+    { label: 'Crypto',       value: d.cryptoUSD,   color: '#f97316' },
+    { label: 'Insurance',    value: d.insuranceUSD, color: '#ec4899' },
+    { label: 'Private',      value: d.privateUSD,  color: '#94a3b8' },
+  ].filter(s => s.value > 0);
+
+  _renderHomeDonut('db-donut', 'db-legend', segments, d.totalUSD);
+
+  // 2×2 metric cards
+  const safeDiv = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—';
+  const cards = [
+    { label: 'US Portfolio', val: fmtTHB(usPortUSD * state.usdThb),     sub: safeDiv(usPortUSD, d.totalUSD),     dot: '#3b82f6' },
+    { label: 'Cash',         val: fmtTHB(d.cashUSD * state.usdThb),     sub: safeDiv(d.cashUSD, d.totalUSD),     dot: '#06b6d4' },
+    { label: 'Gold',         val: fmtTHB(d.goldUSD * state.usdThb),     sub: safeDiv(d.goldUSD, d.totalUSD),     dot: '#fbbf24' },
+    { label: 'Other',        val: fmtTHB((d.mfUSD + d.privateUSD + d.insuranceUSD + d.cryptoUSD) * state.usdThb),
+                             sub: 'MF · Private · Insurance',            dot: '#94a3b8' },
+  ];
+  document.getElementById('db-metrics').innerHTML = cards.map(c => `
+    <div class="card2" style="cursor:${c.label==='Cash'?'pointer':c.label==='US Portfolio'?'pointer':'default'}"
+         onclick="${c.label==='Cash'?'navigate(\'cash\')':c.label==='US Portfolio'?'navigate(\'us\')':''}">
+      <div class="m-lbl"><span style="color:${c.dot}">●</span> ${c.label}</div>
+      <div class="m-val">${c.val}</div>
+      <div class="m-sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
+  if (state.charts[canvasId]) { state.charts[canvasId].destroy(); delete state.charts[canvasId]; }
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const hasData = segments.length > 0;
+  const segs    = hasData ? segments : [{ label: 'Empty', value: 1, color: '#1e2230' }];
+  const isDark  = document.documentElement.classList.contains('dark');
+  const textClr = isDark ? '#e2e6f0' : '#111827';
+
+  state.charts[canvasId] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: segs.map(s => s.label),
+      datasets: [{ data: segs.map(s => s.value), backgroundColor: segs.map(s => s.color), borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '66%',
+      animation: { duration: 500 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: hasData,
+          callbacks: {
+            label: ctx => {
+              const pct = totalUSD > 0 ? ((ctx.raw / totalUSD) * 100).toFixed(1) : '0';
+              return ` ${ctx.label}: ${fmtTHB(ctx.raw * state.usdThb)} (${pct}%)`;
+            }
+          }
+        },
+        centerText: { value: fmtTHB(totalUSD * state.usdThb), textColor: textClr }
+      }
+    }
+  });
+
+  const legendEl = document.getElementById(legendId);
+  if (legendEl && hasData) {
+    legendEl.innerHTML = segments.map(s => {
+      const pct = totalUSD > 0 ? ((s.value / totalUSD) * 100).toFixed(1) : '0';
+      return `<span style="display:flex;align-items:center;gap:4px;color:var(--text-muted)">
+        <span style="color:${s.color}">●</span> ${s.label} <span style="color:var(--text-muted)">${pct}%</span>
+      </span>`;
+    }).join('');
   }
-
-  const empty = { totalUSD: 0, costBasisUSD: 0, gainLossUSD: 0, portfolios: [], otherUSD: 0 };
-  const [myData, partnerData] = await Promise.all([
-    calcUserData(state.userId),
-    state.partnerId ? calcUserData(state.partnerId) : Promise.resolve(empty)
-  ]);
-
-  const combined  = myData.totalUSD + partnerData.totalUSD;
-  const pnl       = myData.gainLossUSD + partnerData.gainLossUSD;
-  const costBasis = myData.costBasisUSD + partnerData.costBasisUSD;
-  const pnlPct    = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
-  const pnlSign   = pnl >= 0 ? '+' : '';
-  const pnlColor  = pnl >= 0 ? 'var(--success)' : 'var(--danger)';
-  const dispPnL   = pnlSign + (state.currency === 'THB' ? fmtTHB(pnl * state.usdThb) : fmtUSD(pnl));
-
-  document.getElementById('db-total').textContent = fmtVal(combined);
-  const pnlEl = document.getElementById('db-pnl');
-  pnlEl.textContent = `Gain / Loss: ${dispPnL} (${pnlSign}${pnlPct.toFixed(2)}%)`;
-  pnlEl.style.color = pnlColor;
-  document.getElementById('db-rate-val').textContent  = state.usdThb.toFixed(3);
-  document.getElementById('db-rate-date').textContent = new Date().toISOString().slice(0, 10);
-
-  const cardsEl = document.getElementById('db-user-cards');
-  cardsEl.innerHTML = '';
-  _buildUserCard(cardsEl, 'my', state.userId, state.userAvatar, state.userName, myData, true);
-  if (state.partnerId) {
-    _buildUserCard(cardsEl, 'partner', state.partnerId, partnerAvatar, partnerName, partnerData, false);
-  }
-
-  // Recent alerts
-  const { data: notifs } = await sb.from('notifications_log')
-    .select('notification_type, message, sent_at')
-    .eq('user_id', state.userId)
-    .order('sent_at', { ascending: false }).limit(3);
-
-  const alertsEl = document.getElementById('recent-alerts');
-  if (!notifs || notifs.length === 0) {
-    alertsEl.innerHTML = '<div class="empty"><div class="empty-text">No recent alerts</div></div>';
-    return;
-  }
-  alertsEl.innerHTML = notifs.map(n => `
-    <div class="card card-sm">
-      <div style="font-size:12px;color:var(--text-muted)">${new Date(n.sent_at).toLocaleString()}</div>
-      <div style="font-size:13px;margin-top:4px">${n.message?.slice(0, 120) || ''}</div>
-    </div>
-  `).join('');
 }
 
 function _buildUserCard(container, key, userId, avatar, name, data, isOwn) {
@@ -1558,44 +1634,56 @@ async function calcUserData(userId) {
   }
   const usValue = portList.reduce((s, p) => s + p.valueUSD, 0);
 
-  const [gold, mf, cash, priv] = await Promise.all([
+  const [gold, mf, cash, priv, insur] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
     sb.from('mutual_fund_holdings').select('fund_code, units').eq('user_id', userId),
     sb.from('cash_accounts').select('sub_type, balance, cash_on_hand_thb').eq('user_id', userId),
-    sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId)
+    sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId),
+    sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', userId)
   ]);
 
-  let otherUSD = 0;
+  let goldUSD = 0, mfUSD = 0, privateUSD = 0, insuranceUSD = 0;
   if (gold.data?.length) {
     const gp = await getLatestPrice('XAU');
-    gold.data.forEach(g => otherUSD += g.troy_oz * gp);
+    gold.data.forEach(g => goldUSD += g.troy_oz * gp);
   }
   if (mf.data?.length) {
     for (const f of mf.data) {
       const nav = await getLatestPrice(f.fund_code);
-      otherUSD += (f.units * nav) / state.usdThb;
+      mfUSD += (f.units * nav) / state.usdThb;
     }
   }
   if (priv.data?.length) {
     priv.data.forEach(p => {
-      otherUSD += p.currency === 'THB' ? p.current_valuation / state.usdThb : p.current_valuation;
+      privateUSD += p.currency === 'THB' ? p.current_valuation / state.usdThb : p.current_valuation;
     });
   }
+  if (insur.data?.length) {
+    insur.data.forEach(i => insuranceUSD += (i.surrender_value_thb || 0) / state.usdThb);
+  }
+  const otherUSD = goldUSD + mfUSD + privateUSD + insuranceUSD;
 
-  // Cash is tracked separately for the dashboard breakdown
+  // Cash tracked separately for dashboard breakdown
   let cashUSD = 0;
   const cashBreakdown = { savingTHB: 0, fdTHB: 0, fcdTHB: 0 };
   if (cash.data?.length) {
     cash.data.forEach(a => {
       const thb = (a.balance || 0) + (a.cash_on_hand_thb || 0);
       cashUSD += thb / state.usdThb;
-      if (a.sub_type === 'saving')        cashBreakdown.savingTHB += thb;
-      else if (a.sub_type === 'fixed_deposit') cashBreakdown.fdTHB += thb;
-      else if (a.sub_type === 'fcd')      cashBreakdown.fcdTHB  += thb;
+      if (a.sub_type === 'saving')             cashBreakdown.savingTHB += thb;
+      else if (a.sub_type === 'fixed_deposit') cashBreakdown.fdTHB     += thb;
+      else if (a.sub_type === 'fcd')           cashBreakdown.fcdTHB    += thb;
     });
   }
 
-  return { totalUSD: usValue + cashUSD + otherUSD, costBasisUSD: costUS, gainLossUSD: usValue - costUS, portfolios: portList, cashUSD, cashBreakdown, otherUSD };
+  return {
+    totalUSD: usValue + cashUSD + otherUSD,
+    costBasisUSD: costUS, gainLossUSD: usValue - costUS,
+    portfolios: portList,
+    cashUSD, cashBreakdown,
+    goldUSD, mfUSD, privateUSD, insuranceUSD, cryptoUSD: 0,
+    otherUSD
+  };
 }
 
 // ── US Portfolio ──────────────────────────────────────────────────────────────
@@ -1607,11 +1695,15 @@ async function loadUSPortfolio() {
     .order('created_at');
 
   if (!portfolios || portfolios.length === 0) {
+    document.getElementById('us-alloc-wrap').style.display = 'none';
     document.getElementById('portfolio-tabs').innerHTML = '';
     document.getElementById('portfolio-content').innerHTML =
       '<div class="empty"><div class="empty-icon">📂</div><div class="empty-text">No portfolios yet</div></div>';
     return;
   }
+
+  // Render allocation donut (non-blocking, runs in background)
+  _renderUSAllocDonut();
 
   // Build tabs
   const tabsEl = document.getElementById('portfolio-tabs');
@@ -1624,6 +1716,53 @@ async function loadUSPortfolio() {
   `;
 
   await loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'));
+}
+
+async function _renderUSAllocDonut() {
+  const wrap = document.getElementById('us-alloc-wrap');
+  const d    = await calcUserData(state.userId);
+  const ports = d.portfolios.filter(p => p.valueUSD > 0);
+  if (!ports.length) { wrap.style.display = 'none'; return; }
+
+  wrap.style.display = 'block';
+  const totalPort = ports.reduce((s, p) => s + p.valueUSD, 0);
+
+  if (state.charts['us-alloc-chart']) {
+    state.charts['us-alloc-chart'].destroy();
+    delete state.charts['us-alloc-chart'];
+  }
+  const canvas = document.getElementById('us-alloc-chart');
+  if (canvas) {
+    state.charts['us-alloc-chart'] = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: ports.map(p => p.name),
+        datasets: [{ data: ports.map(p => p.valueUSD), backgroundColor: ports.map((_, i) => PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length]), borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '60%',
+        animation: { duration: 400 },
+        plugins: { legend: { display: false }, tooltip: { enabled: true } }
+      }
+    });
+  }
+
+  const leg = document.getElementById('us-alloc-legend');
+  if (leg) {
+    leg.innerHTML = ports.map((p, i) => {
+      const color = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
+      const pct   = ((p.valueUSD / totalPort) * 100).toFixed(1);
+      const pSign = p.gainLossUSD >= 0 ? '+' : '';
+      const pClr  = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+      return `<div style="display:flex;align-items:center;gap:8px">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:12px">${p.name} <span style="color:var(--text-muted);font-weight:400">${pct}%</span></div>
+          <div style="font-size:11px;color:var(--text-muted)">${fmtVal(p.valueUSD)} <span style="color:${pClr}">${pSign}${fmtVal(p.gainLossUSD)}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 async function loadPortfolioTab(portfolioId, tabBtn) {
