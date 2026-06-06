@@ -375,7 +375,10 @@ body {
 
   <!-- CASH -->
   <div id="page-cash" class="page">
-    <div class="top-bar"><div class="page-title">Cash</div></div>
+    <div class="top-bar">
+      <div class="page-title">Cash</div>
+      <button onclick="openAddCash()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+    </div>
     <div style="height:12px"></div>
     <div id="cash-content"></div>
   </div>
@@ -644,6 +647,83 @@ body {
   <button class="btn btn-primary" id="modal-save-btn" onclick="saveHolding()">Add to Portfolio</button>
 </div>
 
+<!-- Cash Account Modal -->
+<div id="cash-modal-overlay" onclick="closeCashModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+<div id="cash-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-size:18px;font-weight:700" id="cash-modal-title">Add Account</div>
+    <button onclick="closeCashModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+  </div>
+
+  <!-- Bank selector -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Bank</div>
+  <div id="cash-bank-btn" onclick="toggleBankPicker()" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);cursor:pointer;margin-bottom:4px">
+    <div id="cash-bank-logo-wrap" style="width:32px;height:32px;flex-shrink:0"></div>
+    <div style="flex:1">
+      <div id="cash-bank-name" style="font-size:15px;font-weight:600;color:var(--text)">Select bank…</div>
+      <div id="cash-bank-name-en" style="font-size:11px;color:var(--text-muted)"></div>
+    </div>
+    <div style="color:var(--text-muted);font-size:18px">▾</div>
+  </div>
+  <!-- Bank picker grid -->
+  <div id="cash-bank-picker" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-bottom:14px;max-height:220px;overflow-y:auto">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="cash-bank-grid"></div>
+  </div>
+  <div style="height:10px"></div>
+
+  <!-- Account name -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Account Name</div>
+  <input id="cash-name" type="text" placeholder="e.g. K-eSavings, FD 6mo…"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <!-- Sub-type -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Type</div>
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="modal-type-btn active" id="ctype-saving"   onclick="setCashType('saving')">Savings</button>
+    <button class="modal-type-btn"        id="ctype-fixed_deposit" onclick="setCashType('fixed_deposit')">Fixed Deposit</button>
+    <button class="modal-type-btn"        id="ctype-fcd"      onclick="setCashType('fcd')">FCD</button>
+  </div>
+
+  <!-- Currency (shown for FCD) -->
+  <div id="cash-currency-wrap" style="display:none">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Currency</div>
+    <select id="cash-currency" style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px;appearance:auto">
+      <option value="USD">USD</option>
+      <option value="EUR">EUR</option>
+      <option value="JPY">JPY</option>
+      <option value="GBP">GBP</option>
+      <option value="SGD">SGD</option>
+      <option value="HKD">HKD</option>
+      <option value="CNY">CNY</option>
+    </select>
+  </div>
+
+  <!-- Balance -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Balance</div>
+  <input id="cash-balance" type="number" placeholder="0.00" min="0" step="any"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
+
+  <!-- Interest rate (optional) -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Interest Rate % p.a. <span style="font-weight:400;text-transform:none">(optional)</span></div>
+  <input id="cash-rate" type="number" placeholder="e.g. 1.5" min="0" step="0.01"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
+
+  <!-- Maturity date (optional, shown for FD/FCD) -->
+  <div id="cash-maturity-wrap" style="display:none">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Maturity Date <span style="font-weight:400;text-transform:none">(optional)</span></div>
+    <input id="cash-maturity" type="date"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+  </div>
+
+  <!-- Cash on hand -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cash on Hand (THB) <span style="font-weight:400;text-transform:none">(optional)</span></div>
+  <input id="cash-on-hand" type="number" placeholder="0" min="0" step="1"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:16px">
+
+  <div id="cash-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+  <button class="btn btn-primary" id="cash-modal-save-btn" onclick="saveCashAccount()">Add Account</button>
+</div>
+
 <style>
 .modal-type-btn {
   flex:1;padding:8px 4px;border-radius:var(--radius-sm);border:1px solid var(--border);
@@ -903,6 +983,37 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 // ── Configuration ─────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://zchwqmykjjjtoaymuvwx.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_ONSsLlQfSpD5uqIhCD-7eg_Lkb-0YlK';
+
+// ── Thai bank config ──────────────────────────────────────────────────────────
+const THAI_BANKS = {
+  KBANK:     { name: 'กสิกรไทย',             nameEN: 'Kasikorn',       color: '#138f2d' },
+  SCB:       { name: 'ไทยพาณิชย์',           nameEN: 'SCB',            color: '#4e2d8c' },
+  BBL:       { name: 'กรุงเทพ',              nameEN: 'Bangkok Bank',   color: '#1b3f7a' },
+  KTB:       { name: 'กรุงไทย',             nameEN: 'Krungthai',      color: '#009FDA' },
+  BAY:       { name: 'กรุงศรีอยุธยา',        nameEN: 'Krungsri',       color: '#FFC300' },
+  TTB:       { name: 'ทีเอ็มบีธนชาต',        nameEN: 'TMBThanachart',  color: '#002B6C' },
+  GSB:       { name: 'ออมสิน',              nameEN: 'Gov. Savings',   color: '#eb198d' },
+  BAAC:      { name: 'ธ.ก.ส.',              nameEN: 'BAAC',           color: '#4CAF50' },
+  UOB:       { name: 'ยูโอบี',              nameEN: 'UOB',            color: '#0f3d8c' },
+  CIMB:      { name: 'ซีไอเอ็มบี',          nameEN: 'CIMB Thai',      color: '#e2001a' },
+  KKP:       { name: 'เกียรตินาคินภัทร',     nameEN: 'KKP',            color: '#003087' },
+  TISCO:     { name: 'ทิสโก้',              nameEN: 'Tisco Bank',     color: '#004B9A' },
+  LHB:       { name: 'แลนด์ แอนด์ เฮ้าส์', nameEN: 'LH Bank',        color: '#004B87' },
+  TCRB:      { name: 'ไทยเครดิต',           nameEN: 'Thai Credit',    color: '#1a5276' },
+  GHB:       { name: 'ธ.อ.ส.',             nameEN: 'GH Bank',        color: '#f37021' },
+  IBANK:     { name: 'อิสลามแห่งประเทศไทย', nameEN: 'Islamic Bank',   color: '#005f38' },
+  CITI:      { name: 'ซิตี้แบงก์',          nameEN: 'Citibank',       color: '#003B70' },
+  HSBC:      { name: 'เอชเอสบีซี',          nameEN: 'HSBC',           color: '#DB0011' },
+  ICBC:      { name: 'ไอซีบีซี',            nameEN: 'ICBC',           color: '#C0392B' },
+  TrueMoney: { name: 'ทรูมันนี่',           nameEN: 'True Money',     color: '#ff6600' },
+  PromptPay: { name: 'พร้อมเพย์',           nameEN: 'PromptPay',      color: '#2563eb' },
+};
+function _bankLogoPath(code) { return code ? `assets/banks/${code}.png` : null; }
+function _bankLogoImg(code, size = 28) {
+  const b = THAI_BANKS[code];
+  if (!b) return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--surface2);flex-shrink:0"></div>`;
+  return `<img src="${_bankLogoPath(code)}" alt="${code}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${b.color}22" onerror="this.style.display='none'">`;
+}
 
 // ── Supabase client ───────────────────────────────────────────────────────────
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1788,7 +1899,7 @@ async function loadCash() {
 
   const el = document.getElementById('cash-content');
   if (!accounts || accounts.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">💵</div><div class="empty-text">No cash accounts</div></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">💵</div><div class="empty-text">No cash accounts yet<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
     return;
   }
 
@@ -1803,21 +1914,35 @@ async function loadCash() {
     html += `<div class="section-header">${labels[type]}</div><div class="card">`;
     accs.forEach(a => {
       const thbVal = a.currency === 'THB' ? a.balance : a.balance * state.usdThb;
+      const bank = THAI_BANKS[a.bank];
+      const accentColor = bank ? bank.color : 'var(--accent)';
+      const logoHtml = a.bank
+        ? `<img src="assets/banks/${a.bank}.png" alt="${a.bank}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid ${accentColor}33;flex-shrink:0" onerror="this.outerHTML='<div style=\\'width:38px;height:38px;border-radius:50%;background:${accentColor}22;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:${accentColor}\\'>${a.bank.slice(0,3)}</div>'">`
+        : `<div style="width:38px;height:38px;border-radius:50%;background:var(--surface2);flex-shrink:0"></div>`;
       html += `
         <div class="holding-row">
-          <div class="holding-top">
-            <div>
-              <div class="holding-ticker" style="font-size:14px">${a.name}</div>
-              ${a.bank ? `<div style="font-size:11px;color:var(--text-muted)">${a.bank}</div>` : ''}
+          <div class="holding-top" style="align-items:center;gap:12px">
+            ${logoHtml}
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+                <div class="holding-ticker" style="font-size:14px">${a.name}</div>
+                ${bank ? `<div style="font-size:11px;font-weight:600;color:${accentColor}">${bank.name}</div>` : (a.bank ? `<div style="font-size:11px;color:var(--text-muted)">${a.bank}</div>` : '')}
+              </div>
+              <div class="holding-meta" style="margin-top:3px">
+                <span>${a.currency !== 'THB' ? `${a.currency} ${a.balance.toLocaleString()} · ` : ''}฿${a.balance.toLocaleString('th-TH', {maximumFractionDigits:0})}</span>
+                ${a.interest_rate ? `<span style="color:var(--success)">${a.interest_rate}% p.a.</span>` : ''}
+              </div>
+              ${a.maturity_date ? `<div style="font-size:11px;color:var(--text-muted)">Matures: ${a.maturity_date}</div>` : ''}
+              ${a.cash_on_hand_thb > 0 ? `<div style="font-size:11px;color:var(--text-muted)">+ ฿${a.cash_on_hand_thb.toLocaleString('th-TH')} cash on hand</div>` : ''}
             </div>
-            <span class="holding-price">${fmtTHB(thbVal + a.cash_on_hand_thb)}</span>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+              <span class="holding-price">${fmtTHB(thbVal + (a.cash_on_hand_thb||0))}</span>
+              <div style="display:flex;gap:6px">
+                <button class="pt-act-btn" onclick="openEditCash('${a.id}','${a.name}','${a.bank||''}','${a.sub_type}','${a.currency}',${a.balance},${a.interest_rate||'null'},'${a.maturity_date||''}',${a.cash_on_hand_thb||0})">✏️</button>
+                <button class="pt-act-btn" onclick="deleteCashAccount('${a.id}')">🗑</button>
+              </div>
+            </div>
           </div>
-          <div class="holding-meta">
-            <span>${a.currency !== 'THB' ? `${a.currency} ${a.balance.toLocaleString()} · ` : ''}฿${a.balance.toLocaleString('th-TH', {maximumFractionDigits:0})}</span>
-            ${a.interest_rate ? `<span style="color:var(--success)">${a.interest_rate}% p.a.</span>` : ''}
-          </div>
-          ${a.maturity_date ? `<div style="font-size:12px;color:var(--text-muted)">Matures: ${a.maturity_date}</div>` : ''}
-          ${a.cash_on_hand_thb > 0 ? `<div style="font-size:12px;color:var(--text-muted)">+ ฿${a.cash_on_hand_thb.toLocaleString('th-TH')} cash on hand</div>` : ''}
         </div>
       `;
     });
@@ -1825,6 +1950,162 @@ async function loadCash() {
   });
 
   el.innerHTML = html;
+}
+
+// ── Cash modal ────────────────────────────────────────────────────────────────
+
+let _cashEditId = null;
+let _cashSelectedBank = null;
+let _cashType = 'saving';
+
+function openAddCash() {
+  _cashEditId = null;
+  _cashSelectedBank = null;
+  _cashType = 'saving';
+  document.getElementById('cash-modal-title').textContent = 'Add Account';
+  document.getElementById('cash-modal-save-btn').textContent = 'Add Account';
+  ['cash-name','cash-balance','cash-rate','cash-maturity','cash-on-hand'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('cash-currency').value = 'USD';
+  document.getElementById('cash-modal-error').textContent = '';
+  _setCashBankDisplay(null);
+  _buildBankGrid();
+  setCashType('saving');
+  document.getElementById('cash-bank-picker').style.display = 'none';
+  document.getElementById('cash-modal-overlay').style.display = 'block';
+  document.getElementById('cash-modal').style.display = 'block';
+}
+
+function openEditCash(id, name, bank, subType, currency, balance, rate, maturity, cashOnHand) {
+  _cashEditId = id;
+  _cashSelectedBank = bank || null;
+  _cashType = subType;
+  document.getElementById('cash-modal-title').textContent = 'Edit Account';
+  document.getElementById('cash-modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('cash-name').value = name;
+  document.getElementById('cash-balance').value = balance;
+  document.getElementById('cash-rate').value = rate !== 'null' ? rate : '';
+  document.getElementById('cash-maturity').value = maturity || '';
+  document.getElementById('cash-on-hand').value = cashOnHand || '';
+  document.getElementById('cash-currency').value = currency || 'USD';
+  document.getElementById('cash-modal-error').textContent = '';
+  _setCashBankDisplay(bank || null);
+  _buildBankGrid();
+  setCashType(subType);
+  document.getElementById('cash-bank-picker').style.display = 'none';
+  document.getElementById('cash-modal-overlay').style.display = 'block';
+  document.getElementById('cash-modal').style.display = 'block';
+}
+
+function closeCashModal() {
+  document.getElementById('cash-modal-overlay').style.display = 'none';
+  document.getElementById('cash-modal').style.display = 'none';
+}
+
+function setCashType(type) {
+  _cashType = type;
+  ['saving','fixed_deposit','fcd'].forEach(t => {
+    document.getElementById(`ctype-${t}`).classList.toggle('active', t === type);
+  });
+  const isFCD = type === 'fcd';
+  const isFD  = type === 'fixed_deposit';
+  document.getElementById('cash-currency-wrap').style.display = (isFCD) ? 'block' : 'none';
+  document.getElementById('cash-maturity-wrap').style.display = (isFD || isFCD) ? 'block' : 'none';
+}
+
+function toggleBankPicker() {
+  const picker = document.getElementById('cash-bank-picker');
+  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+}
+
+function _buildBankGrid() {
+  const grid = document.getElementById('cash-bank-grid');
+  grid.innerHTML = Object.entries(THAI_BANKS).map(([code, b]) => `
+    <div onclick="selectBank('${code}')" style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;border-radius:8px;cursor:pointer;border:2px solid ${_cashSelectedBank===code ? b.color : 'transparent'};background:${_cashSelectedBank===code ? b.color+'18' : 'transparent'};transition:all 0.15s">
+      <img src="assets/banks/${code}.png" alt="${code}" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
+      <div style="font-size:10px;font-weight:600;color:var(--text);text-align:center;line-height:1.2">${code}</div>
+    </div>
+  `).join('');
+}
+
+function selectBank(code) {
+  _cashSelectedBank = code;
+  _setCashBankDisplay(code);
+  _buildBankGrid();
+  document.getElementById('cash-bank-picker').style.display = 'none';
+}
+
+function _setCashBankDisplay(code) {
+  const b = THAI_BANKS[code];
+  const logoWrap = document.getElementById('cash-bank-logo-wrap');
+  const nameEl   = document.getElementById('cash-bank-name');
+  const nameEnEl = document.getElementById('cash-bank-name-en');
+  if (b) {
+    logoWrap.innerHTML = `<img src="assets/banks/${code}.png" alt="${code}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid ${b.color}44">`;
+    nameEl.textContent   = b.name;
+    nameEl.style.color   = b.color;
+    nameEnEl.textContent = b.nameEN;
+  } else {
+    logoWrap.innerHTML   = `<div style="width:32px;height:32px;border-radius:50%;background:var(--surface2)"></div>`;
+    nameEl.textContent   = 'Select bank…';
+    nameEl.style.color   = 'var(--text-muted)';
+    nameEnEl.textContent = '';
+  }
+}
+
+async function saveCashAccount() {
+  const name    = document.getElementById('cash-name').value.trim();
+  const balance = parseFloat(document.getElementById('cash-balance').value);
+  const errEl   = document.getElementById('cash-modal-error');
+
+  if (!name) { errEl.textContent = 'Account name is required.'; return; }
+  if (isNaN(balance) || balance < 0) { errEl.textContent = 'Enter a valid balance.'; return; }
+  errEl.textContent = '';
+
+  const currency = _cashType === 'fcd'
+    ? document.getElementById('cash-currency').value
+    : 'THB';
+  const rate     = parseFloat(document.getElementById('cash-rate').value) || null;
+  const maturity = document.getElementById('cash-maturity').value || null;
+  const cashOnHand = parseFloat(document.getElementById('cash-on-hand').value) || 0;
+
+  const btn = document.getElementById('cash-modal-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const payload = {
+    user_id:          state.userId,
+    name,
+    bank:             _cashSelectedBank || null,
+    sub_type:         _cashType,
+    currency,
+    balance,
+    interest_rate:    rate,
+    maturity_date:    maturity,
+    cash_on_hand_thb: cashOnHand,
+  };
+
+  let error;
+  if (_cashEditId) {
+    ({ error } = await sb.from('cash_accounts').update(payload).eq('id', _cashEditId));
+  } else {
+    ({ error } = await sb.from('cash_accounts').insert(payload));
+  }
+
+  btn.disabled = false;
+  btn.textContent = _cashEditId ? 'Save Changes' : 'Add Account';
+
+  if (error) { errEl.textContent = error.message; return; }
+
+  closeCashModal();
+  await loadCash();
+}
+
+async function deleteCashAccount(id) {
+  if (!confirm('Delete this account?')) return;
+  await sb.from('cash_accounts').delete().eq('id', id);
+  await loadCash();
 }
 
 // ── Insurance ─────────────────────────────────────────────────────────────────
