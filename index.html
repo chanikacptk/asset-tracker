@@ -389,8 +389,24 @@ body {
 
   <!-- GOLD -->
   <div id="page-gold" class="page">
-    <div class="top-bar"><div class="page-title">Gold</div></div>
+    <div class="top-bar">
+      <div class="page-title">Gold</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="currency-toggle">
+          <button class="currency-btn active" onclick="setCurrency('USD')" id="gold-usd-btn">USD</button>
+          <button class="currency-btn" onclick="setCurrency('THB')" id="gold-thb-btn">THB</button>
+        </div>
+        <button onclick="openAddGold()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      </div>
+    </div>
     <div style="height:12px"></div>
+    <div id="gold-metrics-wrap" style="display:none;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="card2" id="gold-metric-value" style="padding:12px 14px"></div>
+        <div class="card2" id="gold-metric-pl"    style="padding:12px 14px"></div>
+        <div class="card2" id="gold-metric-day"   style="padding:12px 14px"></div>
+      </div>
+    </div>
     <div id="gold-content"></div>
   </div>
 
@@ -826,6 +842,46 @@ body {
 
   <div id="cash-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
   <button class="btn btn-primary" id="cash-modal-save-btn" onclick="saveCashAccount()">Add Account</button>
+</div>
+
+<!-- ── Gold modal ─────────────────────────────────────────────────────────── -->
+<div id="gold-modal-overlay" onclick="closeGoldModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+<div id="gold-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-size:18px;font-weight:700" id="gold-modal-title">Add Gold</div>
+    <button onclick="closeGoldModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+  </div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Asset Name</div>
+  <input id="gold-name" type="text" placeholder="e.g. MTS-GOLD"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Date Purchased</div>
+  <input id="gold-date" type="date"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Weight (oz)</div>
+      <input id="gold-oz" type="number" placeholder="e.g. 0.5544" min="0" step="any" oninput="calcGoldTotal()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Avg Cost / oz (USD)</div>
+      <input id="gold-cost-oz" type="number" placeholder="e.g. 4484.85" min="0" step="any" oninput="calcGoldTotal()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+    </div>
+  </div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Cost (auto-calculated)</div>
+  <div id="gold-total-cost" style="padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);font-size:16px;font-weight:700;margin-bottom:14px;color:var(--text-muted)">—</div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Notes <span style="font-weight:400;text-transform:none">(optional)</span></div>
+  <textarea id="gold-notes" placeholder="e.g. Bought from MTS dealer" rows="2"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;resize:none;margin-bottom:14px"></textarea>
+
+  <div id="gold-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+  <button class="btn btn-primary" id="gold-modal-save-btn" onclick="saveGold()">Add Gold</button>
 </div>
 
 <style>
@@ -2256,38 +2312,215 @@ async function savePortfolioName(portfolioId) {
 
 async function loadGold() {
   const { data: holdings } = await sb.from('gold_holdings')
-    .select('troy_oz, avg_cost_usd, notes')
-    .eq('user_id', state.userId);
+    .select('id, name, purchase_date, troy_oz, avg_cost_usd, notes')
+    .eq('user_id', state.userId)
+    .order('purchase_date', { ascending: false, nullsFirst: false });
 
   const el = document.getElementById('gold-content');
+  const mWrap = document.getElementById('gold-metrics-wrap');
 
   if (!holdings || holdings.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🥇</div><div class="empty-text">No gold holdings</div></div>';
+    if (mWrap) mWrap.style.display = 'none';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🥇</div><div class="empty-text">No gold holdings<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
     return;
   }
 
   const goldPrice = await getLatestPrice('XAU');
 
-  let html = '<div class="card">';
-  holdings.forEach(g => {
-    const value = g.troy_oz * goldPrice;
-    const gainLoss = g.avg_cost_usd > 0 ? ((goldPrice - g.avg_cost_usd) / g.avg_cost_usd) * 100 : null;
-    html += `
-      <div class="holding-row">
-        <div class="holding-top">
-          <span class="holding-ticker">XAU/USD</span>
-          <span class="holding-price">${fmtVal(value)}</span>
+  // Previous day price for 1-Day Change
+  const todayISO = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
+  const { data: pd } = await sb.from('market_data')
+    .select('price').eq('symbol', 'XAU')
+    .lt('fetched_at', todayISO)
+    .order('fetched_at', { ascending: false }).limit(1);
+  const prevPrice = pd?.[0]?.price ?? null;
+  const hasDayData = prevPrice !== null && prevPrice > 0;
+  const dayPriceDiff = hasDayData ? goldPrice - prevPrice : 0;
+  const dayPct = hasDayData ? (dayPriceDiff / prevPrice) * 100 : 0;
+
+  // Totals
+  const totalOz    = holdings.reduce((s, h) => s + (h.troy_oz || 0), 0);
+  const totalValue = totalOz * goldPrice;
+  const totalCost  = holdings.reduce((s, h) => s + (h.troy_oz || 0) * (h.avg_cost_usd || 0), 0);
+  const totalPL    = totalValue - totalCost;
+  const totalPLPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+  const totalDayUSD = totalOz * dayPriceDiff;
+
+  // Metric cards
+  if (mWrap) {
+    mWrap.style.display = 'block';
+    const plSign  = totalPL >= 0 ? '+' : '';
+    const plClr   = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
+    const daySign = totalDayUSD >= 0 ? '+' : '';
+    const dayClr  = totalDayUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+
+    document.getElementById('gold-metric-value').innerHTML =
+      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
+       <div style="font-size:16px;font-weight:700">${fmtUSD(totalValue)}</div>
+       <div style="font-size:11px;color:var(--text-muted);margin-top:2px">≈ ${fmtTHB(totalValue * state.usdThb)}</div>
+       <div style="font-size:10px;color:var(--text-muted);margin-top:1px">1 USD = ${state.usdThb.toFixed(2)} THB</div>`;
+    document.getElementById('gold-metric-pl').innerHTML =
+      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
+       <div style="font-size:16px;font-weight:700;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
+       <div style="font-size:11px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
+    document.getElementById('gold-metric-day').innerHTML =
+      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
+      (hasDayData
+        ? `<div style="font-size:16px;font-weight:700;color:${dayClr}">${daySign}${fmtVal(totalDayUSD)}</div>
+           <div style="font-size:11px;color:${dayClr}">${daySign}${dayPct.toFixed(2)}%</div>`
+        : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
+  }
+
+  // Holdings table
+  const OZ_TO_G = 31.1035;
+  const thead = `<tr>
+    <th style="text-align:left;min-width:110px">Asset</th>
+    <th style="text-align:right;min-width:90px">Weight</th>
+    <th style="text-align:right;min-width:100px">Avg Cost/oz</th>
+    <th style="text-align:right;min-width:100px">Price/oz</th>
+    <th style="text-align:right;min-width:110px">Value</th>
+    <th style="text-align:right;min-width:90px">P/L $</th>
+    <th style="text-align:right;min-width:70px">P/L %</th>
+    <th style="text-align:right;min-width:70px">1D %</th>
+    <th style="min-width:60px"></th>
+  </tr>`;
+
+  const tbody = holdings.map(h => {
+    const oz    = h.troy_oz || 0;
+    const grams = (oz * OZ_TO_G).toFixed(2);
+    const value = oz * goldPrice;
+    const cost  = oz * (h.avg_cost_usd || 0);
+    const pl    = value - cost;
+    const plPct = cost > 0 ? (pl / cost) * 100 : 0;
+    const plSign = pl >= 0 ? '+' : '';
+    const plClr  = pl >= 0 ? 'var(--success)' : 'var(--danger)';
+    const hDayUSD = oz * dayPriceDiff;
+    const hDaySign = hDayUSD >= 0 ? '+' : '';
+    const hDayClr  = hDayUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+    const dateStr = h.purchase_date
+      ? new Date(h.purchase_date + 'T00:00:00').toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })
+      : '—';
+    return `<tr>
+      <td style="text-align:left">
+        <div style="font-weight:600">${h.name || 'Gold'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${dateStr}</div>
+      </td>
+      <td style="text-align:right" class="mono">
+        <div>${oz.toFixed(4)} oz</div>
+        <div style="font-size:11px;color:var(--text-muted)">${grams}g</div>
+      </td>
+      <td style="text-align:right" class="mono">${fmtUSD(h.avg_cost_usd || 0)}</td>
+      <td style="text-align:right" class="mono">${fmtUSD(goldPrice)}</td>
+      <td style="text-align:right" class="mono">
+        <div>${fmtVal(value)}</div>
+        ${state.currency === 'USD' ? `<div style="font-size:11px;color:var(--text-muted)">≈ ${fmtTHB(value * state.usdThb)}</div>` : ''}
+      </td>
+      <td style="text-align:right;color:${plClr}" class="mono">${plSign}${fmtVal(pl)}</td>
+      <td style="text-align:right;color:${plClr}" class="mono">${plSign}${plPct.toFixed(2)}%</td>
+      <td style="text-align:right;color:${hasDayData ? hDayClr : 'var(--text-muted)'}" class="mono">
+        ${hasDayData ? `${hDaySign}${dayPct.toFixed(2)}%` : '—'}
+      </td>
+      <td>
+        <div style="display:flex;gap:4px;justify-content:flex-end">
+          <button class="pt-act-btn" onclick="openEditGold('${h.id}')">✏️</button>
+          <button class="pt-act-btn" onclick="deleteGold('${h.id}')">🗑</button>
         </div>
-        <div class="holding-meta">
-          <span>${fmtUSD(goldPrice)}/oz · ${g.troy_oz} oz</span>
-          ${gainLoss !== null ? `<span class="pct-change ${gainLoss >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLoss)}</span>` : ''}
-        </div>
-        ${g.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${g.notes}</div>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="pt-card">
+      <div style="padding:10px 16px 8px;font-size:12px;color:var(--text-muted)">
+        XAU/USD · ${fmtUSD(goldPrice)}/oz · ${totalOz.toFixed(4)} oz total
       </div>
-    `;
-  });
-  html += '</div>';
-  el.innerHTML = html;
+      <div class="tbl-wrap">
+        <table class="pt-table">
+          <thead>${thead}</thead>
+          <tbody>${tbody}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── Gold modal ─────────────────────────────────────────────────────────────────
+
+function openAddGold() {
+  _goldEditId = null;
+  document.getElementById('gold-modal-title').textContent = 'Add Gold';
+  document.getElementById('gold-modal-save-btn').textContent = 'Add Gold';
+  document.getElementById('gold-name').value = 'Gold';
+  document.getElementById('gold-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('gold-oz').value = '';
+  document.getElementById('gold-cost-oz').value = '';
+  document.getElementById('gold-total-cost').textContent = '—';
+  document.getElementById('gold-total-cost').style.color = 'var(--text-muted)';
+  document.getElementById('gold-notes').value = '';
+  document.getElementById('gold-modal-error').textContent = '';
+  document.getElementById('gold-modal-overlay').style.display = 'block';
+  document.getElementById('gold-modal').style.display = 'block';
+}
+
+async function openEditGold(id) {
+  _goldEditId = id;
+  const { data: g } = await sb.from('gold_holdings').select('*').eq('id', id).single();
+  if (!g) return;
+  document.getElementById('gold-modal-title').textContent = 'Edit Gold';
+  document.getElementById('gold-modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('gold-name').value = g.name || 'Gold';
+  document.getElementById('gold-date').value = g.purchase_date || '';
+  document.getElementById('gold-oz').value = g.troy_oz || '';
+  document.getElementById('gold-cost-oz').value = g.avg_cost_usd || '';
+  document.getElementById('gold-notes').value = g.notes || '';
+  document.getElementById('gold-modal-error').textContent = '';
+  calcGoldTotal();
+  document.getElementById('gold-modal-overlay').style.display = 'block';
+  document.getElementById('gold-modal').style.display = 'block';
+}
+
+function closeGoldModal() {
+  document.getElementById('gold-modal-overlay').style.display = 'none';
+  document.getElementById('gold-modal').style.display = 'none';
+}
+
+function calcGoldTotal() {
+  const oz   = parseFloat(document.getElementById('gold-oz').value) || 0;
+  const cost = parseFloat(document.getElementById('gold-cost-oz').value) || 0;
+  const el   = document.getElementById('gold-total-cost');
+  if (oz > 0 && cost > 0) {
+    el.textContent = fmtUSD(oz * cost);
+    el.style.color = 'var(--text)';
+  } else {
+    el.textContent = '—';
+    el.style.color = 'var(--text-muted)';
+  }
+}
+
+async function saveGold() {
+  const name   = document.getElementById('gold-name').value.trim() || 'Gold';
+  const date   = document.getElementById('gold-date').value || null;
+  const oz     = parseFloat(document.getElementById('gold-oz').value);
+  const cost   = parseFloat(document.getElementById('gold-cost-oz').value);
+  const notes  = document.getElementById('gold-notes').value.trim() || null;
+  const errEl  = document.getElementById('gold-modal-error');
+
+  if (!oz || oz <= 0)   { errEl.textContent = 'Weight must be greater than 0.'; return; }
+  if (!cost || cost <= 0) { errEl.textContent = 'Avg cost per oz is required.'; return; }
+
+  const payload = { user_id: state.userId, name, purchase_date: date, troy_oz: oz, avg_cost_usd: cost, notes };
+  const { error } = _goldEditId
+    ? await sb.from('gold_holdings').update(payload).eq('id', _goldEditId)
+    : await sb.from('gold_holdings').insert(payload);
+
+  if (error) { errEl.textContent = error.message; return; }
+  closeGoldModal();
+  await loadGold();
+}
+
+async function deleteGold(id) {
+  if (!confirm('Delete this gold holding?')) return;
+  await sb.from('gold_holdings').delete().eq('id', id);
+  await loadGold();
 }
 
 // ── Mutual Funds ──────────────────────────────────────────────────────────────
@@ -2525,6 +2758,7 @@ let _cashEditId = null;
 let _cashSelectedBank = null;
 let _cashType = 'saving';
 let _cashFdStatus = 'active';
+let _goldEditId = null;
 
 function openAddCash() {
   _cashEditId = null;
