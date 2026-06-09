@@ -329,8 +329,10 @@ body {
       </div>
       <div style="position:relative;height:200px"><canvas id="db-donut"></canvas></div>
       <div id="db-legend" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:11px;justify-content:center"></div>
-      <div id="db-port-summary" style="display:none;flex-direction:column;gap:7px;margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
     </div>
+
+    <!-- Portfolio breakdown box -->
+    <div id="db-port-summary" style="display:none;margin-bottom:14px"></div>
 
     <!-- 2×2 category cards -->
     <div class="g2x" id="db-metrics" style="margin-bottom:14px"></div>
@@ -1476,22 +1478,37 @@ function _renderPortSummary(portfolios) {
   if (!el) return;
   const filtered = (portfolios || []).filter(p => p.valueUSD > 0);
   if (!filtered.length) { el.style.display = 'none'; return; }
-  el.style.display = 'flex';
+  el.style.display = 'block';
   const totalUS = filtered.reduce((s, p) => s + p.valueUSD, 0);
-  el.innerHTML = filtered.map((p, i) => {
-    const color  = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
-    const pct    = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
-    const pSign  = p.gainLossUSD >= 0 ? '+' : '';
-    const pClr   = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
-    const glPct  = p.costUSD > 0 ? ((p.gainLossUSD / p.costUSD) * 100).toFixed(1) : '0';
-    return `<div style="display:flex;align-items:center;gap:8px">
-      <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
-      <span style="font-size:12px;flex:1;font-weight:500">${p.name}</span>
-      <span style="font-size:10px;color:var(--text-muted)">${pct}%</span>
-      <span style="font-size:12px;font-weight:600;font-family:inherit;min-width:80px;text-align:right">${fmtVal(p.valueUSD)}</span>
-      <span style="font-size:11px;color:${pClr};min-width:52px;text-align:right">${pSign}${glPct}%</span>
+  const rows = filtered.map((p, i) => {
+    const color = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
+    const pct   = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
+    const pSign = p.gainLossUSD >= 0 ? '+' : '';
+    const pClr  = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+    const glPct = p.costUSD > 0 ? ((p.gainLossUSD / p.costUSD) * 100).toFixed(1) : '0';
+    const barW  = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
+    return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0"></span>
+        <span style="font-size:13px;font-weight:600;flex:1">${p.name}</span>
+        <span style="font-size:13px;font-weight:700">${fmtVal(p.valueUSD)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${barW}%;background:${color};border-radius:2px"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted);min-width:32px;text-align:right">${pct}%</span>
+        <span style="font-size:11px;color:${pClr};min-width:48px;text-align:right">${pSign}${glPct}%</span>
+      </div>
     </div>`;
   }).join('');
+  el.innerHTML = `<div class="card2" style="overflow:hidden;padding:0">
+    <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between">
+      <span class="m-lbl" style="margin:0">US Portfolio</span>
+      <span style="font-size:12px;font-weight:700">${fmtVal(totalUS)}</span>
+    </div>
+    ${rows}
+  </div>`;
 }
 
 function _buildUserCard(container, key, userId, avatar, name, data, isOwn) {
