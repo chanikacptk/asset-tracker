@@ -1,8 +1,5 @@
-const CACHE = 'smart-me-v18';
+const CACHE = 'smart-me-v19';
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
 ];
@@ -32,7 +29,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Cache-first for CDN assets and app shell
+  // Network-first for the app shell so updates show immediately
+  if (url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/asset-tracker/')) {
+    e.respondWith(
+      fetch(e.request).then(resp => {
+        if (resp.ok) {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return resp;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Cache-first for CDN assets (versioned, never change)
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
