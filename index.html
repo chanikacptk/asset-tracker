@@ -400,12 +400,15 @@ body {
       </div>
     </div>
     <div style="height:12px"></div>
-    <div id="gold-metrics-wrap" style="display:none;margin-bottom:12px">
+    <div id="gold-metrics-wrap" style="display:none;margin-bottom:8px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
         <div class="card2" id="gold-metric-value" style="padding:12px 14px"></div>
         <div class="card2" id="gold-metric-pl"    style="padding:12px 14px"></div>
         <div class="card2" id="gold-metric-day"   style="padding:12px 14px"></div>
       </div>
+    </div>
+    <div id="gold-sr-wrap" style="display:none;margin-bottom:12px">
+      <div class="card2" id="gold-sr-card" style="padding:12px 16px"></div>
     </div>
     <div id="gold-content"></div>
   </div>
@@ -2346,6 +2349,13 @@ async function loadGold() {
   const totalPLPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
   const totalDayUSD = totalOz * dayPriceDiff;
 
+  // S/R levels for XAU
+  const { data: srData } = await sb.from('sr_levels')
+    .select('support, resistance, created_at')
+    .eq('ticker', 'XAU')
+    .order('created_at', { ascending: false }).limit(1);
+  const sr = srData?.[0] || null;
+
   // Metric cards
   if (mWrap) {
     mWrap.style.display = 'block';
@@ -2371,8 +2381,60 @@ async function loadGold() {
         : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
   }
 
+  // S/R bar
+  const srWrap = document.getElementById('gold-sr-wrap');
+  const srCard = document.getElementById('gold-sr-card');
+  if (srWrap && srCard) {
+    if (sr && sr.support && sr.resistance) {
+      srWrap.style.display = 'block';
+      const range  = sr.resistance - sr.support;
+      const barPct = range > 0 ? Math.max(2, Math.min(98, ((goldPrice - sr.support) / range) * 100)) : 50;
+      const distToS = goldPrice - sr.support;
+      const distToR = sr.resistance - goldPrice;
+      const updDate = new Date(sr.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+      srCard.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span class="m-lbl" style="margin:0">Support &amp; Resistance · XAU</span>
+          <span style="font-size:10px;color:var(--text-muted)">Updated ${updDate}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Support</div>
+            <div style="font-size:14px;font-weight:700;color:var(--success)">$${Number(sr.support).toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--text-muted)">-$${distToS.toFixed(0)} from now</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Current</div>
+            <div style="font-size:14px;font-weight:700">${fmtUSD(goldPrice)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Resistance</div>
+            <div style="font-size:14px;font-weight:700;color:var(--danger)">$${Number(sr.resistance).toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--text-muted)">+$${distToR.toFixed(0)} to next</div>
+          </div>
+        </div>
+        <div style="position:relative;height:6px;background:var(--surface);border-radius:3px;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(90deg,var(--success)22,var(--warning)44,var(--danger)22);border-radius:3px"></div>
+          <div style="position:absolute;top:0;left:0;height:100%;width:${barPct.toFixed(1)}%;background:rgba(255,255,255,.15);border-radius:3px"></div>
+        </div>
+        <div style="position:relative;margin-top:2px;height:6px">
+          <div style="position:absolute;transform:translateX(-50%);left:${barPct.toFixed(1)}%">
+            <div style="width:2px;height:10px;background:var(--text);border-radius:1px;margin:0 auto"></div>
+          </div>
+        </div>`;
+    } else {
+      srWrap.style.display = 'block';
+      srCard.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span class="m-lbl" style="margin:0">Support &amp; Resistance · XAU</span>
+          <span style="font-size:11px;color:var(--text-muted)">No data — run <code style="font-size:10px">updateSRLevels</code> in GAS</span>
+        </div>`;
+    }
+  }
+
   // Holdings table
   const OZ_TO_G = 31.1035;
+  const srColHdr = `<th style="text-align:right;min-width:80px">S / R</th>`;
   const thead = `<tr>
     <th style="text-align:left;min-width:110px">Asset</th>
     <th style="text-align:right;min-width:90px">Weight</th>
@@ -2382,8 +2444,16 @@ async function loadGold() {
     <th style="text-align:right;min-width:90px">P/L $</th>
     <th style="text-align:right;min-width:70px">P/L %</th>
     <th style="text-align:right;min-width:70px">1D %</th>
+    ${srColHdr}
     <th style="min-width:60px"></th>
   </tr>`;
+
+  const srCell = sr && (sr.support || sr.resistance)
+    ? `<div class="pt-sr">
+         ${sr.support    ? `<span class="pt-sr-lbl">S</span><span class="pt-sr-s">$${Number(sr.support).toLocaleString()}</span>` : ''}
+         ${sr.resistance ? `<span class="pt-sr-lbl">R</span><span class="pt-sr-r">$${Number(sr.resistance).toLocaleString()}</span>` : ''}
+       </div>`
+    : '<span style="color:var(--text-muted);font-size:11px">—</span>';
 
   const tbody = holdings.map(h => {
     const oz    = h.troy_oz || 0;
@@ -2420,6 +2490,7 @@ async function loadGold() {
       <td style="text-align:right;color:${hasDayData ? hDayClr : 'var(--text-muted)'}" class="mono">
         ${hasDayData ? `${hDaySign}${dayPct.toFixed(2)}%` : '—'}
       </td>
+      <td style="text-align:right">${srCell}</td>
       <td>
         <div style="display:flex;gap:4px;justify-content:flex-end">
           <button class="pt-act-btn" onclick="openEditGold('${h.id}')">✏️</button>
