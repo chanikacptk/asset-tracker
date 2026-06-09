@@ -2471,26 +2471,26 @@ async function loadGold() {
       ? new Date(h.purchase_date + 'T00:00:00').toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })
       : '—';
     return `<tr>
-      <td style="text-align:left">
-        <div style="font-weight:600">${h.name || 'Gold'}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${dateStr}</div>
+      <td>
+        <span class="pt-ticker">${h.name || 'Gold'}</span>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px">${dateStr}</div>
       </td>
-      <td style="text-align:right" class="mono">
+      <td class="pt-mono">
         <div>${oz.toFixed(4)} oz</div>
         <div style="font-size:11px;color:var(--text-muted)">${grams}g</div>
       </td>
-      <td style="text-align:right" class="mono">${fmtUSD(h.avg_cost_usd || 0)}</td>
-      <td style="text-align:right" class="mono">${fmtUSD(goldPrice)}</td>
-      <td style="text-align:right" class="mono">
+      <td class="pt-mono">${fmtUSD(h.avg_cost_usd || 0)}</td>
+      <td class="pt-mono">${fmtUSD(goldPrice)}</td>
+      <td class="pt-mono">
         <div>${fmtVal(value)}</div>
         ${state.currency === 'USD' ? `<div style="font-size:11px;color:var(--text-muted)">≈ ${fmtTHB(value * state.usdThb)}</div>` : ''}
       </td>
-      <td style="text-align:right;color:${plClr}" class="mono">${plSign}${fmtVal(pl)}</td>
-      <td style="text-align:right;color:${plClr}" class="mono">${plSign}${plPct.toFixed(2)}%</td>
-      <td style="text-align:right;color:${hasDayData ? hDayClr : 'var(--text-muted)'}" class="mono">
+      <td class="pt-mono ${pl >= 0 ? 'gc' : 'rc'}">${plSign}${fmtVal(pl)}</td>
+      <td class="pt-mono ${pl >= 0 ? 'gc' : 'rc'}">${plSign}${plPct.toFixed(2)}%</td>
+      <td class="pt-mono ${hasDayData ? (hDayUSD >= 0 ? 'gc' : 'rc') : ''}" style="${hasDayData ? '' : 'color:var(--text-muted)'}">
         ${hasDayData ? `${hDaySign}${dayPct.toFixed(2)}%` : '—'}
       </td>
-      <td style="text-align:right">${srCell}</td>
+      <td>${srCell}</td>
       <td>
         <div style="display:flex;gap:4px;justify-content:flex-end">
           <button class="pt-act-btn" onclick="openEditGold('${h.id}')">✏️</button>
