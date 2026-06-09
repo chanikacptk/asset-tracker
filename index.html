@@ -1827,7 +1827,77 @@ async function loadUSPortfolio() {
     <button class="tab-btn" onclick="navigate('more')" style="color:var(--accent2)">More ›</button>
   `;
 
-  await loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'));
+  // Show metrics wrap with placeholders, then compute combined totals in parallel with first tab
+  const mWrap = document.getElementById('us-metrics-wrap');
+  if (mWrap) {
+    mWrap.style.display = 'block';
+    ['us-metric-value','us-metric-pl','us-metric-day'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">—</div><div style="font-size:16px;font-weight:700;color:var(--text-muted)">…</div>';
+    });
+  }
+
+  const [metrics] = await Promise.all([
+    _computeUSCombinedMetrics(portfolios),
+    loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'))
+  ]);
+  _renderUSMetricCards(metrics);
+}
+
+async function _computeUSCombinedMetrics(portfolios) {
+  const todayISO = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
+  let allHoldings = [];
+  for (const p of portfolios) {
+    const { data: hlds } = await sb.from('holdings')
+      .select('ticker, shares, avg_cost_usd').eq('portfolio_id', p.id);
+    if (hlds) allHoldings = allHoldings.concat(hlds);
+  }
+  if (!allHoldings.length) return { totalValue:0, totalPL:0, totalPLPct:0, dayChangeUSD:0, dayChangePct:0, hasDayData:false };
+
+  const tickers = [...new Set(allHoldings.map(h => h.ticker))];
+  const priceMap = {}, prevMap = {};
+  for (const t of tickers) {
+    priceMap[t] = await getLatestPrice(t);
+    const { data: pd } = await sb.from('market_data')
+      .select('price').eq('symbol', t)
+      .lt('fetched_at', todayISO)
+      .order('fetched_at', { ascending: false }).limit(1);
+    prevMap[t] = pd?.[0]?.price ?? null;
+  }
+
+  let totalValue = 0, totalCost = 0, dayChangeUSD = 0, hasDayData = false;
+  for (const h of allHoldings) {
+    const price = priceMap[h.ticker] || 0;
+    totalValue  += h.shares * price;
+    totalCost   += h.shares * (h.avg_cost_usd || 0);
+    const prev = prevMap[h.ticker];
+    if (prev !== null && prev > 0) { dayChangeUSD += h.shares * (price - prev); hasDayData = true; }
+  }
+  const totalPL      = totalValue - totalCost;
+  const totalPLPct   = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+  const prevTotal    = totalValue - dayChangeUSD;
+  const dayChangePct = prevTotal > 0 ? (dayChangeUSD / prevTotal) * 100 : 0;
+  return { totalValue, totalPL, totalPLPct, dayChangeUSD, dayChangePct, hasDayData };
+}
+
+function _renderUSMetricCards({ totalValue, totalPL, totalPLPct, dayChangeUSD, dayChangePct, hasDayData }) {
+  const plSign  = totalPL >= 0 ? '+' : '';
+  const plClr   = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
+  const daySign = dayChangeUSD >= 0 ? '+' : '';
+  const dayClr  = dayChangeUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+  document.getElementById('us-metric-value').innerHTML =
+    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
+     <div style="font-size:16px;font-weight:700">${fmtVal(totalValue)}</div>`;
+  document.getElementById('us-metric-pl').innerHTML =
+    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
+     <div style="font-size:16px;font-weight:700;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
+     <div style="font-size:11px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
+  document.getElementById('us-metric-day').innerHTML =
+    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
+    (hasDayData
+      ? `<div style="font-size:16px;font-weight:700;color:${dayClr}">${daySign}${fmtVal(dayChangeUSD)}</div>
+         <div style="font-size:11px;color:${dayClr}">${daySign}${dayChangePct.toFixed(1)}%</div>`
+      : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
 }
 
 async function _renderUSAllocDonut() {
@@ -1881,9 +1951,6 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   tabBtn?.classList.add('active');
   _sortState = { col: null, dir: 1 }; // reset sort on tab switch
-
-  const mWrap = document.getElementById('us-metrics-wrap');
-  if (mWrap) mWrap.style.display = 'none';
 
   const portfolioName = tabBtn?.dataset.portfolioName || tabBtn?.textContent?.trim() || '';
 
@@ -1952,28 +2019,6 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   const prevTotalValue = totalValue - dayChangeUSD;
   const dayChangePct   = prevTotalValue > 0 ? (dayChangeUSD / prevTotalValue) * 100 : 0;
 
-  // Populate metric cards
-  if (mWrap) {
-    mWrap.style.display = 'block';
-    const plSign  = totalPL >= 0 ? '+' : '';
-    const plClr   = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
-    const daySign = dayChangeUSD >= 0 ? '+' : '';
-    const dayClr  = dayChangeUSD >= 0 ? 'var(--success)' : 'var(--danger)';
-    document.getElementById('us-metric-value').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
-       <div style="font-size:16px;font-weight:700">${fmtVal(totalValue)}</div>`;
-    document.getElementById('us-metric-pl').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
-       <div style="font-size:16px;font-weight:700;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
-       <div style="font-size:11px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
-    document.getElementById('us-metric-day').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
-      (hasDayData
-        ? `<div style="font-size:16px;font-weight:700;color:${dayClr}">${daySign}${fmtVal(dayChangeUSD)}</div>
-           <div style="font-size:11px;color:${dayClr}">${daySign}${dayChangePct.toFixed(1)}%</div>`
-        : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
-  }
-
   // Precompute all row values into sortable data
   _portTableData = holdings.map((h, i) => {
     const price   = prices[h.ticker] || 0;
@@ -2000,11 +2045,13 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
     };
   });
 
+  const daySign2 = dayChangeUSD >= 0 ? '+' : '';
   const statsBar = `
     <div class="pt-stats">
       <span class="pt-stat">Value <strong>${fmtVal(totalValue)}</strong></span>
       <span class="pt-stat">Cost <strong>${fmtVal(totalCost)}</strong></span>
       <span class="pt-stat ${totalPL >= 0 ? 'gc' : 'rc'}">P/L <strong style="color:inherit">${totalPL >= 0 ? '+' : ''}${fmtVal(totalPL)} (${totalPLPct >= 0 ? '+' : ''}${totalPLPct.toFixed(1)}%)</strong></span>
+      ${hasDayData ? `<span class="pt-stat ${dayChangeUSD >= 0 ? 'gc' : 'rc'}">1D <strong style="color:inherit">${daySign2}${fmtVal(dayChangeUSD)} (${daySign2}${dayChangePct.toFixed(1)}%)</strong></span>` : ''}
       <span class="pt-stat">${holdings.length} positions</span>
     </div>`;
 
