@@ -329,6 +329,7 @@ body {
       </div>
       <div style="position:relative;height:200px"><canvas id="db-donut"></canvas></div>
       <div id="db-legend" style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:11px;justify-content:center"></div>
+      <div id="db-port-summary" style="display:none;flex-direction:column;gap:7px;margin-top:14px;border-top:1px solid var(--border);padding-top:12px"></div>
     </div>
 
     <!-- 2×2 category cards -->
@@ -1405,6 +1406,7 @@ function _refreshDonut() {
 
   if (_dbDonutMode === 'me') {
     _renderHomeDonut('db-donut', 'db-legend', _seg(my), my.totalUSD);
+    _renderPortSummary(my.portfolios);
   } else {
     const empty = { portfolios: [], cashUSD: 0, goldUSD: 0, mfUSD: 0, cryptoUSD: 0, insuranceUSD: 0, privateUSD: 0 };
     const p = prt || empty;
@@ -1419,6 +1421,7 @@ function _refreshDonut() {
       totalUSD:     my.totalUSD     + (p.totalUSD     || 0),
     };
     _renderHomeDonut('db-donut', 'db-legend', _seg(combined), combined.totalUSD);
+    _renderPortSummary(combined.portfolios);
   }
 }
 
@@ -1466,6 +1469,29 @@ function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
       </span>`;
     }).join('');
   }
+}
+
+function _renderPortSummary(portfolios) {
+  const el = document.getElementById('db-port-summary');
+  if (!el) return;
+  const filtered = (portfolios || []).filter(p => p.valueUSD > 0);
+  if (!filtered.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const totalUS = filtered.reduce((s, p) => s + p.valueUSD, 0);
+  el.innerHTML = filtered.map((p, i) => {
+    const color  = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
+    const pct    = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
+    const pSign  = p.gainLossUSD >= 0 ? '+' : '';
+    const pClr   = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+    const glPct  = p.costUSD > 0 ? ((p.gainLossUSD / p.costUSD) * 100).toFixed(1) : '0';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+      <span style="font-size:12px;flex:1;font-weight:500">${p.name}</span>
+      <span style="font-size:10px;color:var(--text-muted)">${pct}%</span>
+      <span style="font-size:12px;font-weight:600;font-family:inherit;min-width:80px;text-align:right">${fmtVal(p.valueUSD)}</span>
+      <span style="font-size:11px;color:${pClr};min-width:52px;text-align:right">${pSign}${glPct}%</span>
+    </div>`;
+  }).join('');
 }
 
 function _buildUserCard(container, key, userId, avatar, name, data, isOwn) {
