@@ -2,7 +2,7 @@
 
 ## What this is
 
-A personal finance PWA for 2 users (partners). Tracks US stocks, gold, Thai mutual funds, cash, insurance, and private investments. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
+A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, Thai mutual funds, cash (savings/FD/FCD), insurance, and private investments. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
 
 ## Live URL
 
@@ -12,386 +12,297 @@ A personal finance PWA for 2 users (partners). Tracks US stocks, gold, Thai mutu
 
 | Layer | Technology |
 |---|---|
-| Frontend | Single HTML file (`index.html`) — vanilla JS, no build step, no npm |
+| Frontend | Single HTML file (`index.html`, ~4 000 lines) — vanilla JS, no build step |
 | Fonts | Instrument Sans (body), Syne (headings/tickers), JetBrains Mono (table numbers only) — **do not change** |
-| Styling | CSS variables, light/dark theme via `html.dark` class (default: dark) |
+| Styling | CSS variables, dark/light via `html.dark` (default: dark) |
 | Charts | Chart.js 4.4.0 (CDN) |
 | Database | Supabase (PostgreSQL + REST API) |
-| Backend logic | Google Apps Script (GAS) — `.gs` files in `gas/` |
+| Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
-| Notifications | Telegram bot (per-user, per-portfolio) |
-| PWA | `manifest.json` + `sw.js` (cache-v13) |
+| Notifications | Telegram bot (per-user chat IDs) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v24`) |
 
-**CDN dependencies in `index.html`:**
-- `@supabase/supabase-js@2`
-- `chart.js@4.4.0`
-- Google Fonts: Instrument Sans, Syne, JetBrains Mono
+CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
 ## Deployment
-
-Push to `main` → GitHub Pages deploys automatically (~30–60s). No build step.
 
 ```bash
 git add <files>
 git commit -m "..."
-git push origin main
+git push origin main   # GitHub Pages auto-deploys in ~60s
 ```
 
-**Always bump `sw.js` cache version** (currently `smart-me-v13`) when `index.html` changes — stale cache will serve old JS otherwise.
+**Always bump `sw.js` cache version** (`smart-me-vN`) when `index.html` changes.  
+`index.html` is served **network-first** by the SW — a normal refresh picks up changes after deploy.
 
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS in one file (~3400 lines)
+index.html              Main app — all HTML/CSS/JS (~4 000 lines)
+sw.js                   Service worker (cache-first CDN, network-first app shell)
 manifest.json           PWA manifest
-sw.js                   Service worker (cache-first CDN/shell, network-first Supabase)
-assets/
-  icons/                PWA icons (192px, 512px)
-  banks/                Thai bank logo PNGs (21 files: KBANK.png, SCB.png, BBL.png …)
-src/
-  config/
-    banks.js            THAI_BANKS export — bank codes → { name, nameEN, color, logo }
-                        (reference only; the inline THAI_BANKS const in index.html is the live version)
 portfolio_tracker.html  Design reference — NOT the active app
 
 gas/
-  Code.gs               Orchestrator + doGet web app entry + trigger setup
-  Config.gs             Script Properties wrapper (secrets)
-  DataAgent.gs          Market data: Yahoo Finance, CoinGecko, AIMC NAV scrape + dynamic S/R
-  AnalystAgent.gs       Claude API → BUY/SELL/HOLD/TRIM signals + S/R levels
-  DCAAgent.gs           Monthly DCA plan generation via Claude API
-  NewsAgent.gs          News fetching via NewsAPI.org
-  NotificationAgent.gs  Telegram: per-user per-portfolio daily/weekly/breaking + noise controls
+  Code.gs               Orchestrator, doGet entry, trigger setup
+  Config.gs             Script Properties wrapper
+  DataAgent.gs          Market data: Yahoo Finance, CoinGecko, AIMC NAV, S/R levels
+  AnalystAgent.gs       Claude API → BUY/SELL/HOLD/TRIM signals
+  DCAAgent.gs           Monthly DCA plan generation
+  NewsAgent.gs          NewsAPI.org fetching
+  NotificationAgent.gs  Telegram: daily/weekly/breaking/realtime alerts
   ScriptProperties.md   GAS secrets setup guide
 
 supabase/
-  schema.sql            Full schema (run once to bootstrap)
+  schema.sql            Full schema (bootstrap once)
   seed.sql              Sample data
-  migrations/
-    001_app_config.sql              app_config table (stores GAS URL)
-    002_user_profile.sql            avatar + name columns on users
-    003_frontend_write_policies.sql RLS: holdings CRUD, portfolio INSERT, watchlist
-    004_portfolio_target_pct.sql    portfolios.target_pct + UPDATE policy ✓ applied
-    005_alert_cooldowns.sql         alert_cooldowns table for 24h notification cooldown ✓ applied
-    006_cash_accounts_extended.sql  New columns on cash_accounts ✓ applied
-    007_cash_accounts_rls_insert_delete.sql  INSERT + DELETE policies for cash_accounts ✓ applied
+  migrations/           008 migrations — all applied ✓
 ```
 
 ## Authentication
 
-Custom PIN-based auth — **not** Supabase Auth. `users` table stores `pin_hash` + `salt`. Session saved to `localStorage` as `{ userId, userName, partnerId }`. Auto-restores on load.
+Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `salt`. Session in `localStorage` as `{ userId, userName, partnerId }`. Auto-restores on load.
 
-`SUPABASE_ANON_KEY` is intentionally hardcoded in `index.html` — it is the publishable key only.
+`SUPABASE_ANON_KEY` is intentionally hardcoded in `index.html` — it is the publishable key only. **Never put `SUPABASE_SERVICE_KEY` in index.html.**
 
-## RLS design
+---
 
-- **All tables**: `anon_read_all` SELECT policy — frontend reads everything, filters by `user_id` in JS
-- **Frontend writes** (anon key): holdings CRUD, portfolio INSERT + UPDATE (incl. `target_pct`), DCA approval, private investments, cash accounts (INSERT + UPDATE + DELETE), watchlist
-- **GAS writes** (service_role): market data, AI analyses, DCA plans, notifications log, exchange rates, news, alert_cooldowns — bypasses RLS entirely
+## Database tables
 
-**Never put `SUPABASE_SERVICE_KEY` in index.html.**
+### Auth
+| Table | Key columns |
+|---|---|
+| `users` | id, name, pin_hash, salt, avatar, telegram_chat_id |
+| `user_sessions` | id, user_id, token, expires_at |
+
+### US Portfolios
+| Table | Key columns |
+|---|---|
+| `portfolios` | id, user_id, name, type (`growth`/`dividend`/`etf`), target_pct, dca_budget_usd |
+| `holdings` | id, portfolio_id, ticker, shares, avg_cost_usd, target_pct |
+| `watchlist` | id, user_id, ticker, notes |
+
+### Assets
+| Table | Key columns |
+|---|---|
+| `gold_holdings` | id, user_id, name, purchase_date, troy_oz, avg_cost_usd, notes |
+| `mutual_fund_holdings` | id, user_id, fund_code, fund_name, category (`RMF`/`ESG`/`other`), units, buy_price_thb |
+| `cash_accounts` | id, user_id, name, sub_type (`saving`/`fixed_deposit`/`fcd`), bank, balance (always THB), currency, interest_rate, start/maturity_date, fcd_amount, fcd_purchase_rate |
+| `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
+| `private_investments` | id, user_id, name, current_valuation, currency |
+| `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
+| `thai_bonds` | id, user_id, bond_name, face_value_thb, coupon_rate *(schema only, no UI)* |
+
+### Market & Rates
+| Table | Key columns |
+|---|---|
+| `market_data` | id, symbol, asset_type, price, currency, fetched_at — **no unique constraint; always query `order=fetched_at.desc&limit=1`** |
+| `exchange_rates` | id, from_currency, to_currency, rate, date — unique on (from, to, date) |
+| `sr_levels` | id, ticker, support, resistance, timeframe (`weekly`), created_at |
+
+### AI & DCA
+| Table | Key columns |
+|---|---|
+| `ai_analyses` | id, ticker, portfolio_id, signal, reasoning, support_level, resistance_level |
+| `dca_plans` | id, user_id, month_year, status (`draft`/`approved`/`executed`) |
+| `dca_plan_items` | id, plan_id, ticker, suggested_amount_usd, adjusted_amount_usd, is_approved |
+
+### Notifications
+| Table | Key columns |
+|---|---|
+| `news_items` | id, ticker, title, source_name, url, published_at, is_high_impact |
+| `notifications_log` | id, user_id, notification_type, sent_at |
+| `alert_cooldowns` | id, user_id, ticker, alert_type, last_sent_at — unique on (user_id, ticker, alert_type) |
+| `app_config` | key, value — stores `gas_web_app_url` |
+
+### RLS pattern
+- All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `mutual_fund_holdings`
+- GAS uses `service_role` key (bypasses RLS entirely)
+
+### Migrations applied (all ✓)
+```
+001  app_config table
+002  users.avatar + name
+003  frontend write RLS (holdings, portfolios, watchlist)
+004  portfolios.target_pct
+005  alert_cooldowns table
+006  cash_accounts extended columns (FD/FCD)
+007  cash_accounts INSERT/DELETE RLS
+008  gold_holdings.name + purchase_date + write RLS
+```
+
+---
 
 ## GAS setup
 
-GAS files are copy-pasted into the Apps Script IDE — not auto-deployed from this repo.
+Files are copy-pasted into Apps Script IDE — not auto-deployed from this repo.
 
-**Script Properties** (Apps Script → Project Settings → Script Properties):
+**Script Properties:**
 | Property | Value |
 |---|---|
 | `SUPABASE_URL` | `https://zchwqmykjjjtoaymuvwx.supabase.co` |
-| `SUPABASE_SERVICE_KEY` | service_role key (Supabase Dashboard → Settings → API) |
-| `CLAUDE_API_KEY` | Anthropic API key |
+| `SUPABASE_SERVICE_KEY` | service_role key |
+| `CLAUDE_API_KEY` | Anthropic key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `NEWSAPI_KEY` | NewsAPI.org key |
 
-**Deploy as Web App**: Deploy → New deployment → Web app → Execute as Me → Anyone.
-Save the URL via Settings page in the app (stored in `app_config` table, key: `gas_web_app_url`).
+**Deploy as Web App**: Execute as Me → Anyone. Save URL in app Settings page (`app_config` table).
 
 **Run `setupTriggers()` once** from GAS IDE:
-- Daily @ 8AM → `onDailyTrigger` (fetch data → analysis → news → notifications, weekdays only)
-- Every 5 min → `onRealtimeTrigger` (crypto/gold ±5%, S/R proximity alerts)
-- 1st of month (inside daily) → DCA plan generation
-- Monday (inside daily) → weekly review + `updateDynamicSRLevels()`
+- Daily @ 8AM → `onDailyTrigger` (weekdays: fetch → analyze → news → notify; monthly on day 1; weekly on Monday)
+- Every 5 min → `onRealtimeTrigger` (crypto/gold ±5%, S/R proximity ±1%)
 
 ## GAS web app actions
 
 Called from frontend via `callGAS(action, params)`:
 
-| action | handler | when called |
-|---|---|---|
-| `fetchData` | DataAgent.fetchAll() | manual / daily trigger |
-| `analyzeAll` | AnalystAgent.reviewAllPortfolios() | daily + weekly trigger |
-| `analyzePortfolio` | AnalystAgent.reviewPortfolioById(portfolioId) | auto after saveHolding() + 🤖 Analyze button |
-| `generateDCA` | DCAAgent.generatePlans() | monthly trigger + Monthly Review page |
-| `fetchNews` | NewsAgent.fetchForAllHoldings() | daily/weekly trigger |
-| `updateSRLevels` | DataAgent.updateDynamicSRLevels() | weekly trigger + manual |
-| `getPrice` | Yahoo Finance single quote | ticker autocomplete |
-| `savePrice` | DataAgent.savePrice() | after saveHolding() |
-| `searchTicker` | Yahoo Finance search | ticker autocomplete |
-| `testTelegram` | send test message to all users | Settings page |
-
-`analyzeGrowth` and `analyzeWeekly` still exist in AnalystAgent but are no longer called by triggers — superseded by `analyzeAll`.
-
-## Telegram notification flow
-
-`NotificationAgent.gs` sends personalized messages per user per portfolio:
-
-- **Daily** (weekdays after `analyzeAll` + `fetchNews`):
-  - Groups by Growth portfolio name
-  - Each holding: signal emoji + ticker + BUY/HOLD/TRIM/SELL + reasoning + S/R levels
-  - High-impact news (last 2 days) for that user's tickers
-- **Weekly** (Monday, same structure for Dividend + ETF portfolios, last 7 days news)
-- **Breaking news** (`sendHighImpactNewsAlerts`): fires after each `fetchNews`, sends only articles where the ticker is held by that user (last 6h)
-- **Realtime alerts**: crypto ±5% (1h), gold ±5% (1d), S/R proximity ±1% — routed to user who holds the asset
-
-### Notification noise controls
-
-All realtime alerts and breaking news are subject to:
-- **Quiet hours**: no alerts 10PM–7AM Bangkok time (UTC+7)
-- **24h cooldown**: same ticker + alert type cannot fire again within 24 hours — tracked in `alert_cooldowns` table (persists across GAS restarts)
-- **Daily cap**: max 5 realtime alerts per user per day — counted from `notifications_log`; priority order: crypto > S/R > gold
-- **Min price move**: S/R alerts only fire if price moved >1% since the last 5-min check (tracked via GAS `CacheService`)
-
-## Dynamic S/R levels
-
-`DataAgent.updateDynamicSRLevels()` runs weekly (Monday trigger) and on-demand via `updateSRLevels` action:
-- Fetches 90-day daily OHLC from Yahoo Finance (`range=3mo`)
-- Finds swing highs/lows (3-candle window)
-- Combines with 52-week high/low from Yahoo meta
-- Adds psychological round-number levels (step size scales with price)
-- Writes nearest support (below price) and resistance (above price) to `sr_levels` table
-
-S/R proximity check threshold: **±1%** of level (tightened from ±2%).
-
-Run `testUpdateSRLevels` from GAS IDE to seed initial data after deployment.
-
-## Important data model notes
-
-- `portfolios.type` CHECK constraint: `IN ('growth', 'dividend', 'etf')`. New portfolio modal has a Type selector so `_createPortfolio()` always inserts a valid type.
-- `portfolios.target_pct` — nullable numeric, set from Home dashboard. Used in Gap column.
-- `holdings` unique on `(portfolio_id, ticker)` — frontend upserts on conflict.
-- `market_data` — no unique constraint, rows appended. Always query `order=fetched_at.desc&limit=1`.
-- `exchange_rates` unique on `(from_currency, to_currency, date)`. `fetchExchangeRate()` loads **all** currencies into `state.fxRates` (not just USD/THB).
-- `dca_plans` unique on `(user_id, month_year)`.
-- `alert_cooldowns` unique on `(user_id, ticker, alert_type)` — upserted by GAS after each realtime alert sent.
-- `users.avatar`, `users.name` added via migration 002 — not in base `schema.sql`.
-
-### cash_accounts columns (after migration 006)
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid | PK |
-| `user_id` | uuid | FK → users |
-| `name` | text | Account name |
-| `sub_type` | text | `'saving'` / `'fixed_deposit'` / `'fcd'` |
-| `bank` | text | Bank code (e.g. `'KBANK'`) — links to `THAI_BANKS` |
-| `account_number` | text | Optional, display only |
-| `currency` | text | `'THB'` for saving/FD; foreign code (USD/EUR/…) for FCD |
-| `balance` | numeric | **Always THB principal** for all types. For FCD: `fcd_amount × fcd_purchase_rate` |
-| `interest_rate` | numeric | Annual %, nullable |
-| `start_date` | date | FD start / FCD purchase date |
-| `maturity_date` | date | FD/FCD end/maturity date |
-| `duration_months` | integer | FD/FCD duration (auto-calc or manual) |
-| `status` | text | `'active'` / `'matured'` (FD only) |
-| `fcd_amount` | numeric | Foreign currency units held (FCD only) |
-| `fcd_purchase_rate` | numeric | THB per 1 FC unit at purchase (FCD only) |
-| `cash_on_hand_thb` | numeric | Physical cash (legacy, not in new form) |
-
-## Thai bank config
-
-`THAI_BANKS` constant is embedded inline in `index.html` (and mirrored in `src/config/banks.js`):
-
-```js
-THAI_BANKS = {
-  KBANK: { name: 'กสิกรไทย', nameEN: 'Kasikorn',  color: '#138f2d' },
-  SCB:   { name: 'ไทยพาณิชย์', nameEN: 'SCB',     color: '#4e2d8c' },
-  BBL:   { name: 'กรุงเทพ',    nameEN: 'Bangkok Bank', color: '#1b3f7a' },
-  // … 18 more banks
-}
-```
-
-Logo PNGs live in `assets/banks/{CODE}.png` (e.g. `assets/banks/KBANK.png`).
-
-Helper: `_bankLogoImg(code, size)` — returns `<img>` tag with circular crop + brand-color border.
-
-## Home dashboard
-
-Simplified single-page net worth overview. Always dark-style.
-
-**Layout (top → bottom):**
-1. Header row — avatar · name · rate · **USD/THB toggle** · theme toggle
-2. Hero — "Combined Net Worth" label + large value (`fmtVal`) + US P/L
-3. Per-user row — 2 `card2` tiles side by side: Me | Partner (each: avatar, name, total, P/L %)
-4. Allocation donut with **Me / Combined toggle** in the card header
-5. 2×2 `card2` metric grid — US Portfolio · Cash · Gold · Other (MF+Private+Insurance); tapping US/Cash navigates there
-6. Rate updated date
-
-**Donut:**
-- Segments: US Portfolio (#3b82f6) · Cash (#06b6d4) · Gold (#fbbf24) · Mutual Fund (#a855f7) · Crypto (#f97316) · Insurance (#ec4899) · Private (#94a3b8)
-- Me/Combined toggle switches without re-fetching — uses `_dbCache`
-- Center text and tooltips use `fmtVal()` (respects USD/THB toggle)
-
-**Key functions:**
-- `loadDashboard()` — fetches both users in parallel, sets `_dbCache`, renders all sections
-- `switchDonutMode(mode)` — 'me' | 'combined', re-renders donut from cache
-- `_refreshDonut()` — builds segment array from `_dbCache` per current mode, calls `_renderHomeDonut()`
-- `_renderHomeDonut(canvasId, legendId, segments, totalUSD)` — creates/replaces Chart.js doughnut
-- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, cryptoUSD, otherUSD }`
-  - `cashBreakdown: { savingTHB, fdTHB, fcdTHB }`
-  - `otherUSD = goldUSD + mfUSD + privateUSD + insuranceUSD`
-  - fetches insurance `surrender_value_thb` and converts to USD
-
-## Cash page
-
-3 account types with full Add/Edit/Delete via modal. Bank logos displayed on cards.
-
-**Account types:**
-
-| Type | Key fields |
+| action | handler |
 |---|---|
-| Savings | balance (THB), optional interest rate |
-| Fixed Deposit | balance (principal THB), start/end date ↔ duration months (bidirectional), interest rate, expected interest (auto: principal × rate × days/365), status (Active/Matured) |
-| FCD | foreign currency + amount + purchase rate → THB principal auto-calc; current rate from `exchange_rates` table; FX gain/loss shown on card |
+| `fetchData` | DataAgent.fetchAll() |
+| `analyzeAll` | AnalystAgent.reviewAllPortfolios() |
+| `analyzePortfolio` | AnalystAgent.reviewPortfolioById(portfolioId) |
+| `generateDCA` | DCAAgent.generatePlans() |
+| `fetchNews` | NewsAgent.fetchForAllHoldings() |
+| `updateSRLevels` | DataAgent.updateDynamicSRLevels() |
+| `getPrice` | Yahoo Finance single quote |
+| `savePrice` | DataAgent.savePrice() |
+| `searchTicker` | Yahoo Finance search |
+| `testTelegram` | send test message |
 
-**Modal UX:**
-- Type toggle shown first
-- Bank picker: grid of logos with brand-color highlight on selection
-- Balance field: `type="text"` with `formatCashBalance()` comma formatter (e.g. `1,000,000`); read-only for FCD (auto-filled from amount × rate)
-- FD: start date ↔ end date ↔ duration bidirectional auto-calc; live expected interest updates as you type
-- FCD: changing currency pre-fills purchase rate from `state.fxRates` if available
+## Market data sources (DataAgent)
 
-**Key functions:**
-- `loadCash()` — fetches accounts, pre-loads FX rates for FCD currencies, renders cards by sub_type
-- `openAddCash()` / `openEditCash(id)` — edit fetches full record from DB by ID
-- `saveCashAccount()` — validates per type, computes FCD balance as `fcd_amount × fcd_purchase_rate`
-- `_renderSavingCard()` / `_renderFdCard()` / `_renderFcdCard()` — per-type card HTML
-- `_getCashFxRate(currency)` — returns rate from `state.fxRates`, falls back to `state.usdThb` for USD
-- `calcFdDuration()` / `calcFdEndFromDuration()` / `calcFdInterest()` — FD auto-calc helpers
-- `calcFcdThbEquiv()` / `calcFcdDuration()` / `calcFcdEndFromDuration()` — FCD auto-calc helpers
-- `formatCashBalance()` — formats balance input with thousands commas; `_parseCashBal()` strips them for saving
+| Asset | Yahoo Finance symbol | Stored as |
+|---|---|---|
+| Gold (spot) | `XAUUSD=X` | `XAU` |
+| S&P 500 | `^GSPC` | `SP500` |
+| SET Index | `^SET.BK` | `SET` |
+| USD/THB | `THB=X` | `USDTHB` |
+| Crypto | CoinGecko API | coin symbol |
+| Thai MF NAVs | AIMC scrape | fund code |
 
-## US Portfolio page
-
-**Layout:**
-1. Top bar — "US Portfolio" title + USD/THB toggle + Add (+) button
-2. **Allocation donut card** — compact 90px donut + legend (portfolio name, value, P/L, %) — rendered by `_renderUSAllocDonut()`
-3. Tab bar — one tab per portfolio
-4. Holdings table for selected tab
-
-**Allocation donut** (`_renderUSAllocDonut()`): calls `calcUserData` to get portfolio values, renders a small doughnut showing relative weight of each portfolio. Non-blocking (runs after tabs are built).
-
-**Holdings table (13 columns):**
-
-| Column | Source |
-|---|---|
-| Ticker | `holdings.ticker` |
-| Shares | `holdings.shares` |
-| Avg Cost | `holdings.avg_cost_usd` |
-| Price ● | `market_data` (cached in `state.cache`) |
-| Value | shares × price |
-| P/L $ | value − cost |
-| P/L % | (price − avg_cost) / avg_cost |
-| Weight | value / portfolio total (bar + %) |
-| Target | `holdings.target_pct` |
-| Gap | weight − target (TRIM badge if over, DCA badge if under) |
-| Signal | latest `ai_analyses.signal` per ticker |
-| S/R | `ai_analyses.support_level` / `resistance_level` |
-| Actions | ✏️ edit, 🗑 delete |
-
-**Sorting**: click column header → asc ▲ / desc ▼. Sort state in `_sortState = { col, dir }`. Data precomputed into `_portTableData[]`.
-
-**Key functions:**
-- `loadUSPortfolio()` — builds tabs, calls `_renderUSAllocDonut()`, loads first tab
-- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + analyses, builds table
-- `_renderPortTbody()` — sorts and renders `<tbody>`; uses `.b-buy/.b-sell/.b-hold/.b-trim` badges
-- `_gapCell(gap, target)` / `_signalBadge(signal)` / `_srCell(analysis)`
-- `runPortfolioAnalysis(portfolioId, btn)` — calls GAS `analyzePortfolio`, reloads tab on done
-
-**Analysis triggers:**
-- Auto: fires `callGAS('analyzePortfolio', { portfolioId })` after every `saveHolding()`
-- Manual: 🤖 Analyze button per tab
-- Scheduled: GAS daily trigger @ 8AM covers all portfolios
+---
 
 ## Frontend state
 
 ```js
-state.userId       // UUID of logged-in user
-state.partnerId    // UUID of the other user
-state.currency     // 'USD' | 'THB'
-state.usdThb       // current USD/THB rate
-state.fxRates      // { [currency]: rate } — all rates vs THB from exchange_rates table
-state.gasUrl       // GAS web app URL (from app_config)
-state.cache        // in-memory price cache { [symbol]: price }
-state.charts       // Chart.js instances { [canvasId]: chart }
+// state object (global)
+state.userId        // UUID of logged-in user
+state.partnerId     // UUID of partner
+state.currency      // 'USD' | 'THB'
+state.usdThb        // current rate
+state.fxRates       // { [currency]: rate vs THB }
+state.gasUrl        // GAS web app URL
+state.cache         // price cache { [symbol]: price }
+state.charts        // Chart.js instances { [canvasId]: chart }
 
-_portTableData     // precomputed holdings rows for current portfolio tab
-_sortState         // { col: string|null, dir: 1|-1 }
-_dbCache           // { my: calcUserData result, partner: calcUserData result } — home donut cache
-_dbDonutMode       // 'me' | 'combined' — current home donut scope
-_cashEditId        // ID of cash account being edited (null = add mode)
-_cashSelectedBank  // currently selected bank code in cash modal
-_cashType          // 'saving' | 'fixed_deposit' | 'fcd'
-_cashFdStatus      // 'active' | 'matured'
+// loose globals
+_portTableData      // precomputed holdings rows for current tab
+_sortState          // { col, dir }
+_dbCache            // { my, partner } — calcUserData results for home donut
+_dbDonutMode        // 'me' | 'combined'
+_cashEditId         // cash modal: null = add, uuid = edit
+_cashSelectedBank   // bank code in cash modal
+_cashType           // 'saving' | 'fixed_deposit' | 'fcd'
+_cashFdStatus       // 'active' | 'matured'
+_goldEditId         // gold modal: null = add, uuid = edit
 ```
-
-## CSS design system
-
-Dark theme variables (active by default via `html.dark` on `<html>`):
-```css
---bg: #06070a       /* page background */
---surface: #0d0f14  /* card background */
---surface2: #13161e /* card2 / input background */
---border: rgba(255,255,255,.07)
---text: #e2e6f0
---text-muted: #5a6278
---success: #16a34a  --danger: #dc2626  --warning: #d97706
---accent: #2563eb (light) / #4f9eff (dark)
-```
-
-Reference design system classes (from `portfolio_tracker.html`):
-- `.card2` — secondary card (darker background, 9px radius)
-- `.g2x` / `.g4x` — 2 or 4 column grid layouts
-- `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font, no monospace)
-- `.b-buy` / `.b-sell` / `.b-hold` / `.b-trim` / `.b-dca` — signal badges
-- `.gc` / `.rc` / `.ac` — green/red/amber color utility classes
-- `.mono` — JetBrains Mono (table numbers only)
-- `.pt-badge` — base badge class for portfolio table
 
 ## Pages / navigation
 
-6-tab bottom nav: **Home · US · Cash · Asset · Analysis · Setting**
+6-tab bottom nav: **Home · US · Cash · Asset · Analysis · Settings**
 
-`navigate(page)` — shows/hides `.page` divs. Nav highlight logic:
-- `nav-analysis` lights up for: `analysis`, `monthly`, `weekly`, `allportfolio`, `dca`
-- `nav-more` (Asset) lights up for: `gold`, `mf`, `insurance`, `private`
-- `nav-cash` lights up for: `cash`
-- All other pages: `nav-${page}` matches directly
+`navigate(page)` → `loadPage(page)` dispatches to the loader function.
 
 ```
-dashboard   Home tab
-us          US Portfolio tab
-cash        Cash tab (savings, FD, FCD)
-more        Asset hub → gold | mf | insurance | private
-analysis    Analysis hub → dca | monthly | weekly | allportfolio
-settings    Setting tab
+dashboard     Home — net worth, Me/Combined toggle, donut, asset cards
+us            US Portfolio — combined metric cards, tab per portfolio, holdings table
+gold          Gold — metric cards, S/R bar, holdings table, add/edit modal
+cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
+mf            Mutual Funds — filter by category
+insurance     Insurance policies
+private       Private investments
+dca           DCA plan approval
+monthly       Monthly Review — trigger generateDCA
+weekly        Weekly Review — trigger analyzeAll
+allportfolio  All Portfolio — read-only AI signals across all holdings
+settings      Theme, profile, Telegram, GAS URL
+partner       Partner view (no nav entry; navigate('partner') directly)
 ```
 
-### Analysis hub pages
+Nav highlight logic:
+- `nav-analysis` → analysis, monthly, weekly, allportfolio, dca
+- `nav-more` → gold, mf, insurance, private
+- `nav-cash` → cash
+- others → `nav-${page}`
 
-| Page | Description |
-|---|---|
-| `dca` | DCA Plan — view/edit/approve current month's allocation |
-| `monthly` | Monthly Review — trigger `generateDCA`, view plan summary |
-| `weekly` | Weekly Review — trigger `analyzeAll`, view 7-day signals by portfolio |
-| `allportfolio` | All Portfolio — read-only view of every holding's latest AI signal |
+## Key functions
 
-## Service worker cache
+### Home dashboard
+- `loadDashboard()` — parallel fetch both users, renders hero + user cards + donut + asset grid
+- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, cryptoUSD, otherUSD }`
+- `switchDonutMode('me'|'combined')` — re-renders donut from `_dbCache` without re-fetching
+- `_renderAssetSummary(segments, totalUSD)` — 2-column card grid below donut
 
-Cache name: **`smart-me-v13`**. Bump whenever `index.html`, `manifest.json`, or CDN deps change.
+### US Portfolio
+- `loadUSPortfolio()` — builds tabs + calls `_computeUSCombinedMetrics` and `loadPortfolioTab` in parallel
+- `_computeUSCombinedMetrics(portfolios)` — fetches all holdings + prev-day prices, returns combined value/PL/dayChange
+- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + prev prices + analyses; renders stats bar + table
+- Stats bar includes: Value · Cost · P/L · 1D Change · N positions
 
-## What's NOT implemented yet (schema exists, no UI)
+### Gold
+- `loadGold()` — fetches holdings + XAU price + prev-day price + sr_levels for XAU; renders metric cards + S/R bar + table
+- Gold S/R comes from `sr_levels` table (`ticker='XAU'`) — populated when GAS `updateSRLevels` runs
+- `openAddGold()` / `openEditGold(id)` / `saveGold()` / `deleteGold(id)`
+- `calcGoldTotal()` — auto-computes total cost (oz × avg cost) in modal
+
+### Cash
+- `loadCash()` — shows total summary card (grouped by sub_type) above account sections
+- `balance` column is always THB principal for all account types
+- FCD: `balance = fcd_amount × fcd_purchase_rate`
+
+## CSS design system
+
+```css
+/* Dark theme (default via html.dark) */
+--bg: #06070a
+--surface: #0d0f14
+--surface2: #13161e
+--border: rgba(255,255,255,.07)
+--text: #e2e6f0
+--text-muted: #5a6278
+--success: #16a34a   --danger: #dc2626   --warning: #d97706
+--accent: #4f9eff (dark)
+```
+
+Key classes:
+- `.card` / `.card2` — primary / secondary card
+- `.g2x` / `.g4x` — 2 or 4-column grid
+- `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font)
+- `.mono` — JetBrains Mono (table numbers only)
+- `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells
+- `.pt-sr` / `.pt-sr-s` / `.pt-sr-r` — S/R level display
+- `.gc` / `.rc` / `.ac` — green/red/amber color utilities
+- `.b-buy` / `.b-sell` / `.b-hold` / `.b-trim` / `.b-dca` — signal badges
+- `.currency-toggle` / `.currency-btn` — USD/THB toggle buttons
+- `setCurrency(c)` reloads the current page via `loadPage(state.currentPage)`
+
+## Thai bank config
+
+`THAI_BANKS` embedded inline in `index.html` (19 banks). Helper: `_bankLogoImg(code, size)` → `<img>` with circular crop + brand-color border. Logos in `assets/banks/{CODE}.png`.
+
+## Service worker
+
+Cache name: **`smart-me-v24`**. Bump on every `index.html` change.
+
+Strategy:
+- Network-first: Supabase API, `index.html` / app root (ensures updates always show)
+- Cache-first: CDN assets (Chart.js, Supabase JS)
+- Precached: CDN bundles only (not the app shell)
+
+## What's NOT implemented (schema exists, no UI)
 
 - Crypto holdings (`crypto_holdings` table)
 - Thai bonds (`thai_bonds` table)
 - Watchlist UI (`watchlist` table)
-- Partner View (page + `page-partner` HTML exist but no nav entry — accessible via direct `navigate('partner')` call only)
+- Partner View (accessible via `navigate('partner')` only — no nav entry)
