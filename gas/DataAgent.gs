@@ -73,10 +73,10 @@ const DataAgent = (() => {
   // ── Gold ────────────────────────────────────────────────────────────────────
 
   function _fetchGold() {
-    const data = _yahooQuote('GC=F');
+    const data = _yahooQuote('XAUUSD=X');
     if (!data) return;
     _upsertMarketData('XAU', 'gold', data.regularMarketPrice, 'USD');
-    Logger.log(`[DataAgent] Gold: $${data.regularMarketPrice}`);
+    Logger.log(`[DataAgent] Gold (spot): $${data.regularMarketPrice}`);
   }
 
   // ── Benchmarks (S&P500, SET Index) ─────────────────────────────────────────
@@ -182,7 +182,7 @@ const DataAgent = (() => {
     const golds = supabaseRequest('GET', 'gold_holdings?select=user_id');
     if (!golds || golds.length === 0) return;
 
-    const data = _yahooQuote('GC=F');
+    const data = _yahooQuote('XAUUSD=X');
     if (!data) return;
 
     const changePct = data.regularMarketChangePercent || 0;
