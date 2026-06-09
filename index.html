@@ -2374,7 +2374,29 @@ async function loadCash() {
   accounts.forEach(a => grouped[a.sub_type]?.push(a));
   const labels = { saving: 'Savings', fixed_deposit: 'Fixed Deposits', fcd: 'Foreign Currency Deposits (FCD)' };
 
-  let html = '';
+  // Summary block
+  const fmtTHB = v => '฿' + Math.round(v).toLocaleString('en-US');
+  const totals = { saving: 0, fixed_deposit: 0, fcd: 0 };
+  accounts.forEach(a => {
+    const thb = (a.balance || 0) + (a.cash_on_hand_thb || 0);
+    if (totals[a.sub_type] !== undefined) totals[a.sub_type] += thb;
+  });
+  const grandTotal = totals.saving + totals.fixed_deposit + totals.fcd;
+  const typeRows = Object.entries({ saving: 'Savings', fixed_deposit: 'Fixed Deposit', fcd: 'FCD' })
+    .filter(([type]) => totals[type] > 0)
+    .map(([type, label]) => `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:var(--text-muted)">${label}</span>
+        <span style="font-size:13px;font-weight:700">${fmtTHB(totals[type])}</span>
+      </div>`).join('');
+
+  let html = `
+    <div class="card" style="padding:16px 18px 14px;margin-bottom:4px">
+      <div class="m-lbl" style="margin-bottom:6px">Total Cash</div>
+      <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;margin-bottom:${typeRows ? '14px' : '0'}">${fmtTHB(grandTotal)}</div>
+      ${typeRows ? `<div style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:12px">${typeRows}</div>` : ''}
+    </div>`;
+
   Object.entries(grouped).forEach(([type, accs]) => {
     if (accs.length === 0) return;
     html += `<div class="section-header">${labels[type]}</div><div class="card">`;
