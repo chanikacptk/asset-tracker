@@ -1407,8 +1407,9 @@ function _refreshDonut() {
   ].filter(s => s.value > 0);
 
   if (_dbDonutMode === 'me') {
-    _renderHomeDonut('db-donut', 'db-legend', _seg(my), my.totalUSD);
-    _renderPortSummary(my.portfolios);
+    const segs = _seg(my);
+    _renderHomeDonut('db-donut', 'db-legend', segs, my.totalUSD);
+    _renderAssetSummary(segs, my.totalUSD);
   } else {
     const empty = { portfolios: [], cashUSD: 0, goldUSD: 0, mfUSD: 0, cryptoUSD: 0, insuranceUSD: 0, privateUSD: 0 };
     const p = prt || empty;
@@ -1422,8 +1423,9 @@ function _refreshDonut() {
       privateUSD:   my.privateUSD   + (p.privateUSD   || 0),
       totalUSD:     my.totalUSD     + (p.totalUSD     || 0),
     };
-    _renderHomeDonut('db-donut', 'db-legend', _seg(combined), combined.totalUSD);
-    _renderPortSummary(combined.portfolios);
+    const segs = _seg(combined);
+    _renderHomeDonut('db-donut', 'db-legend', segs, combined.totalUSD);
+    _renderAssetSummary(segs, combined.totalUSD);
   }
 }
 
@@ -1473,39 +1475,28 @@ function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
   }
 }
 
-function _renderPortSummary(portfolios) {
+function _renderAssetSummary(segments, totalUSD) {
   const el = document.getElementById('db-port-summary');
   if (!el) return;
-  const filtered = (portfolios || []).filter(p => p.valueUSD > 0);
-  if (!filtered.length) { el.style.display = 'none'; return; }
+  if (!segments || !segments.length) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  const totalUS = filtered.reduce((s, p) => s + p.valueUSD, 0);
-  const rows = filtered.map((p, i) => {
-    const color = PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length];
-    const pct   = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
-    const pSign = p.gainLossUSD >= 0 ? '+' : '';
-    const pClr  = p.gainLossUSD >= 0 ? 'var(--success)' : 'var(--danger)';
-    const glPct = p.costUSD > 0 ? ((p.gainLossUSD / p.costUSD) * 100).toFixed(1) : '0';
-    const barW  = totalUS > 0 ? ((p.valueUSD / totalUS) * 100).toFixed(1) : '0';
-    return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0"></span>
-        <span style="font-size:13px;font-weight:600;flex:1">${p.name}</span>
-        <span style="font-size:13px;font-weight:700">${fmtVal(p.valueUSD)}</span>
+  const rows = segments.map(s => {
+    const pct  = totalUSD > 0 ? ((s.value / totalUSD) * 100).toFixed(1) : '0';
+    const barW = pct;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border)">
+      <span style="width:9px;height:9px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+      <span style="font-size:13px;flex:1">${s.label}</span>
+      <div style="width:60px;height:3px;background:var(--surface2);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${barW}%;background:${s.color};border-radius:2px"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">
-          <div style="height:100%;width:${barW}%;background:${color};border-radius:2px"></div>
-        </div>
-        <span style="font-size:11px;color:var(--text-muted);min-width:32px;text-align:right">${pct}%</span>
-        <span style="font-size:11px;color:${pClr};min-width:48px;text-align:right">${pSign}${glPct}%</span>
-      </div>
+      <span style="font-size:11px;color:var(--text-muted);min-width:32px;text-align:right">${pct}%</span>
+      <span style="font-size:13px;font-weight:700;min-width:80px;text-align:right">${fmtVal(s.value)}</span>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="card2" style="overflow:hidden;padding:0">
-    <div style="padding:10px 14px 8px;display:flex;align-items:center;justify-content:space-between">
-      <span class="m-lbl" style="margin:0">US Portfolio</span>
-      <span style="font-size:12px;font-weight:700">${fmtVal(totalUS)}</span>
+    <div style="padding:10px 14px 9px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
+      <span class="m-lbl" style="margin:0">Assets</span>
+      <span style="font-size:13px;font-weight:700">${fmtVal(totalUSD)}</span>
     </div>
     ${rows}
   </div>`;
