@@ -483,6 +483,12 @@ body {
     <div id="bonds-maturing-wrap" style="display:none;margin-bottom:14px"></div>
     <!-- Bond list (master panel) -->
     <div id="bond-list-panel">
+      <div class="tabs" style="margin-bottom:8px">
+        <button class="tab-btn" id="sort-btn-code"     onclick="setBondSort('code')">Code A→Z</button>
+        <button class="tab-btn active" id="sort-btn-maturity" onclick="setBondSort('maturity')">Maturity ↑</button>
+        <button class="tab-btn" id="sort-btn-amount"   onclick="setBondSort('amount')">Amount ↓</button>
+        <button class="tab-btn" id="sort-btn-coupon"   onclick="setBondSort('coupon')">Coupon ↓</button>
+      </div>
       <input id="bond-search-input" type="text" placeholder="Search by name or code…" class="bond-search-input" oninput="filterBondList(this.value)">
       <div id="bond-list-items"></div>
     </div>
@@ -1016,13 +1022,13 @@ body {
 
   <div id="bond-input-baht">
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Amount (THB)</div>
-    <input id="bond-total-baht" type="number" placeholder="e.g. 500000" min="0" step="1000" oninput="calcBondFromBaht()"
+    <input id="bond-total-baht" type="text" inputmode="numeric" placeholder="e.g. 500,000" oninput="_numInputFmt(this);calcBondFromBaht()"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
   </div>
 
   <div id="bond-input-units" style="display:none">
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
-    <input id="bond-total-units-input" type="number" placeholder="e.g. 500" min="0" step="1" oninput="calcBondFromUnits()"
+    <input id="bond-total-units-input" type="text" inputmode="numeric" placeholder="e.g. 500" oninput="_numInputFmt(this);calcBondFromUnits()"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
   </div>
 
@@ -1030,12 +1036,12 @@ body {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
-        <input id="bond-manual-units" type="number" placeholder="e.g. 500" min="0" step="1"
+        <input id="bond-manual-units" type="text" inputmode="numeric" placeholder="e.g. 500" oninput="_numInputFmt(this)"
           style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
       </div>
       <div>
         <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total (THB)</div>
-        <input id="bond-manual-baht" type="number" placeholder="e.g. 500000" min="0" step="1000"
+        <input id="bond-manual-baht" type="text" inputmode="numeric" placeholder="e.g. 500,000" oninput="_numInputFmt(this)"
           style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
       </div>
     </div>
@@ -1055,7 +1061,7 @@ body {
     </div>
     <div>
       <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Price / Unit (THB)</div>
-      <input id="bond-price-per-unit" type="number" value="1000" min="0" step="1"
+      <input id="bond-price-per-unit" type="text" inputmode="numeric" value="1,000" oninput="_numInputFmt(this);calcBondFromBaht();calcBondFromUnits()"
         style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
     </div>
   </div>
@@ -3582,10 +3588,28 @@ async function loadPrivate() {
 
 // ── Thai Bonds ────────────────────────────────────────────────────────────────
 
+// Number-separator helpers for modal inputs
+function _numInputFmt(el) {
+  const pos   = el.selectionStart;
+  const prev  = el.value;
+  const raw   = prev.replace(/[^0-9.]/g, '');
+  const parts = raw.split('.');
+  parts[0]    = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const next  = parts.join('.');
+  el.value    = next;
+  // Restore caret, adjusted for added/removed commas
+  const diff  = next.length - prev.length;
+  el.setSelectionRange(pos + diff, pos + diff);
+}
+function _parseNum(str) {
+  return parseFloat((str || '').toString().replace(/,/g, '')) || 0;
+}
+
 let _bondEditId = null;
 let _bondInputMethod = 'baht';
 let _bondListData = [];
 let _selectedBondId = null;
+let _bondSortKey = 'maturity';
 
 // Rating → badge color
 function _ratingColor(rating) {
@@ -3830,13 +3854,41 @@ function _renderBondMaturingAlert(bonds) {
     </div>`;
 }
 
+function setBondSort(key) {
+  _bondSortKey = key;
+  ['code','maturity','amount','coupon'].forEach(k => {
+    const btn = document.getElementById(`sort-btn-${k}`);
+    if (btn) btn.classList.toggle('active', k === key);
+  });
+  _renderBondList(_bondListData, document.getElementById('bond-search-input')?.value || '');
+}
+
 function _renderBondList(bonds, query) {
   const q = (query || '').toLowerCase();
   const filtered = q
     ? bonds.filter(b =>
         (b.bond_code || '').toLowerCase().includes(q) ||
         (b.bond_name || '').toLowerCase().includes(q))
-    : bonds;
+    : [...bonds];
+
+  // Sort
+  filtered.sort((a, b) => {
+    if (_bondSortKey === 'code') {
+      return (a.bond_code || a.bond_name || '').localeCompare(b.bond_code || b.bond_name || '');
+    }
+    if (_bondSortKey === 'maturity') {
+      const da = a.maturity_date ? new Date(a.maturity_date) : new Date('9999-12-31');
+      const db = b.maturity_date ? new Date(b.maturity_date) : new Date('9999-12-31');
+      return da - db;
+    }
+    if (_bondSortKey === 'amount') {
+      return (b.face_value_thb || 0) - (a.face_value_thb || 0);
+    }
+    if (_bondSortKey === 'coupon') {
+      return (b.coupon_rate || 0) - (a.coupon_rate || 0);
+    }
+    return 0;
+  });
 
   const el = document.getElementById('bond-list-items');
   if (!filtered.length) {
@@ -3965,15 +4017,15 @@ function setBondInputMethod(method, btn) {
 }
 
 function calcBondFromBaht() {
-  const baht = parseFloat(document.getElementById('bond-total-baht').value) || 0;
-  const ppu  = parseFloat(document.getElementById('bond-price-per-unit').value) || 1000;
+  const baht  = _parseNum(document.getElementById('bond-total-baht').value);
+  const ppu   = _parseNum(document.getElementById('bond-price-per-unit').value) || 1000;
   const units = ppu > 0 ? baht / ppu : 0;
   _updateBondCalcDisplay(units, baht);
 }
 
 function calcBondFromUnits() {
-  const units = parseFloat(document.getElementById('bond-total-units-input').value) || 0;
-  const ppu   = parseFloat(document.getElementById('bond-price-per-unit').value) || 1000;
+  const units = _parseNum(document.getElementById('bond-total-units-input').value);
+  const ppu   = _parseNum(document.getElementById('bond-price-per-unit').value) || 1000;
   const baht  = units * ppu;
   _updateBondCalcDisplay(units, baht);
 }
@@ -4033,7 +4085,7 @@ function _bondModalReset() {
   document.getElementById('bond-manual-units').value  = '';
   document.getElementById('bond-manual-baht').value   = '';
   document.getElementById('bond-purchase-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('bond-price-per-unit').value = '1000';
+  document.getElementById('bond-price-per-unit').value = '1,000';
   document.getElementById('bond-notes').value         = '';
   document.getElementById('bond-modal-error').textContent = '';
   document.getElementById('bond-lookup-status').textContent = '';
@@ -4072,7 +4124,7 @@ async function openEditBond(id) {
   document.getElementById('bond-coupon-rate').value   = b.coupon_rate || '';
   document.getElementById('bond-coupon-type').value   = b.coupon_type || 'semi-annually';
   document.getElementById('bond-purchase-date').value = b.purchase_date || '';
-  document.getElementById('bond-price-per-unit').value = b.price_per_unit_thb || 1000;
+  document.getElementById('bond-price-per-unit').value = Number(b.price_per_unit_thb || 1000).toLocaleString('en-US');
   document.getElementById('bond-notes').value         = b.notes || '';
 
   // For edit, switch to manual mode pre-filled
@@ -4081,8 +4133,8 @@ async function openEditBond(id) {
   document.getElementById('bond-input-units').style.display  = 'none';
   document.getElementById('bond-input-manual').style.display = 'block';
   document.querySelectorAll('#bond-modal .modal-type-btn').forEach((btn, i) => btn.classList.toggle('active', i === 2));
-  document.getElementById('bond-manual-units').value = b.units || '';
-  document.getElementById('bond-manual-baht').value  = b.face_value_thb || '';
+  document.getElementById('bond-manual-units').value = b.units ? Number(b.units).toLocaleString('en-US') : '';
+  document.getElementById('bond-manual-baht').value  = b.face_value_thb ? Number(b.face_value_thb).toLocaleString('en-US') : '';
   _updateBondCalcDisplay(b.units || 0, b.face_value_thb || 0);
 
   document.getElementById('bond-modal-overlay').style.display = 'block';
@@ -4104,22 +4156,22 @@ async function saveBond() {
   const creditRating = document.getElementById('bond-rating').value.trim() || null;
   const issuedDate   = document.getElementById('bond-issued-date').value || null;
   const maturityDate = document.getElementById('bond-maturity-date').value || null;
-  const couponRate   = parseFloat(document.getElementById('bond-coupon-rate').value) || null;
+  const couponRate   = _parseNum(document.getElementById('bond-coupon-rate').value) || null;
   const couponType   = document.getElementById('bond-coupon-type').value;
   const purchaseDate = document.getElementById('bond-purchase-date').value || null;
-  const pricePerUnit = parseFloat(document.getElementById('bond-price-per-unit').value) || 1000;
+  const pricePerUnit = _parseNum(document.getElementById('bond-price-per-unit').value) || 1000;
   const notes        = document.getElementById('bond-notes').value.trim() || null;
 
   let units = 0, faceValueThb = 0;
   if (_bondInputMethod === 'baht') {
-    faceValueThb = parseFloat(document.getElementById('bond-total-baht').value) || 0;
+    faceValueThb = _parseNum(document.getElementById('bond-total-baht').value);
     units = pricePerUnit > 0 ? faceValueThb / pricePerUnit : 0;
   } else if (_bondInputMethod === 'units') {
-    units = parseFloat(document.getElementById('bond-total-units-input').value) || 0;
+    units = _parseNum(document.getElementById('bond-total-units-input').value);
     faceValueThb = units * pricePerUnit;
   } else {
-    units = parseFloat(document.getElementById('bond-manual-units').value) || 0;
-    faceValueThb = parseFloat(document.getElementById('bond-manual-baht').value) || 0;
+    units = _parseNum(document.getElementById('bond-manual-units').value);
+    faceValueThb = _parseNum(document.getElementById('bond-manual-baht').value);
   }
 
   if (!bondCode && !bondName) { errEl.textContent = 'Bond Code or Name is required.'; return; }
