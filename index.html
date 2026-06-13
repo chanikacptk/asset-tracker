@@ -456,13 +456,26 @@ body {
   <!-- THAI BONDS -->
   <div id="page-bonds" class="page">
     <div class="top-bar">
-      <div class="page-title">Thai Bonds</div>
+      <div class="page-title">Bond</div>
       <button onclick="openAddBond()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
-    <div id="bonds-summary-wrap" style="display:none;margin-bottom:12px"></div>
-    <div id="bonds-maturing-wrap" style="display:none;margin-bottom:12px"></div>
-    <div id="bonds-content"></div>
+    <!-- KPI summary cards -->
+    <div id="bonds-summary-wrap" style="display:none;margin-bottom:16px"></div>
+    <!-- Portfolio dashboard (2 donuts) -->
+    <div id="bonds-dashboard-wrap" style="display:none;margin-bottom:16px"></div>
+    <!-- 90-day maturity alert -->
+    <div id="bonds-maturing-wrap" style="display:none;margin-bottom:14px"></div>
+    <!-- Bond list (master panel) -->
+    <div id="bond-list-panel">
+      <input id="bond-search-input" type="text" placeholder="Search by name or code…" class="bond-search-input" oninput="filterBondList(this.value)">
+      <div id="bond-list-items"></div>
+    </div>
+    <!-- Bond detail (detail panel) -->
+    <div id="bond-detail-panel" style="display:none">
+      <button class="bond-back-btn" onclick="closeBondDetail()">‹ All Bonds</button>
+      <div id="bond-detail-content"></div>
+    </div>
   </div>
 
   <!-- DCA PLAN -->
@@ -1048,46 +1061,117 @@ body {
 }
 .modal-type-btn.active { background:var(--accent);border-color:var(--accent);color:#fff; }
 
-/* Bond cards */
-.bond-card {
-  background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);
-  padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);
+/* ── Bond page ────────────────────────────────────────────────────────────── */
+
+/* KPI summary cards */
+.bond-kpi-wrap { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.bond-kpi-full { grid-column:1/-1; }
+.bond-kpi-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px 18px;
 }
-.bond-code {
-  font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:var(--orange);
-  letter-spacing:0.5px;
+.bond-kpi-lbl {
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;
 }
+.bond-kpi-val { font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1.1; }
+.bond-kpi-sub { font-size:12px;color:var(--text-muted);margin-top:5px; }
+
+/* Portfolio dashboard (2 donuts) */
+.bond-charts-row { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.bond-chart-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 12px;overflow:hidden;
+}
+.bond-chart-title {
+  font-size:11px;font-weight:700;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;
+}
+.bond-chart-wrap { position:relative;height:130px; }
+.bond-chart-legend { margin-top:10px; }
+.bond-chart-legend-item {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:2px 0;font-size:10px;
+}
+.bond-chart-legend-label {
+  display:flex;align-items:center;gap:5px;color:var(--text-muted);
+  min-width:0;flex:1;overflow:hidden;
+}
+.bond-chart-legend-name {
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72px;
+}
+.bond-chart-legend-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+.bond-chart-legend-val { color:var(--text);font-weight:700;flex-shrink:0;margin-left:6px; }
+
+/* Search bar */
+.bond-search-input {
+  width:100%;padding:10px 14px;border-radius:var(--radius);
+  border:1px solid var(--border);background:var(--surface2);
+  color:var(--text);font-size:14px;outline:none;margin-bottom:12px;
+  transition:border-color 0.15s;
+}
+.bond-search-input:focus { border-color:var(--accent); }
+.bond-search-input::placeholder { color:var(--text-muted); }
+
+/* Bond list items */
+.bond-list-item {
+  display:flex;align-items:center;gap:12px;
+  padding:14px 14px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:8px;cursor:pointer;transition:border-color 0.15s,background 0.1s;
+}
+.bond-list-item:active { background:var(--surface2); }
+.bond-list-item.active { border-color:var(--accent);background:rgba(37,99,235,0.04); }
+html.dark .bond-list-item.active { background:rgba(37,99,235,0.08); }
+.bond-list-left { flex:1;min-width:0; }
+.bond-list-code { font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--orange); }
+.bond-list-name { font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.bond-list-meta { display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap; }
+.bond-list-right { text-align:right;flex-shrink:0; }
+.bond-list-amount { font-size:14px;font-weight:700; }
+.bond-list-date { font-size:10px;color:var(--text-muted);margin-top:2px; }
+.bond-list-arrow { color:var(--text-muted);font-size:18px;line-height:1;flex-shrink:0; }
+
+/* Back button (detail panel) */
+.bond-back-btn {
+  display:inline-flex;align-items:center;gap:4px;background:none;border:none;
+  color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;
+  padding:0 0 14px;font-family:inherit;
+}
+
+/* Detail card */
+.bond-detail-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px;margin-bottom:12px;
+}
+.bond-detail-code { font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--orange); }
+.bond-detail-name { font-size:15px;font-weight:700;color:var(--text);line-height:1.4;margin:10px 0 14px; }
+.bond-detail-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px; }
+.bond-detail-box {
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:10px 12px;
+}
+.bond-detail-box-lbl { font-size:11px;color:var(--text-muted);margin-bottom:4px; }
+.bond-detail-box-val { font-size:14px;font-weight:700;color:var(--orange); }
+.bond-coupon-row {
+  background:rgba(22,163,74,0.07);border:1px solid rgba(22,163,74,0.18);
+  border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;
+}
+html.dark .bond-coupon-row { background:rgba(22,163,74,0.1);border-color:rgba(22,163,74,0.25); }
+.bond-detail-footer { padding-top:10px;border-top:1px solid var(--border); }
+
+/* Rating badge */
 .bond-rating-badge {
-  display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;
-  line-height:1.6;letter-spacing:.3px;
+  display:inline-block;padding:2px 9px;border-radius:20px;
+  font-size:11px;font-weight:700;line-height:1.6;letter-spacing:.3px;
 }
-.bond-name {
-  font-size:15px;font-weight:700;color:var(--text);margin:10px 0 12px;line-height:1.4;
-}
-.bond-grid {
-  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;
-}
-.bond-box {
-  background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;
-  border:1px solid var(--border);
-}
-.bond-box-label {
-  font-size:11px;color:var(--text-muted);margin-bottom:4px;
-}
-.bond-box-val {
-  font-size:14px;font-weight:700;color:var(--orange);
-}
-.bond-maturity-bar {
-  margin-top:12px;padding-top:10px;border-top:1px solid var(--border);
-}
-.bond-remark {
-  margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
-  font-size:12px;color:var(--text-muted);
-}
+
+/* 90-day maturity alert */
 .bond-maturing-card {
-  background:rgba(217,119,6,0.1);border:1px solid rgba(217,119,6,0.3);
-  border-radius:var(--radius);padding:12px 16px;margin-bottom:8px;
+  background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.25);
+  border-radius:var(--radius);padding:12px 16px;
 }
+html.dark .bond-maturing-card { background:rgba(217,119,6,0.12); }
 
 /* More page rows */
 .more-row {
@@ -3426,6 +3510,8 @@ async function loadPrivate() {
 
 let _bondEditId = null;
 let _bondInputMethod = 'baht';
+let _bondListData = [];
+let _selectedBondId = null;
 
 // Rating → badge color
 function _ratingColor(rating) {
@@ -3482,26 +3568,40 @@ async function loadBonds() {
     .select('*').eq('user_id', state.userId)
     .order('purchase_date', { ascending: false, nullsFirst: false });
 
-  const el     = document.getElementById('bonds-content');
-  const sumWrap = document.getElementById('bonds-summary-wrap');
-  const matWrap = document.getElementById('bonds-maturing-wrap');
+  const sumWrap  = document.getElementById('bonds-summary-wrap');
+  const dashWrap = document.getElementById('bonds-dashboard-wrap');
+  const matWrap  = document.getElementById('bonds-maturing-wrap');
+
+  // Reset to list view whenever the page reloads
+  document.getElementById('bond-list-panel').style.display  = 'block';
+  document.getElementById('bond-detail-panel').style.display = 'none';
+  _selectedBondId = null;
 
   if (!bonds || bonds.length === 0) {
-    if (sumWrap) sumWrap.style.display = 'none';
-    if (matWrap) matWrap.style.display = 'none';
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📜</div><div class="empty-text">No bonds yet<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
+    sumWrap.style.display  = 'none';
+    dashWrap.style.display = 'none';
+    matWrap.style.display  = 'none';
+    document.getElementById('bond-list-items').innerHTML =
+      '<div class="empty"><div class="empty-icon">📜</div><div class="empty-text">No bonds yet<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
     return;
   }
 
-  const today = new Date(); today.setHours(0,0,0,0);
+  _bondListData = bonds;
+  _renderBondSummary(bonds);
+  _renderBondDashboard(bonds);
+  _renderBondMaturingAlert(bonds);
+  _renderBondList(bonds, document.getElementById('bond-search-input').value || '');
+}
 
-  // ── Summary cards ──
+function _renderBondSummary(bonds) {
+  const sumWrap = document.getElementById('bonds-summary-wrap');
   const totalInvestedTHB = bonds.reduce((s, b) => s + (b.face_value_thb || 0), 0);
-  const totalCount = bonds.length;
+  const withRate = bonds.filter(b => b.coupon_rate > 0);
+  const avgCoupon = withRate.length
+    ? withRate.reduce((s, b) => s + b.coupon_rate, 0) / withRate.length
+    : 0;
 
-  // Find the earliest upcoming coupon across all bonds
-  let earliestCouponDate = null;
-  let earliestCouponAmt  = 0;
+  let earliestCouponDate = null, earliestCouponAmt = 0;
   bonds.forEach(b => {
     const nc = _nextCouponDate(b.issued_date, b.maturity_date, b.coupon_type || 'semi-annually');
     if (!nc) return;
@@ -3511,119 +3611,271 @@ async function loadBonds() {
     }
   });
 
-  if (sumWrap) {
-    sumWrap.style.display = 'block';
-    const couponInfo = earliestCouponDate
-      ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Next Coupon</div>
-         <div style="font-size:15px;font-weight:700;color:var(--success)">${fmtTHB(earliestCouponAmt)}</div>
-         <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${_fmtShortDate(earliestCouponDate.toISOString().split('T')[0])}</div>`
-      : `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Next Coupon</div><div style="font-size:14px;color:var(--text-muted)">—</div>`;
-    sumWrap.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div class="card2" style="padding:12px 14px">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Invested</div>
-          <div style="font-size:15px;font-weight:700">${fmtTHB(totalInvestedTHB)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">face value</div>
-        </div>
-        <div class="card2" style="padding:12px 14px">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Bonds</div>
-          <div style="font-size:15px;font-weight:700">${totalCount}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">positions</div>
-        </div>
-        <div class="card2" style="padding:12px 14px">${couponInfo}</div>
-      </div>`;
-  }
+  const couponVal  = earliestCouponDate ? fmtTHB(earliestCouponAmt) : '—';
+  const couponClr  = earliestCouponDate ? 'var(--success)' : 'var(--text-muted)';
+  const couponDate = earliestCouponDate
+    ? _fmtShortDate(earliestCouponDate.toISOString().split('T')[0])
+    : 'No upcoming';
 
-  // ── Maturing within 90 days ──
-  const maturing90 = bonds.filter(b => {
+  sumWrap.style.display = 'block';
+  sumWrap.innerHTML = `
+    <div class="bond-kpi-wrap">
+      <div class="bond-kpi-card bond-kpi-full">
+        <div class="bond-kpi-lbl">Total Invested</div>
+        <div class="bond-kpi-val">${fmtTHB(totalInvestedTHB)}</div>
+        <div class="bond-kpi-sub">${bonds.length} position${bonds.length !== 1 ? 's' : ''} · face value</div>
+      </div>
+      <div class="bond-kpi-card">
+        <div class="bond-kpi-lbl">Next Coupon</div>
+        <div class="bond-kpi-val" style="font-size:20px;color:${couponClr}">${couponVal}</div>
+        <div class="bond-kpi-sub">${couponDate}</div>
+      </div>
+      <div class="bond-kpi-card">
+        <div class="bond-kpi-lbl">Avg. Coupon</div>
+        <div class="bond-kpi-val" style="font-size:22px">${avgCoupon.toFixed(2)}%</div>
+        <div class="bond-kpi-sub">per year</div>
+      </div>
+    </div>`;
+}
+
+function _renderBondDashboard(bonds) {
+  const dashWrap = document.getElementById('bonds-dashboard-wrap');
+  const totalTHB = bonds.reduce((s, b) => s + (b.face_value_thb || 0), 0);
+  if (totalTHB === 0) { dashWrap.style.display = 'none'; return; }
+
+  // Allocation by bond
+  const allocItems = bonds.map((b, i) => ({
+    label: b.bond_code || b.bond_name || `Bond ${i+1}`,
+    value: b.face_value_thb || 0,
+    color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length]
+  })).filter(i => i.value > 0);
+
+  // Maturity distribution
+  const buckets = [
+    { label: '< 90d',    min: 0,    max: 90,         color: '#ef4444', value: 0 },
+    { label: '90d–1yr',  min: 91,   max: 365,        color: '#f97316', value: 0 },
+    { label: '1–3 yrs',  min: 366,  max: 1095,       color: '#f59e0b', value: 0 },
+    { label: '> 3 yrs',  min: 1096, max: Infinity,   color: '#22c55e', value: 0 },
+  ];
+  bonds.forEach(b => {
     const days = _daysTo(b.maturity_date);
-    return days !== null && days >= 0 && days <= 90;
+    if (days === null || days < 0) return;
+    const bkt = buckets.find(bk => days >= bk.min && days <= bk.max);
+    if (bkt) bkt.value += (b.face_value_thb || 0);
   });
-  if (matWrap) {
-    if (maturing90.length > 0) {
-      matWrap.style.display = 'block';
-      matWrap.innerHTML = `
-        <div class="bond-maturing-card">
-          <div style="font-size:13px;font-weight:700;color:var(--warning);margin-bottom:8px">⚠️ Maturing within 90 days</div>
-          ${maturing90.map(b => {
-            const days = _daysTo(b.maturity_date);
-            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
-              <span style="font-size:13px;font-weight:600;color:var(--orange)">${b.bond_code || b.bond_name}</span>
-              <span style="font-size:12px;color:var(--warning)">${days === 0 ? 'Today' : days + ' days'} · ${fmtTHB(b.face_value_thb || 0)}</span>
-            </div>`;
-          }).join('')}
+  const matItems = buckets.filter(bk => bk.value > 0);
+
+  const isDark  = document.documentElement.classList.contains('dark');
+  const textClr = isDark ? '#e2e6f0' : '#111827';
+
+  dashWrap.style.display = 'block';
+  dashWrap.innerHTML = `
+    <div class="bond-charts-row">
+      <div class="bond-chart-card">
+        <div class="bond-chart-title">Allocation</div>
+        <div class="bond-chart-wrap"><canvas id="bond-alloc-chart"></canvas></div>
+        <div class="bond-chart-legend" id="bond-alloc-legend"></div>
+      </div>
+      <div class="bond-chart-card">
+        <div class="bond-chart-title">By Maturity</div>
+        <div class="bond-chart-wrap"><canvas id="bond-mat-chart"></canvas></div>
+        <div class="bond-chart-legend" id="bond-mat-legend"></div>
+      </div>
+    </div>`;
+
+  const _draw = (canvasId, items, centerVal, centerSub) => {
+    if (state.charts[canvasId]) { state.charts[canvasId].destroy(); delete state.charts[canvasId]; }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !items.length) return;
+    state.charts[canvasId] = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: items.map(i => i.label),
+        datasets: [{ data: items.map(i => i.value), backgroundColor: items.map(i => i.color), borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        animation: { duration: 400 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const tot = items.reduce((s, i) => s + i.value, 0);
+                const pct = tot > 0 ? ((ctx.raw / tot) * 100).toFixed(1) : '0';
+                return ` ${ctx.label}: ${fmtTHB(ctx.raw)} (${pct}%)`;
+              }
+            }
+          },
+          centerText: { value: centerVal, pnl: centerSub, textColor: textClr, pnlColor: textClr }
+        }
+      }
+    });
+  };
+
+  const _legend = (legendId, items, total) => {
+    const el = document.getElementById(legendId);
+    if (!el) return;
+    el.innerHTML = items.slice(0, 5).map(item => {
+      const pct = total > 0 ? ((item.value / total) * 100).toFixed(0) : '0';
+      return `<div class="bond-chart-legend-item">
+        <span class="bond-chart-legend-label">
+          <span class="bond-chart-legend-dot" style="background:${item.color}"></span>
+          <span class="bond-chart-legend-name">${item.label}</span>
+        </span>
+        <span class="bond-chart-legend-val">${pct}%</span>
+      </div>`;
+    }).join('') + (items.length > 5 ? `<div style="font-size:10px;color:var(--text-muted);padding-top:2px">+${items.length-5} more</div>` : '');
+  };
+
+  const matTotal = matItems.reduce((s, m) => s + m.value, 0);
+  _draw('bond-alloc-chart', allocItems, fmtTHB(totalTHB), `${bonds.length} bonds`);
+  _legend('bond-alloc-legend', allocItems, totalTHB);
+  _draw('bond-mat-chart', matItems, fmtTHB(matTotal), `${matItems.length} bucket${matItems.length !== 1 ? 's' : ''}`);
+  _legend('bond-mat-legend', matItems, matTotal);
+}
+
+function _renderBondMaturingAlert(bonds) {
+  const matWrap = document.getElementById('bonds-maturing-wrap');
+  if (!matWrap) return;
+  const m90 = bonds.filter(b => { const d = _daysTo(b.maturity_date); return d !== null && d >= 0 && d <= 90; });
+  if (!m90.length) { matWrap.style.display = 'none'; return; }
+  matWrap.style.display = 'block';
+  matWrap.innerHTML = `
+    <div class="bond-maturing-card">
+      <div style="font-size:13px;font-weight:700;color:var(--warning);margin-bottom:8px">⚠️ Maturing within 90 days</div>
+      ${m90.map(b => {
+        const d = _daysTo(b.maturity_date);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+          <span style="font-size:13px;font-weight:600;color:var(--orange)">${b.bond_code || b.bond_name}</span>
+          <span style="font-size:12px;color:var(--warning)">${d === 0 ? 'Today' : d + ' days'} · ${fmtTHB(b.face_value_thb || 0)}</span>
         </div>`;
-    } else {
-      matWrap.style.display = 'none';
-    }
+      }).join('')}
+    </div>`;
+}
+
+function _renderBondList(bonds, query) {
+  const q = (query || '').toLowerCase();
+  const filtered = q
+    ? bonds.filter(b =>
+        (b.bond_code || '').toLowerCase().includes(q) ||
+        (b.bond_name || '').toLowerCase().includes(q))
+    : bonds;
+
+  const el = document.getElementById('bond-list-items');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-text" style="padding:24px 0">No bonds match your search</div></div>';
+    return;
   }
 
-  // ── Bond cards ──
-  el.innerHTML = bonds.map(b => {
-    const ratingColor = _ratingColor(b.credit_rating);
-    const ratingBadge = b.credit_rating
-      ? `<span class="bond-rating-badge" style="background:${ratingColor}22;color:${ratingColor};border:1px solid ${ratingColor}44">${b.credit_rating}</span>`
+  el.innerHTML = filtered.map(b => {
+    const rc = _ratingColor(b.credit_rating);
+    const badge = b.credit_rating
+      ? `<span class="bond-rating-badge" style="background:${rc}22;color:${rc};border:1px solid ${rc}44">${b.credit_rating}</span>`
       : '';
     const days = _daysTo(b.maturity_date);
-    let daysHtml = '';
-    if (days !== null) {
-      const daysColor = days <= 90 ? 'var(--warning)' : days <= 365 ? 'var(--text-muted)' : 'var(--success)';
-      daysHtml = `<div style="font-size:12px;color:${daysColor};margin-top:2px">
-        ${days < 0 ? 'Matured' : days === 0 ? 'Matures today' : `${days} days to maturity`}
-      </div>`;
-    }
-    const nc = _nextCouponDate(b.issued_date, b.maturity_date, b.coupon_type || 'semi-annually');
-    const couponAmt = _couponPerPayment(b.face_value_thb, b.coupon_rate, b.coupon_type || 'semi-annually');
-    const couponHtml = nc
-      ? `<div style="font-size:11px;color:var(--text-muted);margin-top:6px">
-           Next coupon <strong style="color:var(--success)">${fmtTHB(couponAmt)}</strong> on ${_fmtShortDate(nc.toISOString().split('T')[0])}
-         </div>`
+    const matStr = b.maturity_date ? `Matures ${_fmtShortDate(b.maturity_date)}` : '';
+    const warnBadge = days !== null && days >= 0 && days <= 90
+      ? `<span style="font-size:10px;color:var(--warning);font-weight:600">⚠ ${days === 0 ? 'today' : days + 'd'}</span>`
       : '';
-
+    const isActive = b.id === _selectedBondId;
     return `
-    <div class="bond-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="bond-code">${b.bond_code || '—'}</span>
-          ${ratingBadge}
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="pt-act-btn" onclick="openEditBond('${b.id}')">✏️</button>
-          <button class="pt-act-btn" onclick="deleteBond('${b.id}')" style="color:var(--danger)">🗑</button>
-        </div>
+    <div class="bond-list-item${isActive ? ' active' : ''}" onclick="selectBond('${b.id}')">
+      <div class="bond-list-left">
+        <div class="bond-list-code">${b.bond_code || '—'}</div>
+        ${b.bond_name ? `<div class="bond-list-name">${b.bond_name}</div>` : ''}
+        <div class="bond-list-meta">${badge}${matStr ? `<span style="font-size:11px;color:var(--text-muted)">${matStr}</span>` : ''}${warnBadge}</div>
       </div>
-      ${b.bond_name ? `<div class="bond-name">${b.bond_name}</div>` : '<div style="height:8px"></div>'}
-      <div class="bond-grid">
-        <div class="bond-box">
-          <div class="bond-box-label">Principal (Baht)</div>
-          <div class="bond-box-val">${(b.face_value_thb || 0).toLocaleString('th-TH')}</div>
-        </div>
-        <div class="bond-box">
-          <div class="bond-box-label">Total Unit</div>
-          <div class="bond-box-val">${(b.units || 0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-        </div>
-        <div class="bond-box">
-          <div class="bond-box-label">Issued Date</div>
-          <div class="bond-box-val">${_fmtShortDate(b.issued_date)}</div>
-        </div>
-        <div class="bond-box">
-          <div class="bond-box-label">Maturity Date</div>
-          <div class="bond-box-val">${_fmtShortDate(b.maturity_date)}</div>
-        </div>
-        <div class="bond-box">
-          <div class="bond-box-label">Coupon (Per Year)</div>
-          <div class="bond-box-val">${b.coupon_rate ? b.coupon_rate.toFixed(2) + ' %' : '—'}</div>
-        </div>
-        <div class="bond-box">
-          <div class="bond-box-label">Coupon Type</div>
-          <div class="bond-box-val" style="font-size:13px">${_couponTypeLabel(b.coupon_type)}</div>
-        </div>
+      <div class="bond-list-right">
+        <div class="bond-list-amount">${fmtTHB(b.face_value_thb || 0)}</div>
+        ${b.coupon_rate ? `<div class="bond-list-date">${b.coupon_rate.toFixed(2)}% p.a.</div>` : ''}
       </div>
-      ${couponHtml}
-      <div class="bond-maturity-bar">${daysHtml}</div>
-      ${b.notes ? `<div class="bond-remark">Remark : ${b.notes}</div>` : ''}
+      <span class="bond-list-arrow">›</span>
     </div>`;
   }).join('');
+}
+
+function filterBondList(query) {
+  _renderBondList(_bondListData, query);
+}
+
+function selectBond(id) {
+  _selectedBondId = id;
+  const bond = _bondListData.find(b => b.id === id);
+  if (!bond) return;
+
+  document.getElementById('bond-list-panel').style.display  = 'none';
+  document.getElementById('bond-detail-panel').style.display = 'block';
+  document.getElementById('page-bonds').scrollTo({ top: 0, behavior: 'smooth' });
+
+  const rc = _ratingColor(bond.credit_rating);
+  const badge = bond.credit_rating
+    ? `<span class="bond-rating-badge" style="background:${rc}22;color:${rc};border:1px solid ${rc}44">${bond.credit_rating}</span>`
+    : '';
+  const nc = _nextCouponDate(bond.issued_date, bond.maturity_date, bond.coupon_type || 'semi-annually');
+  const couponAmt = _couponPerPayment(bond.face_value_thb, bond.coupon_rate, bond.coupon_type || 'semi-annually');
+  const days = _daysTo(bond.maturity_date);
+  const daysClr = days === null ? 'var(--text-muted)' : days <= 90 ? 'var(--warning)' : days <= 365 ? 'var(--text-muted)' : 'var(--success)';
+  const daysStr = days === null ? '' : days < 0 ? 'Matured' : days === 0 ? 'Matures today' : `${days} days to maturity`;
+
+  document.getElementById('bond-detail-content').innerHTML = `
+    <div class="bond-detail-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="bond-detail-code">${bond.bond_code || '—'}</div>
+          ${badge ? `<div style="margin-top:6px">${badge}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;padding-top:2px">
+          <button class="pt-act-btn" onclick="openEditBond('${bond.id}')">✏️</button>
+          <button class="pt-act-btn pt-act-del" onclick="deleteBond('${bond.id}')">🗑</button>
+        </div>
+      </div>
+      ${bond.bond_name ? `<div class="bond-detail-name">${bond.bond_name}</div>` : '<div style="height:8px"></div>'}
+      <div class="bond-detail-grid">
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Principal (Baht)</div>
+          <div class="bond-detail-box-val">${(bond.face_value_thb || 0).toLocaleString('th-TH')}</div>
+        </div>
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Total Unit</div>
+          <div class="bond-detail-box-val">${(bond.units || 0).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Issued Date</div>
+          <div class="bond-detail-box-val">${_fmtShortDate(bond.issued_date)}</div>
+        </div>
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Maturity Date</div>
+          <div class="bond-detail-box-val">${_fmtShortDate(bond.maturity_date)}</div>
+        </div>
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Coupon (Per Year)</div>
+          <div class="bond-detail-box-val">${bond.coupon_rate ? bond.coupon_rate.toFixed(2) + ' %' : '—'}</div>
+        </div>
+        <div class="bond-detail-box">
+          <div class="bond-detail-box-lbl">Coupon Type</div>
+          <div class="bond-detail-box-val" style="font-size:13px">${_couponTypeLabel(bond.coupon_type)}</div>
+        </div>
+      </div>
+      ${nc ? `
+        <div class="bond-coupon-row">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Next coupon payment</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:18px;font-weight:800;color:var(--success)">${fmtTHB(couponAmt)}</span>
+            <span style="font-size:12px;color:var(--text-muted)">${_fmtShortDate(nc.toISOString().split('T')[0])}</span>
+          </div>
+        </div>` : ''}
+      <div class="bond-detail-footer">
+        ${daysStr ? `<div style="font-size:12px;font-weight:600;color:${daysClr}">${daysStr}</div>` : ''}
+        ${bond.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Remark: ${bond.notes}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function closeBondDetail() {
+  _selectedBondId = null;
+  document.getElementById('bond-detail-panel').style.display = 'none';
+  document.getElementById('bond-list-panel').style.display  = 'block';
 }
 
 function setBondInputMethod(method, btn) {
