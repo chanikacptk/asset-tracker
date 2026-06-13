@@ -20,7 +20,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, Thai
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v24`) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v26`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -166,20 +166,27 @@ Called from frontend via `callGAS(action, params)`:
 | `fetchNews` | NewsAgent.fetchForAllHoldings() |
 | `updateSRLevels` | DataAgent.updateDynamicSRLevels() |
 | `getPrice` | Yahoo Finance single quote |
+| `getGoldPrice` | DataAgent.fetchGoldPrice() — live spot, saves to DB, returns `{price, source}` |
 | `savePrice` | DataAgent.savePrice() |
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
 
 ## Market data sources (DataAgent)
 
-| Asset | Yahoo Finance symbol | Stored as |
+| Asset | Source | Stored as |
 |---|---|---|
-| Gold (spot) | `XAUUSD=X` | `XAU` |
-| S&P 500 | `^GSPC` | `SP500` |
-| SET Index | `^SET.BK` | `SET` |
-| USD/THB | `THB=X` | `USDTHB` |
+| Gold (spot) | Stooq.com CSV → GLD ETF÷0.093252 → goldprice.org → metals.live | `XAU` |
+| S&P 500 | Yahoo Finance `^GSPC` | `SP500` |
+| SET Index | Yahoo Finance `^SET.BK` | `SET` |
+| USD/THB | Yahoo Finance `THB=X` | `USDTHB` |
 | Crypto | CoinGecko API | coin symbol |
 | Thai MF NAVs | AIMC scrape | fund code |
+
+**Gold price chain** (`_fetchGoldSpotPrice()` in DataAgent.gs): each source logs its HTTP code + raw body to the GAS execution log for diagnosis. Yahoo Finance forex symbols (`XAUUSD=X`) are unreliable from GAS server IPs — equity/ETF prices (GLD) are used instead as fallback.
+
+`fetchGoldPrice()` is the public function: fetches live price, saves to `market_data`, returns `{ price, source }`.
+
+**Standalone test**: run `testGoldPrice()` from the GAS IDE to see which source succeeded and verify price matches TradingView.
 
 ---
 
@@ -251,7 +258,7 @@ Nav highlight logic:
 - Stats bar includes: Value · Cost · P/L · 1D Change · N positions
 
 ### Gold
-- `loadGold()` — fetches holdings + XAU price + prev-day price + sr_levels for XAU; renders metric cards + S/R bar + table
+- `loadGold(_liveRefreshed?)` — fetches holdings + XAU price (DB cache) + prev-day price + sr_levels; renders metric cards + S/R bar + table. After render, fires `callGAS('getGoldPrice')` in background; if live price differs >0.1% from cached, updates `state.cache['XAU']` and re-renders once with `_liveRefreshed=true` to prevent loop.
 - Gold S/R comes from `sr_levels` table (`ticker='XAU'`) — populated when GAS `updateSRLevels` runs
 - `openAddGold()` / `openEditGold(id)` / `saveGold()` / `deleteGold(id)`
 - `calcGoldTotal()` — auto-computes total cost (oz × avg cost) in modal
@@ -293,7 +300,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v24`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v26`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

@@ -67,6 +67,17 @@ function doGet(e) {
       result.sent = _sendTestTelegram(userId);
     } else if (action === 'updateSRLevels') {
       DataAgent.updateDynamicSRLevels();
+    } else if (action === 'getGoldPrice') {
+      const gold = DataAgent.fetchGoldPrice();
+      if (!gold) throw new Error('All gold price sources failed');
+      result.price  = gold.price;
+      result.source = gold.source;
+    } else if (action === 'scrapeBondInfo') {
+      const bondCode = (e?.parameter?.bondCode || '').toUpperCase().trim();
+      if (!bondCode) throw new Error('bondCode required');
+      const info = DataAgent.scrapeBondInfo(bondCode);
+      if (!info) throw new Error('Bond not found or scrape failed — use manual input');
+      result.bondInfo = info;
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {

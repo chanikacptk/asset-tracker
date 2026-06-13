@@ -73,10 +73,122 @@ const DataAgent = (() => {
   // ── Gold ────────────────────────────────────────────────────────────────────
 
   function _fetchGold() {
-    const data = _yahooQuote('XAUUSD=X');
-    if (!data) return;
-    _upsertMarketData('XAU', 'gold', data.regularMarketPrice, 'USD');
-    Logger.log(`[DataAgent] Gold (spot): $${data.regularMarketPrice}`);
+    const result = _fetchGoldSpotPrice();
+    if (!result) return;
+    _upsertMarketData('XAU', 'gold', result.price, 'USD');
+    Logger.log(`[DataAgent] Gold price: $${result.price}/oz  [source: ${result.source}]`);
+  }
+
+  // Returns { price, source } or null.
+  // Priority: Stooq.com → GLD ETF÷0.093252 → goldprice.org → metals.live
+  // Each source logs HTTP code + raw body so failures are visible in execution log.
+  function _fetchGoldSpotPrice() {
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+    // 1. Stooq.com — CSV, no key, reliable from GAS server IPs
+    try {
+      const r = UrlFetchApp.fetch(
+        'https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv',
+        { muteHttpExceptions: true, headers: { 'User-Agent': UA } }
+      );
+      const code = r.getResponseCode();
+      const body = r.getContentText();
+      Logger.log('[DataAgent] Stooq HTTP ' + code + ': ' + body.substring(0, 120));
+      if (code === 200) {
+        const lines = body.trim().split('\n');
+        // Header: Symbol,Date,Time,Open,High,Low,Close,Volume
+        // Data:   XAUUSD,20260610,150000,4200.00,4215.00,4195.00,4207.50,0
+        if (lines.length >= 2) {
+          const headers = lines[0].split(',');
+          const vals    = lines[1].split(',');
+          const closeIdx = headers.indexOf('Close');
+          if (closeIdx >= 0) {
+            const price = parseFloat(vals[closeIdx]);
+            if (price > 1000 && price < 10000) {
+              return { price, source: 'stooq.com' };
+            }
+            Logger.log('[DataAgent] Stooq: Close=' + vals[closeIdx] + ' (out of range or N/D)');
+          }
+        }
+      }
+    } catch (e) {
+      Logger.log('[DataAgent] Stooq exception: ' + e.message);
+    }
+
+    // 2. GLD ETF ÷ 0.093252  (Yahoo equity far more reliable than Yahoo forex)
+    //    1 GLD share = 0.093252 troy oz as of 2024; so gold = GLD / 0.093252
+    try {
+      const data = _yahooQuote('GLD');
+      const gld = data?.regularMarketPrice;
+      Logger.log('[DataAgent] GLD quote: ' + gld);
+      if (gld > 50 && gld < 2000) {
+        const price = parseFloat((gld / 0.093252).toFixed(2));
+        if (price > 1000 && price < 10000) {
+          return { price, source: 'GLD÷0.093252 (GLD=$' + gld + ')' };
+        }
+      }
+    } catch (e) {
+      Logger.log('[DataAgent] GLD fallback exception: ' + e.message);
+    }
+
+    // 3. goldprice.org with Referer header (may be blocked by Google IPs)
+    try {
+      const r = UrlFetchApp.fetch('https://data-asg.goldprice.org/dbXRates/USD', {
+        muteHttpExceptions: true,
+        headers: {
+          'User-Agent': UA,
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://goldprice.org/'
+        }
+      });
+      const code = r.getResponseCode();
+      const body = r.getContentText();
+      Logger.log('[DataAgent] goldprice.org HTTP ' + code + ': ' + body.substring(0, 200));
+      if (code === 200) {
+        const data  = JSON.parse(body);
+        const price = data?.items?.[0]?.xauPrice;
+        if (price > 1000 && price < 10000) {
+          return { price: parseFloat(price.toFixed(2)), source: 'goldprice.org' };
+        }
+        Logger.log('[DataAgent] goldprice.org: xauPrice=' + price + ' (out of range or missing)');
+      }
+    } catch (e) {
+      Logger.log('[DataAgent] goldprice.org exception: ' + e.message);
+    }
+
+    // 4. metals.live (may be blocked by Google IPs)
+    try {
+      const r = UrlFetchApp.fetch('https://metals.live/api/spot?metals=gold', {
+        muteHttpExceptions: true,
+        headers: { 'User-Agent': UA, 'Accept': 'application/json' }
+      });
+      const code = r.getResponseCode();
+      const body = r.getContentText();
+      Logger.log('[DataAgent] metals.live HTTP ' + code + ': ' + body.substring(0, 200));
+      if (code === 200) {
+        const data  = JSON.parse(body);
+        const entry = Array.isArray(data) ? data.find(function(x) { return x.metal === 'gold'; }) : null;
+        const price = entry?.price;
+        if (price > 1000 && price < 10000) {
+          return { price: parseFloat(price.toFixed(2)), source: 'metals.live' };
+        }
+        Logger.log('[DataAgent] metals.live: price=' + price + ' (out of range or missing)');
+      }
+    } catch (e) {
+      Logger.log('[DataAgent] metals.live exception: ' + e.message);
+    }
+
+    Logger.log('[DataAgent] Gold fetch FAILED — all four sources returned no valid price');
+    return null;
+  }
+
+  // Public: fetch live spot price, save to DB, return { price, source } for web app action
+  function fetchGoldPrice() {
+    const result = _fetchGoldSpotPrice();
+    if (!result) return null;
+    _upsertMarketData('XAU', 'gold', result.price, 'USD');
+    Logger.log(`[DataAgent] fetchGoldPrice: $${result.price}/oz  [source: ${result.source}]`);
+    return result;
   }
 
   // ── Benchmarks (S&P500, SET Index) ─────────────────────────────────────────
@@ -182,17 +294,24 @@ const DataAgent = (() => {
     const golds = supabaseRequest('GET', 'gold_holdings?select=user_id');
     if (!golds || golds.length === 0) return;
 
-    const data = _yahooQuote('XAUUSD=X');
-    if (!data) return;
+    const result = _fetchGoldSpotPrice();
+    if (!result) return;
 
-    const changePct = data.regularMarketChangePercent || 0;
+    // Compare against yesterday's saved price for % change (goldprice.org has no built-in % change)
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const prevRows = supabaseRequest('GET',
+      `market_data?select=price&symbol=eq.XAU&fetched_at=lt.${todayISO}T00:00:00Z&order=fetched_at.desc&limit=1`);
+    const prevPrice = prevRows?.[0]?.price;
+    if (!prevPrice) return;
+
+    const changePct = ((result.price - prevPrice) / prevPrice) * 100;
     if (Math.abs(changePct) >= 5) {
       golds.forEach(g => {
         alerts.push({
           type: 'gold_alert',
           user_id: g.user_id,
           symbol: 'XAU/USD',
-          price: data.regularMarketPrice,
+          price: result.price,
           change_pct: changePct,
           window: '1d'
         });
@@ -387,7 +506,146 @@ const DataAgent = (() => {
     });
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels };
+  // ── Bond info scraper ─────────────────────────────────────────────────────
+
+  /**
+   * Scrape bond metadata from ThaiBMA website for a given bond code.
+   * Checks bond_master cache first; scrapes and caches on miss.
+   * Returns bond info object or null if lookup fails.
+   */
+  function scrapeBondInfo(bondCode) {
+    // 1. Check cache
+    try {
+      const cached = supabaseRequest('GET', `bond_master?bond_code=eq.${encodeURIComponent(bondCode)}&limit=1`);
+      if (cached && cached.length > 0) {
+        Logger.log(`[DataAgent] Bond ${bondCode}: returning cached info`);
+        return cached[0];
+      }
+    } catch (e) {
+      Logger.log(`[DataAgent] Bond cache lookup failed: ${e.message}`);
+    }
+
+    // 2. Scrape ThaiBMA EN page
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+    const url = `https://www.thaibma.or.th/EN/BondInfo/BondFeature/Issue.aspx?symbol=${encodeURIComponent(bondCode)}`;
+    let html = '';
+    try {
+      const r = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: { 'User-Agent': UA, 'Accept': 'text/html,application/xhtml+xml' }
+      });
+      const code = r.getResponseCode();
+      Logger.log(`[DataAgent] ThaiBMA HTTP ${code} for ${bondCode}`);
+      if (code !== 200) return null;
+      html = r.getContentText();
+    } catch (e) {
+      Logger.log(`[DataAgent] ThaiBMA fetch failed: ${e.message}`);
+      return null;
+    }
+
+    // 3. Parse fields using regex (ThaiBMA ASP.NET table structure)
+    function extract(patterns) {
+      for (const rx of patterns) {
+        const m = html.match(rx);
+        if (m && m[1] && m[1].trim() && m[1].trim() !== '&nbsp;') return m[1].trim();
+      }
+      return null;
+    }
+
+    const bondName     = extract([
+      /(?:Bond Name|Security Name|Instrument Name)[^<]*<\/[^>]+>\s*<td[^>]*>([^<]{5,})<\/td>/i,
+      /<span[^>]*id="[^"]*lblBondName[^"]*"[^>]*>([^<]+)<\/span>/i,
+      /<td[^>]*class="[^"]*BondName[^"]*"[^>]*>([^<]+)<\/td>/i
+    ]);
+    const issuer       = extract([
+      /(?:Issuer|Issuer Name)[^<]*<\/[^>]+>\s*<td[^>]*>([^<]{2,})<\/td>/i,
+      /<span[^>]*id="[^"]*lblIssuer[^"]*"[^>]*>([^<]+)<\/span>/i
+    ]);
+    const creditRating = extract([
+      /(?:Credit Rating|Rating)[^<]*<\/[^>]+>\s*<td[^>]*>([A-Za-z0-9+\-()]+(?:\([a-z]+\))?)<\/td>/i,
+      /<span[^>]*id="[^"]*lblRating[^"]*"[^>]*>([^<]+)<\/span>/i,
+      /Rating\s*<\/td>\s*<td[^>]*>\s*([A-Za-z0-9+\-()]+)\s*<\/td>/i
+    ]);
+    const couponRateRaw = extract([
+      /(?:Coupon Rate|Interest Rate)[^<]*<\/[^>]+>\s*<td[^>]*>([\d.]+)\s*%?<\/td>/i,
+      /<span[^>]*id="[^"]*lblCoupon[^"]*"[^>]*>([\d.]+)<\/span>/i
+    ]);
+    const couponTypeRaw = extract([
+      /(?:Coupon Frequency|Payment Frequency|Coupon Type)[^<]*<\/[^>]+>\s*<td[^>]*>([^<]+)<\/td>/i,
+      /<span[^>]*id="[^"]*lblFrequency[^"]*"[^>]*>([^<]+)<\/span>/i
+    ]);
+    const issuedDateRaw  = extract([
+      /(?:Issue Date|Issued Date)[^<]*<\/[^>]+>\s*<td[^>]*>([\d\/\-\w]+)<\/td>/i,
+      /<span[^>]*id="[^"]*lblIssueDate[^"]*"[^>]*>([^<]+)<\/span>/i
+    ]);
+    const maturityDateRaw = extract([
+      /(?:Maturity Date)[^<]*<\/[^>]+>\s*<td[^>]*>([\d\/\-\w]+)<\/td>/i,
+      /<span[^>]*id="[^"]*lblMaturity[^"]*"[^>]*>([^<]+)<\/span>/i
+    ]);
+
+    // Normalise coupon type to our standard values
+    function normaliseCouponType(raw) {
+      if (!raw) return 'semi-annually';
+      const r = raw.toLowerCase();
+      if (r.includes('semi') || r.includes('bi-ann') || r.includes('2')) return 'semi-annually';
+      if (r.includes('quarter') || r.includes('4'))                        return 'quarterly';
+      if (r.includes('month') || r.includes('12'))                         return 'monthly';
+      return 'annually';
+    }
+
+    // Parse a date string like "30/06/2023", "30-Jun-2023", "2023-06-30"
+    function parseThaiDate(raw) {
+      if (!raw) return null;
+      const dd_mm_yyyy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (dd_mm_yyyy) return `${dd_mm_yyyy[3]}-${dd_mm_yyyy[2].padStart(2,'0')}-${dd_mm_yyyy[1].padStart(2,'0')}`;
+      const d_mon_yyyy = raw.match(/^(\d{1,2})[\/\- ]([A-Za-z]{3,})[\/\- ](\d{4})$/);
+      if (d_mon_yyyy) {
+        const months = { jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+                         jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12' };
+        const mo = months[d_mon_yyyy[2].substring(0,3).toLowerCase()] || '01';
+        return `${d_mon_yyyy[3]}-${mo}-${d_mon_yyyy[1].padStart(2,'0')}`;
+      }
+      const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (iso) return raw;
+      return null;
+    }
+
+    const couponRate  = couponRateRaw  ? parseFloat(couponRateRaw)  : null;
+    const couponType  = normaliseCouponType(couponTypeRaw);
+    const issuedDate  = parseThaiDate(issuedDateRaw);
+    const maturityDate = parseThaiDate(maturityDateRaw);
+
+    // Need at least the bond name to be useful
+    if (!bondName && !issuer) {
+      Logger.log(`[DataAgent] Bond ${bondCode}: could not parse any fields from ThaiBMA`);
+      return null;
+    }
+
+    const info = {
+      bond_code:     bondCode,
+      bond_name:     bondName,
+      issuer:        issuer,
+      credit_rating: creditRating,
+      coupon_rate:   couponRate,
+      coupon_type:   couponType,
+      issued_date:   issuedDate,
+      maturity_date: maturityDate,
+      scraped_at:    new Date().toISOString()
+    };
+
+    // 4. Cache in bond_master (upsert on primary key bond_code)
+    try {
+      supabaseUpsert('bond_master?on_conflict=bond_code', info);
+      Logger.log(`[DataAgent] Bond ${bondCode} cached in bond_master`);
+    } catch (e) {
+      Logger.log(`[DataAgent] bond_master upsert failed: ${e.message}`);
+    }
+
+    return info;
+  }
+
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
@@ -399,3 +657,11 @@ function testRealtimeAlerts()    {
   Logger.log('[test] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
 }
 function testUpdateSRLevels()    { DataAgent.updateDynamicSRLevels(); }
+function testGoldPrice()         {
+  const result = DataAgent.fetchGoldPrice();
+  Logger.log('[testGoldPrice] result: ' + JSON.stringify(result));
+}
+function testBondScrape()        {
+  const result = DataAgent.scrapeBondInfo('SCB276A');
+  Logger.log('[testBondScrape] result: ' + JSON.stringify(result));
+}
