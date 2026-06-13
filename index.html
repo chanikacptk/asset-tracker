@@ -373,19 +373,34 @@ body {
     <div style="height:12px"></div>
     <div id="more-content">
       <div class="more-row" onclick="navigate('gold')">
-        <span class="more-icon">🥇</span><div><div class="more-label">Gold</div><div class="more-sub">XAU/USD position</div></div><span class="more-arrow">›</span>
+        <span class="more-icon">🥇</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Gold</div></div>
+        <div id="more-val-gold" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
       </div>
       <div class="more-row" onclick="navigate('insurance')">
-        <span class="more-icon">🛡️</span><div><div class="more-label">Insurance</div><div class="more-sub">Policies & surrender value</div></div><span class="more-arrow">›</span>
+        <span class="more-icon">🛡️</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Insurance</div></div>
+        <div id="more-val-insurance" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
       </div>
       <div class="more-row" onclick="navigate('private')">
-        <span class="more-icon">🏢</span><div><div class="more-label">Private Investments</div><div class="more-sub">Manual valuation</div></div><span class="more-arrow">›</span>
+        <span class="more-icon">🏢</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Private Investments</div></div>
+        <div id="more-val-private" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
       </div>
       <div class="more-row" onclick="navigate('mf')">
-        <span class="more-icon">📂</span><div><div class="more-label">Mutual Funds</div><div class="more-sub">RMF, ESG, other Thai funds</div></div><span class="more-arrow">›</span>
+        <span class="more-icon">📂</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Mutual Funds</div></div>
+        <div id="more-val-mf" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
       </div>
       <div class="more-row" onclick="navigate('bonds')">
-        <span class="more-icon">📜</span><div><div class="more-label">Thai Bonds</div><div class="more-sub">Corporate & government bonds</div></div><span class="more-arrow">›</span>
+        <span class="more-icon">📜</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Thai Bonds</div></div>
+        <div id="more-val-bonds" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
       </div>
     </div>
   </div>
@@ -1184,7 +1199,10 @@ html.dark .bond-maturing-card { background:rgba(217,119,6,0.12); }
 .more-icon  { font-size:24px; flex-shrink:0; }
 .more-label { font-size:15px; font-weight:600; }
 .more-sub   { font-size:12px; color:var(--text-muted); margin-top:2px; }
-.more-arrow { margin-left:auto;color:var(--text-muted);font-size:20px;font-weight:300; }
+.more-arrow { color:var(--text-muted);font-size:20px;font-weight:300;flex-shrink:0; }
+.more-val-slot { text-align:right;flex-shrink:0;margin-right:6px; }
+.more-val-num  { font-size:14px;font-weight:600; }
+.more-val-pct  { font-size:11px;color:var(--text-muted);margin-top:1px; }
 
 /* Ticker autocomplete */
 .ticker-suggestions {
@@ -1537,7 +1555,7 @@ function navigate(page) {
 async function loadPage(page) {
   if (page === 'dashboard')    await loadDashboard();
   else if (page === 'us')      await loadUSPortfolio();
-  else if (page === 'more')    { /* static HTML */ }
+  else if (page === 'more')    await loadMore();
   else if (page === 'gold')    await loadGold();
   else if (page === 'mf')      await loadMutualFunds();
   else if (page === 'cash')    await loadCash();
@@ -3443,6 +3461,62 @@ async function deleteCashAccount(id) {
   if (!confirm('Delete this account?')) return;
   await sb.from('cash_accounts').delete().eq('id', id);
   await loadCash();
+}
+
+// ── Asset hub (More page) ─────────────────────────────────────────────────────
+
+async function loadMore() {
+  const uid = state.userId;
+
+  // Fetch all five asset types in parallel
+  const [goldRes, insurRes, privRes, mfRes, bondsRes] = await Promise.all([
+    sb.from('gold_holdings').select('troy_oz').eq('user_id', uid),
+    sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', uid),
+    sb.from('private_investments').select('current_valuation, currency').eq('user_id', uid),
+    sb.from('mutual_fund_holdings').select('fund_code, units').eq('user_id', uid),
+    sb.from('thai_bonds').select('face_value_thb').eq('user_id', uid)
+  ]);
+
+  let goldTHB = 0, insurTHB = 0, privTHB = 0, mfTHB = 0, bondsTHB = 0;
+
+  if (goldRes.data?.length) {
+    const xau = await getLatestPrice('XAU');
+    goldRes.data.forEach(g => goldTHB += (g.troy_oz || 0) * xau * state.usdThb);
+  }
+
+  insurRes.data?.forEach(p => insurTHB += p.surrender_value_thb || 0);
+
+  privRes.data?.forEach(p => {
+    privTHB += p.currency === 'THB'
+      ? (p.current_valuation || 0)
+      : (p.current_valuation || 0) * state.usdThb;
+  });
+
+  if (mfRes.data?.length) {
+    for (const f of mfRes.data) {
+      const nav = await getLatestPrice(f.fund_code);
+      mfTHB += (f.units || 0) * nav;
+    }
+  }
+
+  bondsRes.data?.forEach(b => bondsTHB += b.face_value_thb || 0);
+
+  const total = goldTHB + insurTHB + privTHB + mfTHB + bondsTHB;
+  const pctStr = v => total > 0 ? ((v / total) * 100).toFixed(1) + '%' : '0%';
+
+  const _set = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const clr = val > 0 ? 'var(--text)' : 'var(--text-muted)';
+    el.innerHTML = `<div class="more-val-num" style="color:${clr}">${fmtTHB(val)}</div>`
+                 + `<div class="more-val-pct">${pctStr(val)}</div>`;
+  };
+
+  _set('more-val-gold',      goldTHB);
+  _set('more-val-insurance', insurTHB);
+  _set('more-val-private',   privTHB);
+  _set('more-val-mf',        mfTHB);
+  _set('more-val-bonds',     bondsTHB);
 }
 
 // ── Insurance ─────────────────────────────────────────────────────────────────
