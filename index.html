@@ -3771,7 +3771,7 @@ async function saveBond() {
   errEl.textContent = '';
 
   const bondCode = document.getElementById('bond-code').value.trim().toUpperCase() || null;
-  const bondName = document.getElementById('bond-name').value.trim() || null;
+  const bondName = document.getElementById('bond-name').value.trim() || bondCode || '(unnamed)';
   const issuer   = document.getElementById('bond-issuer').value.trim() || null;
   const creditRating = document.getElementById('bond-rating').value.trim() || null;
   const issuedDate   = document.getElementById('bond-issued-date').value || null;
