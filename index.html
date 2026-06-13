@@ -3675,13 +3675,14 @@ function _renderBondSummary(bonds) {
     ? withRate.reduce((s, b) => s + b.coupon_rate, 0) / withRate.length
     : 0;
 
-  let earliestCouponDate = null, earliestCouponAmt = 0;
+  let earliestCouponDate = null, earliestCouponAmt = 0, earliestCouponBond = null;
   bonds.forEach(b => {
     const nc = _nextCouponDate(b.issued_date, b.maturity_date, b.coupon_type || 'semi-annually');
     if (!nc) return;
     if (!earliestCouponDate || nc < earliestCouponDate) {
       earliestCouponDate = nc;
       earliestCouponAmt  = _couponPerPayment(b.face_value_thb, b.coupon_rate, b.coupon_type || 'semi-annually');
+      earliestCouponBond = b.bond_code || b.bond_name || null;
     }
   });
 
@@ -3703,6 +3704,7 @@ function _renderBondSummary(bonds) {
         <div class="bond-kpi-lbl">Next Coupon</div>
         <div class="bond-kpi-val" style="font-size:20px;color:${couponClr}">${couponVal}</div>
         <div class="bond-kpi-sub">${couponDate}</div>
+        ${earliestCouponBond ? `<div style="margin-top:4px;font-size:11px;font-weight:600;color:var(--text-muted)">${earliestCouponBond}</div>` : ''}
       </div>
       <div class="bond-kpi-card">
         <div class="bond-kpi-lbl">Avg. Coupon</div>
