@@ -381,6 +381,14 @@ function testMonthlyTrigger() {
   onMonthlyTrigger();
 }
 
+function testFetchThaiMutualFunds() {
+  DataAgent.fetchThaiMutualFunds();
+}
+
+function testSECApi() {
+  DataAgent.testSECApi();
+}
+
 function testRealtimeAlerts() {
   const alerts = DataAgent.checkRealtimeAlerts();
   Logger.log('[testRealtimeAlerts] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
