@@ -467,22 +467,11 @@ body {
       <button onclick="closeMFModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
 
-    <!-- Fund Code + Search -->
-    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Code</div>
-    <div style="display:flex;gap:8px;margin-bottom:6px">
-      <input id="mf-fund-code" type="text" placeholder="e.g. KKP-CP" oninput="this.value=this.value.toUpperCase()"
-        style="flex:1;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:'JetBrains Mono',monospace;letter-spacing:1px">
-      <button onclick="searchMFFund()" id="mf-search-btn"
-        style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">
-        Search
-      </button>
-    </div>
-    <div id="mf-search-status" style="font-size:12px;min-height:16px;margin-bottom:12px"></div>
-
-    <!-- Fund Name -->
-    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Name <span style="font-weight:400;text-transform:none">(auto-filled or enter manually)</span></div>
-    <input id="mf-fund-name" type="text" placeholder="Full fund name"
-      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:16px">
+    <!-- Fund Name (required — fund code matched automatically in background) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Name</div>
+    <input id="mf-fund-name" type="text" placeholder="e.g. KKP CorePath Balanced"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:6px">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Fund code &amp; daily NAV will be linked automatically after saving</div>
 
     <!-- Category -->
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Category</div>
@@ -570,6 +559,40 @@ body {
       style="display:none;width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
       Delete this holding
     </button>
+  </div>
+
+  <!-- MF LINK MODAL (tap orange badge to link NAV) -->
+  <div id="mf-link-overlay" onclick="closeMFLinkModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:302;backdrop-filter:blur(3px)"></div>
+  <div id="mf-link-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:303;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(28px + var(--safe-bottom))">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="font-size:16px;font-weight:700">Link Daily NAV</div>
+      <button onclick="closeMFLinkModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div id="mf-link-fname" style="font-size:13px;color:var(--text-muted);margin-bottom:16px"></div>
+
+    <!-- Auto-match -->
+    <button id="mf-link-auto-btn" onclick="autoMatchMFFund()"
+      class="btn btn-primary" style="margin-bottom:12px">
+      Search SEC database
+    </button>
+    <div id="mf-link-status" style="font-size:13px;min-height:18px;margin-bottom:16px"></div>
+
+    <!-- Divider -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">or enter fund code manually</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <input id="mf-link-code-input" type="text" placeholder="e.g. KKP-CP"
+        oninput="this.value=this.value.toUpperCase()"
+        style="flex:1;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'JetBrains Mono',monospace;letter-spacing:1px">
+      <button onclick="manualLinkMFFund()"
+        style="padding:0 18px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
+        Link
+      </button>
+    </div>
   </div>
 
   <!-- CASH -->
@@ -1399,6 +1422,21 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   cursor:pointer;transition:all 0.15s;font-family:inherit;
 }
 .mf-cat-pill.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+
+/* NAV link status badges on fund cards */
+.mf-nav-badge {
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:600;letter-spacing:.2px;
+  padding:2px 8px;border-radius:10px;
+}
+.mf-nav-badge.linked {
+  background:rgba(22,163,74,.1);color:var(--success);border:1px solid rgba(22,163,74,.2);
+}
+.mf-nav-badge.unlinked {
+  background:rgba(217,119,6,.1);color:var(--warning);border:1px solid rgba(217,119,6,.25);
+  cursor:pointer;
+}
+.mf-nav-badge.unlinked:hover { background:rgba(217,119,6,.18); }
 
 /* More page rows */
 .more-row {
@@ -3125,12 +3163,14 @@ async function deleteGold(id) {
 
 // ── Mutual Funds ──────────────────────────────────────────────────────────────
 
-let _mfListData    = [];   // computed holdings array for rendering
-let _mfEditId      = null; // UUID being edited; null = add mode
+let _mfListData    = [];
+let _mfEditId      = null;
 let _mfSortKey     = 'value_desc';
-let _mfExpandedId  = null; // currently expanded card id
-let _mfCategory    = 'Onshore'; // selected category in modal
-let _mfInputMethod = 'baht';    // selected input method in modal
+let _mfExpandedId  = null;
+let _mfCategory    = 'Onshore';
+let _mfInputMethod = 'baht';
+let _mfLinkId      = null; // holding being linked via link modal
+let _mfLinkName    = '';
 
 async function loadMutualFunds() {
   const el = document.getElementById('mf-content');
@@ -3233,43 +3273,60 @@ function _renderMFList() {
   if      (_mfSortKey === 'value_desc') sorted.sort((a, b) => b.currentValue - a.currentValue);
   else if (_mfSortKey === 'value_asc')  sorted.sort((a, b) => a.currentValue - b.currentValue);
   else if (_mfSortKey === 'pl_desc')    sorted.sort((a, b) => b.plPct - a.plPct);
-  else if (_mfSortKey === 'name_asc')   sorted.sort((a, b) => (a.fund_code || '').localeCompare(b.fund_code || ''));
+  else if (_mfSortKey === 'name_asc')   sorted.sort((a, b) => (a.fund_name || '').localeCompare(b.fund_name || ''));
 
   el.innerHTML = sorted.map(h => {
     const isExpanded = h.id === _mfExpandedId;
-    const plPos  = h.plPct >= 0;
-    const arrow  = plPos ? '↗' : '↘';
-    const plClr  = plPos ? 'var(--success)' : 'var(--danger)';
-    const plPctStr = (plPos ? '+' : '') + Math.abs(h.plPct).toFixed(2) + '%';
-    const plThbStr = (plPos ? '+' : '') + h.plThb.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const valStr = h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const linked     = !!h.fund_code;
+    const plPos      = h.plPct >= 0;
+    const arrow      = plPos ? '↗' : '↘';
+    const plClr      = plPos ? 'var(--success)' : 'var(--danger)';
+    const plPctStr   = (plPos ? '+' : '') + Math.abs(h.plPct).toFixed(2) + '%';
+    const plThbStr   = (plPos ? '+' : '') + h.plThb.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const valStr     = h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const dayBadge = h.dayChange !== null
+    // Category badge
+    const catBadge = `<span class="mf-cat-badge" style="${_mfCatStyle(h.category)}">${h.category}</span>`;
+
+    // NAV status badge
+    const navBadge = linked
+      ? `<span class="mf-nav-badge linked">🟢 NAV auto-updated</span>`
+      : `<span class="mf-nav-badge unlinked" onclick="event.stopPropagation();openMFLinkModal('${h.id}','${(h.fund_name||'').replace(/'/g,"\\'")}')">🟡 Manual NAV · tap to link</span>`;
+
+    // 1-day change (only for linked funds that have history)
+    const dayBadge = (linked && h.dayChange !== null)
       ? `<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;background:${h.dayChange >= 0 ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)'};color:${h.dayChange >= 0 ? 'var(--success)' : 'var(--danger)'};border:1px solid ${h.dayChange >= 0 ? 'rgba(22,163,74,0.25)' : 'rgba(220,38,38,0.25)'}">1D ${h.dayChange >= 0 ? '▲' : '▼'} ${Math.abs(h.dayChange).toFixed(2)}%</span>`
       : '';
 
-    const catStyle = _mfCatStyle(h.category);
-    const badges   = `<span class="mf-cat-badge" style="${catStyle}">${h.category}</span>${dayBadge}`;
+    // Profile link (only if code is known)
+    const profileLink = linked
+      ? `<a href="https://thaifundstoday.com/funds/${encodeURIComponent(h.fund_code)}" target="_blank" rel="noopener" class="mf-profile-btn">View fund profile →</a>`
+      : `<button class="mf-profile-btn" onclick="event.stopPropagation();openMFLinkModal('${h.id}','${(h.fund_name||'').replace(/'/g,"\\'")}')">Link fund code →</button>`;
 
     const expandDetail = `
       <div class="mf-card-detail" id="mf-detail-${h.id}" style="display:${isExpanded ? 'block' : 'none'}">
-        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost value</span><span class="mf-detail-val">${h.costValue.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost value</span><span class="mf-detail-val">${h.costValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} THB</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Units</span><span class="mf-detail-val">${Number(h.units).toFixed(4)} Unit</span></div>
-        <div class="mf-detail-row"><span class="mf-detail-lbl">Market price</span><span class="mf-detail-val">${h.currentNav > 0 ? h.currentNav.toFixed(4) : '—'} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Market price / NAV</span><span class="mf-detail-val">${h.currentNav > 0 ? h.currentNav.toFixed(4) : '—'} THB</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Cost/Unit</span><span class="mf-detail-val">${Number(h.buy_price_thb) > 0 ? Number(h.buy_price_thb).toFixed(4) : '—'} THB</span></div>
+        ${h.fund_code ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Fund code</span><span class="mf-detail-val" style="font-family:'JetBrains Mono',monospace;font-size:12px">${h.fund_code}</span></div>` : ''}
         <div class="mf-detail-actions">
-          <a href="https://thaifundstoday.com/funds/${encodeURIComponent(h.fund_code)}" target="_blank" rel="noopener" class="mf-profile-btn">View fund profile →</a>
+          ${profileLink}
           <button onclick="event.stopPropagation();openEditMF('${h.id}')" class="pt-act-btn" style="margin-left:8px">✏️</button>
         </div>
       </div>`;
+
+    // Primary display: fund_name bold, fund_code as subtitle if available
+    const displayName = h.fund_name || h.fund_code || '(unnamed)';
+    const displaySub  = (h.fund_name && h.fund_code) ? `<div class="mf-card-name" style="font-family:'JetBrains Mono',monospace;font-size:11px">${h.fund_code}</div>` : '';
 
     return `
     <div class="mf-fund-card">
       <div class="mf-card-head" onclick="toggleMFExpand('${h.id}')">
         <div class="mf-card-left">
-          <div class="mf-card-badges">${badges}</div>
-          <div class="mf-card-code">${h.fund_code}</div>
-          ${h.fund_name ? `<div class="mf-card-name">${h.fund_name}</div>` : ''}
+          <div class="mf-card-badges">${catBadge}${navBadge}${dayBadge}</div>
+          <div class="mf-card-code" style="font-size:15px">${displayName}</div>
+          ${displaySub}
         </div>
         <div class="mf-card-right">
           <span class="mf-card-chevron${isExpanded ? ' open' : ''}">∨</span>
@@ -3306,10 +3363,9 @@ function _mfCatStyle(cat) {
 // ── MF CRUD ────────────────────────────────────────────────────────────────────
 
 function _mfModalReset() {
-  ['mf-fund-code','mf-fund-name','mf-cost-per-unit','mf-purchase-date',
+  ['mf-fund-name','mf-cost-per-unit','mf-purchase-date',
    'mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  document.getElementById('mf-search-status').textContent = '';
   document.getElementById('mf-modal-error').textContent = '';
   document.getElementById('mf-calc-result').textContent = '—';
   document.getElementById('mf-calc-result').style.color = 'var(--text-muted)';
@@ -3342,11 +3398,10 @@ async function openEditMF(id) {
 
   document.getElementById('mf-modal-title').textContent    = 'Edit Fund';
   document.getElementById('mf-modal-save-btn').textContent = 'Save Changes';
-  document.getElementById('mf-fund-code').value    = h.fund_code  || '';
-  document.getElementById('mf-fund-name').value    = h.fund_name  || '';
-  document.getElementById('mf-purchase-date').value = h.buy_date  || '';
-  document.getElementById('mf-notes').value         = h.notes     || '';
-  document.getElementById('mf-cost-per-unit').value =
+  document.getElementById('mf-fund-name').value     = h.fund_name  || '';
+  document.getElementById('mf-purchase-date').value = h.buy_date   || '';
+  document.getElementById('mf-notes').value          = h.notes     || '';
+  document.getElementById('mf-cost-per-unit').value  =
     Number(h.buy_price_thb) > 0 ? Number(h.buy_price_thb).toLocaleString('en-US') : '';
 
   _mfCategory = h.category || 'Onshore';
@@ -3423,13 +3478,12 @@ async function saveMF() {
   const errEl = document.getElementById('mf-modal-error');
   errEl.textContent = '';
 
-  const fundCode    = document.getElementById('mf-fund-code').value.trim().toUpperCase();
-  const fundName    = document.getElementById('mf-fund-name').value.trim() || null;
+  const fundName    = document.getElementById('mf-fund-name').value.trim();
   const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
   const purchaseDate = document.getElementById('mf-purchase-date').value || null;
   const notes       = document.getElementById('mf-notes').value.trim() || null;
 
-  if (!fundCode)           { errEl.textContent = 'Fund code is required.'; return; }
+  if (!fundName)           { errEl.textContent = 'Fund name is required.'; return; }
   if (!_mfCategory)        { errEl.textContent = 'Please select a category.'; return; }
   if (!(costPerUnit > 0))  { errEl.textContent = 'Cost/Unit must be greater than 0.'; return; }
 
@@ -3448,24 +3502,39 @@ async function saveMF() {
 
   if (!(units > 0)) { errEl.textContent = 'Units must be greater than 0.'; return; }
 
+  // fund_code intentionally omitted — will be matched in background
   const payload = {
-    user_id: state.userId,
-    fund_code:    fundCode,
-    fund_name:    fundName,
-    category:     _mfCategory,
+    user_id:       state.userId,
+    fund_name:     fundName,
+    category:      _mfCategory,
     units,
     buy_price_thb: costPerUnit,
     buy_date:      purchaseDate,
     notes
   };
 
-  const { error } = _mfEditId
-    ? await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId)
-    : await sb.from('mutual_fund_holdings').insert(payload);
+  const { data: saved, error } = _mfEditId
+    ? await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId).select('id').single()
+    : await sb.from('mutual_fund_holdings').insert(payload).select('id').single();
 
   if (error) { errEl.textContent = error.message; return; }
   closeMFModal();
   await loadMutualFunds();
+
+  // Background SEC name match (new adds only — edits keep existing fund_code)
+  if (!_mfEditId && saved?.id) {
+    _triggerMFNameMatch(saved.id, fundName);
+  }
+}
+
+async function _triggerMFNameMatch(holdingId, fundName) {
+  try {
+    const result = await callGAS('matchMFFund', { fundName, holdingId });
+    if (result.ok && result.match?.fundCode) {
+      // Matched — refresh cards to show green badge + live NAV
+      await loadMutualFunds();
+    }
+  } catch (_) { /* silent — orange badge stays until user links manually */ }
 }
 
 async function deleteMF(id) {
@@ -3482,33 +3551,70 @@ async function _deleteMFFromModal() {
   await loadMutualFunds();
 }
 
-async function searchMFFund() {
-  const fundCode = document.getElementById('mf-fund-code').value.trim().toUpperCase();
-  if (!fundCode) { document.getElementById('mf-search-status').textContent = 'Enter a fund code first.'; return; }
+// ── MF Link Modal (name → fund code via SEC API) ──────────────────────────────
 
-  const statusEl = document.getElementById('mf-search-status');
-  const btn      = document.getElementById('mf-search-btn');
+function openMFLinkModal(holdingId, fundName) {
+  _mfLinkId   = holdingId;
+  _mfLinkName = fundName;
+  document.getElementById('mf-link-fname').textContent  = fundName || '—';
+  document.getElementById('mf-link-status').textContent = '';
+  document.getElementById('mf-link-status').style.color = 'var(--text-muted)';
+  document.getElementById('mf-link-code-input').value   = '';
+  document.getElementById('mf-link-auto-btn').disabled  = false;
+  document.getElementById('mf-link-overlay').style.display = 'block';
+  document.getElementById('mf-link-modal').style.display  = 'block';
+}
+
+function closeMFLinkModal() {
+  document.getElementById('mf-link-overlay').style.display = 'none';
+  document.getElementById('mf-link-modal').style.display  = 'none';
+  _mfLinkId = null; _mfLinkName = '';
+}
+
+async function autoMatchMFFund() {
+  if (!_mfLinkId || !_mfLinkName) return;
+  const statusEl = document.getElementById('mf-link-status');
+  const btn      = document.getElementById('mf-link-auto-btn');
+
   statusEl.textContent = 'Searching SEC database…';
   statusEl.style.color = 'var(--text-muted)';
   btn.disabled = true;
 
   try {
-    const result = await callGAS('searchMFFund', { fundCode });
-    if (result.ok && result.fundInfo) {
-      const info = result.fundInfo;
-      if (info.fundName) document.getElementById('mf-fund-name').value = info.fundName;
-      statusEl.style.color = 'var(--success)';
-      statusEl.textContent = '✓ Found' + (info.amc ? ' · ' + info.amc : '');
+    const result = await callGAS('matchMFFund', { fundName: _mfLinkName, holdingId: _mfLinkId });
+    if (result.ok && result.match?.fundCode) {
+      statusEl.style.color  = 'var(--success)';
+      statusEl.textContent  = '✓ Linked: ' + result.match.fundCode
+        + (result.match.amc ? ' · ' + result.match.amc : '');
+      setTimeout(async () => { closeMFLinkModal(); await loadMutualFunds(); }, 1200);
     } else {
       statusEl.style.color = 'var(--warning)';
-      statusEl.textContent = (result.error || 'Not found') + ' — enter details manually';
+      statusEl.textContent = 'No match found — enter fund code manually below';
+      btn.disabled = false;
     }
   } catch (_) {
-    statusEl.style.color = 'var(--text-muted)';
-    statusEl.textContent = 'Search unavailable — enter details manually';
-  } finally {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = 'Search failed — enter fund code manually';
     btn.disabled = false;
   }
+}
+
+async function manualLinkMFFund() {
+  const code = document.getElementById('mf-link-code-input').value.trim().toUpperCase();
+  if (!code || !_mfLinkId) return;
+  const statusEl = document.getElementById('mf-link-status');
+  statusEl.textContent = 'Linking…';
+  statusEl.style.color = 'var(--text-muted)';
+
+  const { error } = await sb.from('mutual_fund_holdings')
+    .update({ fund_code: code }).eq('id', _mfLinkId);
+
+  if (error) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = error.message; return; }
+  statusEl.style.color = 'var(--success)';
+  statusEl.textContent = '✓ Linked — fetching NAV…';
+  // Ask GAS to fetch NAV for this code immediately
+  callGAS('fetchThaiMutualFunds').catch(() => {});
+  setTimeout(async () => { closeMFLinkModal(); await loadMutualFunds(); }, 900);
 }
 
 // ── Cash ──────────────────────────────────────────────────────────────────────

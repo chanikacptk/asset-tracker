@@ -84,6 +84,22 @@ function doGet(e) {
       const info = DataAgent.searchSECFund(fundCode);
       if (!info) throw new Error('Fund not found in SEC database — enter details manually');
       result.fundInfo = info;
+    } else if (action === 'matchMFFund') {
+      const fundName  = (e?.parameter?.fundName  || '').trim();
+      const holdingId = (e?.parameter?.holdingId || '').trim();
+      if (!fundName) throw new Error('fundName required');
+      const match = DataAgent.matchSECFundByName(fundName);
+      result.match = match || null;
+      if (match?.fundCode && holdingId) {
+        // Update fund_code directly in Supabase (service_role bypasses RLS)
+        supabaseRequest('PATCH',
+          'mutual_fund_holdings?id=eq.' + holdingId,
+          { fund_code: match.fundCode }
+        );
+        // Fetch and persist NAV immediately so card shows live value
+        DataAgent.fetchNavForSingleFund(match.fundCode);
+        result.updated = true;
+      }
     } else if (action === 'fetchThaiMutualFunds') {
       DataAgent.fetchThaiMutualFunds();
     } else if (action === 'ping') {
@@ -387,6 +403,12 @@ function testFetchThaiMutualFunds() {
 
 function testSECApi() {
   DataAgent.testSECApi();
+}
+
+function testMatchMFFund() {
+  // Edit the fund name below to test name→code matching
+  const match = DataAgent.matchSECFundByName('KKP CorePath Balanced');
+  Logger.log('[testMatchMFFund] result: ' + JSON.stringify(match));
 }
 
 function testRealtimeAlerts() {

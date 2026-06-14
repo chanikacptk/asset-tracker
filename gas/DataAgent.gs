@@ -476,6 +476,112 @@ const DataAgent = (() => {
   }
 
   /**
+   * Search SEC database by fund name (Thai or English).
+   * Called from Code.gs action=matchMFFund after a user saves a new holding.
+   * Returns { fundCode, fundName, fundNameTh, amc, projId } or null.
+   */
+  function matchSECFundByName(fundName) {
+    var apiKey = Config.SEC_API_KEY();
+    if (!apiKey) return null;
+
+    try {
+      var encoded = encodeURIComponent(fundName);
+
+      // Try the dedicated funds search endpoint first
+      var raw = _secGet('/v2/fund/general-info/funds?fund_name=' + encoded, apiKey);
+
+      // Fallback: profiles endpoint with English name query
+      if (!raw || _secIsEmpty(raw)) {
+        raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
+      }
+      // Fallback: profiles with Thai name
+      if (!raw || _secIsEmpty(raw)) {
+        raw = _secGet('/v2/fund/general-info/profiles?proj_name_th=' + encoded, apiKey);
+      }
+      // Fallback: profiles with abbreviation
+      if (!raw || _secIsEmpty(raw)) {
+        raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
+      }
+
+      var items = Array.isArray(raw)          ? raw
+                : (raw && raw.data)           ? raw.data
+                : (raw && raw.proj_id)        ? [raw]
+                : [];
+
+      if (!items.length) return null;
+
+      // Pick best match: prefer where name contains search term
+      var q = fundName.toLowerCase();
+      var best = items.find(function(item) {
+        var en   = (item.proj_name_en   || item.projNameEng   || '').toLowerCase();
+        var th   = (item.proj_name_th   || item.projNameTh    || '').toLowerCase();
+        var abbr = (item.proj_abbr_name || item.projAbbrName  || '').toLowerCase();
+        return en.includes(q) || th.includes(q) || abbr.includes(q)
+               || q.includes(en.slice(0, 10));
+      }) || items[0];
+
+      var projId = String(best.proj_id || best.projId || '');
+      var code   = best.proj_abbr_name || best.projAbbrName || null;
+
+      // Cache in mutual_fund_master
+      if (code) {
+        supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
+          fund_code:    code,
+          fund_name:    best.proj_name_en || best.projNameEng || null,
+          fund_name_th: best.proj_name_th || best.projNameTh  || null,
+          amc:          best.amc_name_th  || best.amcNameTh   ||
+                        best.comp_name    || best.compName    || null,
+          sec_proj_id:  projId || null,
+          scraped_at:   new Date().toISOString()
+        });
+      }
+
+      return {
+        fundCode:   code,
+        fundName:   best.proj_name_en || best.projNameEng || null,
+        fundNameTh: best.proj_name_th || best.projNameTh  || null,
+        amc:        best.amc_name_th  || best.amcNameTh   ||
+                    best.comp_name    || best.compName    || null,
+        projId:     projId || null
+      };
+    } catch (e) {
+      Logger.log('[DataAgent] matchSECFundByName failed: ' + e.message);
+      return null;
+    }
+  }
+
+  /** True when a raw API response is empty (no results). */
+  function _secIsEmpty(raw) {
+    if (!raw) return true;
+    if (Array.isArray(raw))      return raw.length === 0;
+    if (raw.data)                return raw.data.length === 0;
+    return false;
+  }
+
+  /**
+   * Fetch and persist NAV for a single fund code immediately.
+   * Called after a successful name→code match so the card shows live NAV
+   * without waiting for the next daily 8 AM trigger.
+   */
+  function fetchNavForSingleFund(fundCode) {
+    try {
+      var today  = _dateStr();
+      var result = _fetchSECNav(fundCode);
+      if (!result || !(result.nav > 0)) return;
+
+      _upsertMarketData(fundCode, 'mutual_fund', result.nav, 'THB');
+      supabaseUpsert('mutual_fund_nav?on_conflict=fund_code,nav_date', {
+        fund_code: fundCode,
+        nav_date:  result.date || today,
+        nav_price: result.nav
+      });
+      Logger.log('[DataAgent] fetchNavForSingleFund ' + fundCode + ': ฿' + result.nav);
+    } catch (e) {
+      Logger.log('[DataAgent] fetchNavForSingleFund error for ' + fundCode + ': ' + e.message);
+    }
+  }
+
+  /**
    * Standalone test — run from GAS IDE to verify SEC API connectivity.
    * Usage: testSECApi()  → logs profile + NAV for a sample fund.
    */
@@ -881,7 +987,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, testSECApi };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
