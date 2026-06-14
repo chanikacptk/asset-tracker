@@ -225,39 +225,211 @@ const DataAgent = (() => {
     });
   }
 
-  // ── Thai Mutual Fund NAV (AIMC scrape) ──────────────────────────────────────
+  // ── Thai Mutual Fund NAV (SEC Open Data API + fallback scrape) ───────────────
+
+  /** Public entry point — called by fetchAll() and the daily 8 AM trigger */
+  function fetchThaiMutualFunds() {
+    Logger.log('[DataAgent] fetchThaiMutualFunds started');
+    _fetchMutualFundNAV();
+    Logger.log('[DataAgent] fetchThaiMutualFunds complete');
+  }
 
   function _fetchMutualFundNAV() {
-    const funds = supabaseRequest('GET', 'mutual_fund_holdings?select=fund_code');
+    var funds = supabaseRequest('GET', 'mutual_fund_holdings?select=fund_code');
     if (!funds || funds.length === 0) return;
 
-    funds.forEach(f => {
-      const nav = _fetchAIMCNav(f.fund_code);
-      if (nav !== null) {
-        _upsertMarketData(f.fund_code, 'mutual_fund', nav, 'THB');
-        Logger.log(`[DataAgent] ${f.fund_code} NAV: ฿${nav}`);
+    var today = _dateStr();
+    var seen  = {};
+    funds.forEach(function(f) { seen[f.fund_code] = true; });
+    var uniqueCodes = Object.keys(seen);
+
+    uniqueCodes.forEach(function(code) {
+      try {
+        var result = _fetchSECNav(code);
+        if (!result || !(result.nav > 0)) return;
+
+        var nav     = result.nav;
+        var navDate = result.date || today;
+
+        // Keep market_data updated for backwards-compat (dashboard, loadMore, calcUserData)
+        _upsertMarketData(code, 'mutual_fund', nav, 'THB');
+
+        // Store in mutual_fund_nav for NAV history + 1-day change calculation
+        supabaseUpsert('mutual_fund_nav?on_conflict=fund_code,nav_date', {
+          fund_code: code,
+          nav_date:  navDate,
+          nav_price: nav
+        });
+
+        Logger.log('[DataAgent] ' + code + ' NAV: ฿' + nav + ' (' + navDate + ')');
+      } catch (e) {
+        Logger.log('[DataAgent] NAV fetch error for ' + code + ': ' + e.message);
       }
     });
   }
 
-  function _fetchAIMCNav(fundCode) {
+  /**
+   * Try SEC Open Data API first, fall back to thaifundstoday.com scrape.
+   * Returns { nav: Number, date: 'YYYY-MM-DD' } or null.
+   */
+  function _fetchSECNav(fundCode) {
+    var apiKey = Config.SEC_API_KEY();
+
+    if (apiKey) {
+      // Look up cached projId from mutual_fund_master
+      var master = supabaseRequest('GET',
+        'mutual_fund_master?fund_code=eq.' + encodeURIComponent(fundCode) +
+        '&select=sec_proj_id&limit=1');
+      var projId = (master && master[0]) ? master[0].sec_proj_id : null;
+
+      // No projId cached — fetch fund info from SEC FundFactsheet API
+      if (!projId) {
+        projId = _fetchSECProjId(fundCode, apiKey);
+      }
+
+      if (projId) {
+        var result = _fetchSECDailyNav(projId, apiKey);
+        if (result) return result;
+      }
+    }
+
+    // Fallback: scrape thaifundstoday.com
+    return _fetchThaiFundsTodayNav(fundCode);
+  }
+
+  /**
+   * Fetch fund's projId from SEC FundFactsheet API and cache in mutual_fund_master.
+   * Returns projId string or null.
+   */
+  function _fetchSECProjId(fundCode, apiKey) {
     try {
-      // AIMC public NAV search endpoint
-      const url = `https://www.aimc.or.th/en/nav/?fund=${encodeURIComponent(fundCode)}`;
-      const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      var url  = 'https://api.sec.or.th/FundFactsheet/fund/' + encodeURIComponent(fundCode);
+      var resp = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
+      });
       if (resp.getResponseCode() !== 200) return null;
 
-      const html = resp.getContentText();
-      // Parse NAV value from HTML table — look for the fund code row
-      // Pattern: fund code followed by NAV number in table cell
-      const pattern = new RegExp(fundCode + '[^<]*<[^>]+>[^<]*<[^>]+>([\\d,]+\\.\\d+)');
-      const match = html.match(pattern);
+      var data = JSON.parse(resp.getContentText());
+      var fund = Array.isArray(data) ? data[0] : data;
+      if (!fund || !fund.projId) return null;
+
+      var projId = String(fund.projId);
+
+      // Cache metadata in mutual_fund_master
+      supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
+        fund_code:    fund.projAbbrName || fundCode,
+        fund_name:    fund.projNameEng  || null,
+        fund_name_th: fund.projNameTh   || null,
+        amc:          fund.thaiName     || fund.compName || null,
+        sec_proj_id:  projId,
+        scraped_at:   new Date().toISOString()
+      });
+
+      return projId;
+    } catch (e) {
+      Logger.log('[DataAgent] SEC projId lookup failed for ' + fundCode + ': ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch latest daily NAV from SEC FundDailyInfo API.
+   * Returns { nav, date } or null.
+   */
+  function _fetchSECDailyNav(projId, apiKey) {
+    try {
+      var url  = 'https://api.sec.or.th/FundDailyInfo/' + projId + '/dailynav';
+      var resp = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
+      });
+      if (resp.getResponseCode() !== 200) return null;
+
+      var data = JSON.parse(resp.getContentText());
+      if (!data || data.length === 0) return null;
+
+      var entry = data[0]; // API returns most-recent first
+      var nav = parseFloat(entry.nav || entry.navValue || entry.NAV || 0);
+      if (!(nav > 0)) return null;
+
+      return {
+        nav:  nav,
+        date: entry.navDate || entry.nav_date || _dateStr()
+      };
+    } catch (e) {
+      Logger.log('[DataAgent] SEC daily NAV failed for projId ' + projId + ': ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fallback: scrape NAV from thaifundstoday.com.
+   * Returns { nav, date } or null.
+   */
+  function _fetchThaiFundsTodayNav(fundCode) {
+    try {
+      var url  = 'https://thaifundstoday.com/funds/' + encodeURIComponent(fundCode);
+      var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      if (resp.getResponseCode() !== 200) return null;
+
+      var html  = resp.getContentText();
+      // Look for a 4-decimal NAV value near a known pattern
+      var match = html.match(/nav[^<"]{0,80}?([\d]{1,6}\.[\d]{4})/i);
+      if (!match) match = html.match(/>[\s]*([\d]{1,6}\.[\d]{4})[\s]*<\/td>/);
       if (match) {
-        return parseFloat(match[1].replace(/,/g, ''));
+        var nav = parseFloat(match[1]);
+        if (nav > 0) return { nav: nav, date: _dateStr() };
       }
       return null;
     } catch (e) {
-      Logger.log(`[DataAgent] AIMC fetch failed for ${fundCode}: ${e.message}`);
+      Logger.log('[DataAgent] ThaiFundsToday scrape failed for ' + fundCode + ': ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Called from Code.gs via action=searchMFFund.
+   * Queries SEC FundFactsheet API and caches result in mutual_fund_master.
+   */
+  function searchSECFund(fundCode) {
+    var apiKey = Config.SEC_API_KEY();
+    if (!apiKey) return null;
+
+    try {
+      var url  = 'https://api.sec.or.th/FundFactsheet/fund/' + encodeURIComponent(fundCode);
+      var resp = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
+      });
+      if (resp.getResponseCode() !== 200) return null;
+
+      var data = JSON.parse(resp.getContentText());
+      var fund = Array.isArray(data) ? data[0] : data;
+      if (!fund) return null;
+
+      var projId = fund.projId ? String(fund.projId) : null;
+
+      if (projId) {
+        supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
+          fund_code:    fund.projAbbrName || fundCode,
+          fund_name:    fund.projNameEng  || null,
+          fund_name_th: fund.projNameTh   || null,
+          amc:          fund.thaiName     || fund.compName || null,
+          sec_proj_id:  projId,
+          scraped_at:   new Date().toISOString()
+        });
+      }
+
+      return {
+        fundCode:   fund.projAbbrName || fundCode,
+        fundName:   fund.projNameEng  || null,
+        fundNameTh: fund.projNameTh   || null,
+        amc:        fund.thaiName     || fund.compName || null,
+        projId:     projId
+      };
+    } catch (e) {
+      Logger.log('[DataAgent] searchSECFund failed: ' + e.message);
       return null;
     }
   }
@@ -645,7 +817,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────

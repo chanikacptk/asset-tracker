@@ -78,6 +78,14 @@ function doGet(e) {
       const info = DataAgent.scrapeBondInfo(bondCode);
       if (!info) throw new Error('Bond not found or scrape failed — use manual input');
       result.bondInfo = info;
+    } else if (action === 'searchMFFund') {
+      const fundCode = (e?.parameter?.fundCode || '').toUpperCase().trim();
+      if (!fundCode) throw new Error('fundCode required');
+      const info = DataAgent.searchSECFund(fundCode);
+      if (!info) throw new Error('Fund not found in SEC database — enter details manually');
+      result.fundInfo = info;
+    } else if (action === 'fetchThaiMutualFunds') {
+      DataAgent.fetchThaiMutualFunds();
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {

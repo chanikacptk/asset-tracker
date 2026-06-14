@@ -19,6 +19,7 @@ const Config = (() => {
     CLAUDE_API_KEY:       () => props.getProperty('CLAUDE_API_KEY'),
     TELEGRAM_BOT_TOKEN:   () => props.getProperty('TELEGRAM_BOT_TOKEN'),
     NEWSAPI_KEY:          () => props.getProperty('NEWSAPI_KEY'),
+    SEC_API_KEY:          () => props.getProperty('SEC_API_KEY'),
 
     /** Supabase REST headers for service-role requests */
     supabaseHeaders() {

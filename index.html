@@ -433,15 +433,143 @@ body {
 
   <!-- MUTUAL FUNDS -->
   <div id="page-mf" class="page">
-    <div class="top-bar"><div class="page-title">Mutual Funds</div></div>
+    <div class="top-bar">
+      <div class="page-title">Mutual Funds</div>
+      <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+    </div>
     <div style="height:12px"></div>
-    <div class="tabs">
-      <button class="tab-btn active" onclick="setMFCategory('all', this)">All</button>
-      <button class="tab-btn" onclick="setMFCategory('RMF', this)">RMF</button>
-      <button class="tab-btn" onclick="setMFCategory('ESG', this)">ESG</button>
-      <button class="tab-btn" onclick="setMFCategory('other', this)">Other</button>
+    <div id="mf-hero-wrap" style="display:none;margin-bottom:12px">
+      <div class="mf-hero">
+        <div class="mf-hero-header">
+          <span class="mf-hero-lbl">Amount</span>
+          <span id="mf-updated-ts" class="mf-hero-ts">—</span>
+        </div>
+        <div id="mf-hero-total" class="mf-hero-total">—</div>
+        <div id="mf-hero-pl" class="mf-hero-pl">—</div>
+      </div>
+    </div>
+    <div id="mf-sort-wrap" style="display:none;margin-bottom:14px">
+      <select id="mf-sort-select" class="mf-sort-select" onchange="setMFSort(this.value)">
+        <option value="value_desc">Total value: High → Low</option>
+        <option value="value_asc">Total value: Low → High</option>
+        <option value="pl_desc">P/L %: High → Low</option>
+        <option value="name_asc">Fund name: A → Z</option>
+      </select>
     </div>
     <div id="mf-content"></div>
+  </div>
+
+  <!-- MF MODAL -->
+  <div id="mf-modal-overlay" onclick="closeMFModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+  <div id="mf-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:94dvh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700" id="mf-modal-title">Add Fund</div>
+      <button onclick="closeMFModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+
+    <!-- Fund Code + Search -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Code</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input id="mf-fund-code" type="text" placeholder="e.g. KKP-CP" oninput="this.value=this.value.toUpperCase()"
+        style="flex:1;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:'JetBrains Mono',monospace;letter-spacing:1px">
+      <button onclick="searchMFFund()" id="mf-search-btn"
+        style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">
+        Search
+      </button>
+    </div>
+    <div id="mf-search-status" style="font-size:12px;min-height:16px;margin-bottom:12px"></div>
+
+    <!-- Fund Name -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Name <span style="font-weight:400;text-transform:none">(auto-filled or enter manually)</span></div>
+    <input id="mf-fund-name" type="text" placeholder="Full fund name"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:16px">
+
+    <!-- Category -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Category</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="mf-cat-pill active" onclick="_setMFCat('Onshore',this)">Onshore</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('Offshore',this)">Offshore</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('RMF',this)">RMF</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('ESG',this)">ESG</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('SSF',this)">SSF</button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0 16px"></div>
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">Purchase Details</div>
+
+    <!-- Investment method -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Investment Method</div>
+    <div style="display:flex;gap:6px;margin-bottom:16px">
+      <button class="modal-type-btn active" onclick="_setMFInputMethod('baht',this)">Total Baht</button>
+      <button class="modal-type-btn" onclick="_setMFInputMethod('units',this)">Total Units</button>
+      <button class="modal-type-btn" onclick="_setMFInputMethod('manual',this)">Manual</button>
+    </div>
+
+    <!-- Total Baht input -->
+    <div id="mf-input-baht">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Amount (THB)</div>
+      <input id="mf-total-baht" type="text" inputmode="numeric" placeholder="e.g. 100,000"
+        oninput="_numInputFmt(this);_calcMFFromBaht()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+    </div>
+
+    <!-- Total Units input -->
+    <div id="mf-input-units" style="display:none">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
+      <input id="mf-total-units-input" type="text" inputmode="numeric" placeholder="e.g. 10,000.0000"
+        oninput="_numInputFmt(this);_calcMFFromUnits()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+    </div>
+
+    <!-- Manual input -->
+    <div id="mf-input-manual" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
+          <input id="mf-manual-units" type="text" inputmode="numeric" placeholder="e.g. 10,000" oninput="_numInputFmt(this)"
+            style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total (THB)</div>
+          <input id="mf-manual-baht" type="text" inputmode="numeric" placeholder="e.g. 100,000" oninput="_numInputFmt(this)"
+            style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculated result display -->
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:var(--radius-sm);padding:11px 14px;margin-bottom:14px">
+      <span style="font-size:12px;color:var(--text-muted)">Units · Total Cost</span>
+      <span id="mf-calc-result" style="font-size:15px;font-weight:700;color:var(--text-muted)">—</span>
+    </div>
+
+    <!-- Cost/Unit + Purchase date -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cost/Unit (THB)</div>
+        <input id="mf-cost-per-unit" type="text" inputmode="numeric" placeholder="e.g. 10.5500"
+          oninput="_numInputFmt(this);_calcMFFromBaht();_calcMFFromUnits()"
+          style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Purchase Date</div>
+        <input id="mf-purchase-date" type="date"
+          style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Notes <span style="font-weight:400;text-transform:none">(optional)</span></div>
+    <input id="mf-notes" type="text" placeholder="e.g. Monthly DCA"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:16px">
+
+    <div id="mf-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary" id="mf-modal-save-btn" onclick="saveMF()">Add Fund</button>
+    <div style="height:12px"></div>
+    <button id="mf-delete-btn" onclick="_deleteMFFromModal()"
+      style="display:none;width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
+      Delete this holding
+    </button>
   </div>
 
   <!-- CASH -->
@@ -1193,6 +1321,84 @@ html.dark .bond-coupon-row { background:rgba(22,163,74,0.1);border-color:rgba(22
   border-radius:var(--radius);padding:12px 16px;
 }
 html.dark .bond-maturing-card { background:rgba(217,119,6,0.12); }
+
+/* ── Mutual Fund Page ─────────────────────────────────────────────────────── */
+.mf-hero {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 18px 16px;
+}
+.mf-hero-header {
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;
+}
+.mf-hero-lbl {
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.6px;
+}
+.mf-hero-ts { font-size:11px;color:var(--text-muted); }
+.mf-hero-total {
+  font-size:34px;font-weight:800;letter-spacing:-.5px;line-height:1.1;margin-bottom:8px;
+}
+.mf-hero-dec { font-size:22px;font-weight:700; }
+.mf-hero-pl { font-size:14px;font-weight:600; }
+
+.mf-sort-select {
+  -webkit-appearance:none;appearance:none;
+  border:1px solid var(--border);border-radius:20px;
+  padding:9px 36px 9px 16px;color:var(--text);
+  background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;outline:none;
+}
+html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+
+.mf-fund-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;margin-bottom:10px;
+}
+.mf-card-head {
+  display:flex;align-items:flex-start;justify-content:space-between;
+  cursor:pointer;gap:12px;user-select:none;
+}
+.mf-card-left { flex:1;min-width:0; }
+.mf-card-badges { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:7px; }
+.mf-cat-badge {
+  display:inline-block;padding:3px 10px;border-radius:12px;
+  font-size:11px;font-weight:700;letter-spacing:.2px;
+}
+.mf-card-code { font-size:16px;font-weight:700;color:var(--text); }
+.mf-card-name { font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.4; }
+.mf-card-right { text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end; }
+.mf-card-chevron {
+  font-size:13px;color:var(--text-muted);margin-bottom:5px;
+  display:inline-block;transition:transform 0.2s;
+}
+.mf-card-chevron.open { transform:rotate(180deg); }
+.mf-card-value { font-size:17px;font-weight:700;color:var(--text);white-space:nowrap; }
+.mf-card-pl { font-size:12px;font-weight:600;margin-top:3px;white-space:nowrap; }
+
+.mf-card-detail {
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+}
+.mf-detail-row {
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:13px;padding:4px 0;
+}
+.mf-detail-lbl { color:var(--text-muted); }
+.mf-detail-val { font-weight:600;color:var(--text); }
+.mf-detail-actions { display:flex;align-items:center;justify-content:space-between;margin-top:12px; }
+.mf-profile-btn {
+  display:inline-block;border:1px solid var(--border);border-radius:20px;
+  padding:7px 16px;font-size:13px;font-weight:600;color:var(--text);
+  text-decoration:none;background:transparent;cursor:pointer;
+  transition:border-color 0.15s,color 0.15s;
+}
+.mf-profile-btn:hover { border-color:var(--accent);color:var(--accent); }
+
+.mf-cat-pill {
+  padding:8px 14px;border-radius:20px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:600;
+  cursor:pointer;transition:all 0.15s;font-family:inherit;
+}
+.mf-cat-pill.active { background:var(--accent);border-color:var(--accent);color:#fff; }
 
 /* More page rows */
 .more-row {
@@ -2919,58 +3125,390 @@ async function deleteGold(id) {
 
 // ── Mutual Funds ──────────────────────────────────────────────────────────────
 
+let _mfListData    = [];   // computed holdings array for rendering
+let _mfEditId      = null; // UUID being edited; null = add mode
+let _mfSortKey     = 'value_desc';
+let _mfExpandedId  = null; // currently expanded card id
+let _mfCategory    = 'Onshore'; // selected category in modal
+let _mfInputMethod = 'baht';    // selected input method in modal
+
 async function loadMutualFunds() {
-  let query = sb.from('mutual_fund_holdings')
-    .select('fund_code, fund_name, category, units, buy_price_thb, buy_date')
-    .eq('user_id', state.userId);
-
-  if (state.mfCategory !== 'all') query = query.eq('category', state.mfCategory);
-  const { data: holdings } = await query;
-
   const el = document.getElementById('mf-content');
 
+  const { data: holdings } = await sb.from('mutual_fund_holdings')
+    .select('id, fund_code, fund_name, category, units, buy_price_thb, buy_date, notes')
+    .eq('user_id', state.userId)
+    .order('created_at', { ascending: false });
+
   if (!holdings || holdings.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No mutual fund holdings</div></div>';
+    document.getElementById('mf-hero-wrap').style.display = 'none';
+    document.getElementById('mf-sort-wrap').style.display = 'none';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No mutual fund holdings<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
     return;
   }
 
-  let html = '<div class="card">';
-  for (const h of holdings) {
-    const nav = await getLatestPrice(h.fund_code);
-    const currentValue = h.units * nav;
-    const costValue = h.units * h.buy_price_thb;
-    const gainLossThb = currentValue - costValue;
-    const gainLossPct = costValue > 0 ? (gainLossThb / costValue) * 100 : 0;
+  // Batch-fetch NAVs from mutual_fund_nav (latest 2 rows per fund for 1-day change)
+  const fundCodes = [...new Set(holdings.map(h => h.fund_code))];
+  const { data: navRows } = await sb.from('mutual_fund_nav')
+    .select('fund_code, nav_date, nav_price')
+    .in('fund_code', fundCodes)
+    .order('nav_date', { ascending: false })
+    .limit(fundCodes.length * 3);
 
-    html += `
-      <div class="holding-row">
-        <div class="holding-top">
-          <div>
-            <div class="holding-ticker">${h.fund_code}</div>
-            <div style="font-size:11px;color:var(--text-muted)">${h.fund_name || ''} · <span style="color:var(--accent)">${h.category}</span></div>
-          </div>
-          <span class="holding-price">${fmtTHB(currentValue)}</span>
-        </div>
-        <div class="holding-meta">
-          <span>NAV ฿${nav.toFixed(4)} · ${h.units.toLocaleString()} units</span>
-          <span class="pct-change ${gainLossPct >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLossPct)}</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
-          Cost ฿${costValue.toLocaleString('th-TH', {maximumFractionDigits:0})} ·
-          G/L <span class="${gainLossThb >= 0 ? 'text-success' : 'text-danger'}">${gainLossThb >= 0 ? '+' : ''}฿${gainLossThb.toLocaleString('th-TH', {maximumFractionDigits:0})}</span>
-        </div>
-      </div>
-    `;
+  // Build navMap { fund_code: [latest, prev] }
+  const navMap = {};
+  (navRows || []).forEach(row => {
+    if (!navMap[row.fund_code]) navMap[row.fund_code] = [];
+    if (navMap[row.fund_code].length < 2) navMap[row.fund_code].push(row);
+  });
+
+  // Fallback to market_data for funds without nav history yet
+  const missingCodes = fundCodes.filter(c => !navMap[c] || !navMap[c].length);
+  for (const code of missingCodes) {
+    const price = await getLatestPrice(code);
+    if (price > 0) navMap[code] = [{ nav_price: price, nav_date: null }];
   }
-  html += '</div>';
-  el.innerHTML = html;
+
+  // Determine last-updated timestamp
+  const latestDate = navRows && navRows.length ? navRows[0].nav_date : null;
+
+  // Compute each holding
+  _mfListData = holdings.map(h => {
+    const navData     = navMap[h.fund_code] || [];
+    const currentNav  = navData[0]?.nav_price  || 0;
+    const prevNav     = navData[1]?.nav_price   || 0;
+    const costPerUnit = Number(h.buy_price_thb) || 0;
+    const units       = Number(h.units)          || 0;
+    const currentValue = units * currentNav;
+    const costValue    = units * costPerUnit;
+    const plThb        = currentValue - costValue;
+    const plPct        = costValue > 0 ? (plThb / costValue) * 100 : 0;
+    const dayChange    = prevNav > 0 ? ((currentNav - prevNav) / prevNav) * 100 : null;
+    return { ...h, currentNav, prevNav, currentValue, costValue, plThb, plPct, dayChange };
+  });
+
+  _renderMFHero(latestDate);
+  _renderMFList();
 }
 
-function setMFCategory(cat, btn) {
-  state.mfCategory = cat;
-  document.querySelectorAll('#page-mf .tab-btn').forEach(b => b.classList.remove('active'));
+function _renderMFHero(latestDate) {
+  const totalValue = _mfListData.reduce((s, h) => s + h.currentValue, 0);
+  const totalCost  = _mfListData.reduce((s, h) => s + h.costValue,   0);
+  const totalPL    = totalValue - totalCost;
+  const totalPlPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+  // Split integer and decimal for big-number display
+  const totalFmt = totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dotIdx   = totalFmt.lastIndexOf('.');
+  const intPart  = totalFmt.slice(0, dotIdx);
+  const decPart  = totalFmt.slice(dotIdx); // includes the dot
+
+  document.getElementById('mf-hero-total').innerHTML =
+    `${intPart}<span class="mf-hero-dec">${decPart}</span> THB`;
+
+  const plPos  = totalPL >= 0;
+  const plSign = plPos ? '+' : '';
+  const arrow  = plPos ? '↗' : '↘';
+  const plClr  = plPos ? 'var(--success)' : 'var(--danger)';
+  const plPctStr = (plPos ? '+' : '') + totalPlPct.toFixed(2) + '%';
+  const plThbStr = (plPos ? '+' : '') + totalPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('mf-hero-pl').innerHTML =
+    `<span style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</span>`;
+
+  if (latestDate) {
+    const d  = new Date(latestDate + 'T00:00:00');
+    const ts = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    document.getElementById('mf-updated-ts').textContent = 'Updated ' + ts;
+  }
+
+  document.getElementById('mf-hero-wrap').style.display = 'block';
+  document.getElementById('mf-sort-wrap').style.display = 'block';
+}
+
+function _renderMFList() {
+  const el = document.getElementById('mf-content');
+  if (!_mfListData.length) return;
+
+  const sorted = [..._mfListData];
+  if      (_mfSortKey === 'value_desc') sorted.sort((a, b) => b.currentValue - a.currentValue);
+  else if (_mfSortKey === 'value_asc')  sorted.sort((a, b) => a.currentValue - b.currentValue);
+  else if (_mfSortKey === 'pl_desc')    sorted.sort((a, b) => b.plPct - a.plPct);
+  else if (_mfSortKey === 'name_asc')   sorted.sort((a, b) => (a.fund_code || '').localeCompare(b.fund_code || ''));
+
+  el.innerHTML = sorted.map(h => {
+    const isExpanded = h.id === _mfExpandedId;
+    const plPos  = h.plPct >= 0;
+    const arrow  = plPos ? '↗' : '↘';
+    const plClr  = plPos ? 'var(--success)' : 'var(--danger)';
+    const plPctStr = (plPos ? '+' : '') + Math.abs(h.plPct).toFixed(2) + '%';
+    const plThbStr = (plPos ? '+' : '') + h.plThb.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const valStr = h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const dayBadge = h.dayChange !== null
+      ? `<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;background:${h.dayChange >= 0 ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)'};color:${h.dayChange >= 0 ? 'var(--success)' : 'var(--danger)'};border:1px solid ${h.dayChange >= 0 ? 'rgba(22,163,74,0.25)' : 'rgba(220,38,38,0.25)'}">1D ${h.dayChange >= 0 ? '▲' : '▼'} ${Math.abs(h.dayChange).toFixed(2)}%</span>`
+      : '';
+
+    const catStyle = _mfCatStyle(h.category);
+    const badges   = `<span class="mf-cat-badge" style="${catStyle}">${h.category}</span>${dayBadge}`;
+
+    const expandDetail = `
+      <div class="mf-card-detail" id="mf-detail-${h.id}" style="display:${isExpanded ? 'block' : 'none'}">
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost value</span><span class="mf-detail-val">${h.costValue.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Units</span><span class="mf-detail-val">${Number(h.units).toFixed(4)} Unit</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Market price</span><span class="mf-detail-val">${h.currentNav > 0 ? h.currentNav.toFixed(4) : '—'} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost/Unit</span><span class="mf-detail-val">${Number(h.buy_price_thb) > 0 ? Number(h.buy_price_thb).toFixed(4) : '—'} THB</span></div>
+        <div class="mf-detail-actions">
+          <a href="https://thaifundstoday.com/funds/${encodeURIComponent(h.fund_code)}" target="_blank" rel="noopener" class="mf-profile-btn">View fund profile →</a>
+          <button onclick="event.stopPropagation();openEditMF('${h.id}')" class="pt-act-btn" style="margin-left:8px">✏️</button>
+        </div>
+      </div>`;
+
+    return `
+    <div class="mf-fund-card">
+      <div class="mf-card-head" onclick="toggleMFExpand('${h.id}')">
+        <div class="mf-card-left">
+          <div class="mf-card-badges">${badges}</div>
+          <div class="mf-card-code">${h.fund_code}</div>
+          ${h.fund_name ? `<div class="mf-card-name">${h.fund_name}</div>` : ''}
+        </div>
+        <div class="mf-card-right">
+          <span class="mf-card-chevron${isExpanded ? ' open' : ''}">∨</span>
+          <div class="mf-card-value">${valStr} THB</div>
+          <div class="mf-card-pl" style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</div>
+        </div>
+      </div>
+      ${expandDetail}
+    </div>`;
+  }).join('');
+}
+
+function setMFSort(key) {
+  _mfSortKey = key;
+  _renderMFList();
+}
+
+function toggleMFExpand(id) {
+  _mfExpandedId = (_mfExpandedId === id) ? null : id;
+  _renderMFList();
+}
+
+function _mfCatStyle(cat) {
+  const map = {
+    Onshore:  'background:rgba(37,99,235,.12);color:#3b82f6;border:1px solid rgba(37,99,235,.25)',
+    Offshore: 'background:rgba(234,88,12,.12);color:#ea580c;border:1px solid rgba(234,88,12,.25)',
+    RMF:      'background:rgba(124,58,237,.12);color:#7c3aed;border:1px solid rgba(124,58,237,.25)',
+    ESG:      'background:rgba(22,163,74,.12);color:#16a34a;border:1px solid rgba(22,163,74,.25)',
+    SSF:      'background:rgba(217,119,6,.12);color:#d97706;border:1px solid rgba(217,119,6,.25)',
+  };
+  return map[cat] || 'background:var(--surface2);color:var(--text-muted)';
+}
+
+// ── MF CRUD ────────────────────────────────────────────────────────────────────
+
+function _mfModalReset() {
+  ['mf-fund-code','mf-fund-name','mf-cost-per-unit','mf-purchase-date',
+   'mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('mf-search-status').textContent = '';
+  document.getElementById('mf-modal-error').textContent = '';
+  document.getElementById('mf-calc-result').textContent = '—';
+  document.getElementById('mf-calc-result').style.color = 'var(--text-muted)';
+  document.getElementById('mf-delete-btn').style.display = 'none';
+
+  _mfCategory = 'Onshore';
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach((b, i) => b.classList.toggle('active', i === 0));
+
+  _mfInputMethod = 'baht';
+  document.getElementById('mf-input-baht').style.display   = 'block';
+  document.getElementById('mf-input-units').style.display  = 'none';
+  document.getElementById('mf-input-manual').style.display = 'none';
+  document.querySelectorAll('#mf-modal .modal-type-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+}
+
+function openAddMF() {
+  _mfEditId = null;
+  _mfModalReset();
+  document.getElementById('mf-modal-title').textContent    = 'Add Fund';
+  document.getElementById('mf-modal-save-btn').textContent = 'Add Fund';
+  document.getElementById('mf-modal-overlay').style.display = 'block';
+  document.getElementById('mf-modal').style.display = 'block';
+}
+
+async function openEditMF(id) {
+  _mfEditId = id;
+  _mfModalReset();
+  const { data: h } = await sb.from('mutual_fund_holdings').select('*').eq('id', id).single();
+  if (!h) return;
+
+  document.getElementById('mf-modal-title').textContent    = 'Edit Fund';
+  document.getElementById('mf-modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('mf-fund-code').value    = h.fund_code  || '';
+  document.getElementById('mf-fund-name').value    = h.fund_name  || '';
+  document.getElementById('mf-purchase-date').value = h.buy_date  || '';
+  document.getElementById('mf-notes').value         = h.notes     || '';
+  document.getElementById('mf-cost-per-unit').value =
+    Number(h.buy_price_thb) > 0 ? Number(h.buy_price_thb).toLocaleString('en-US') : '';
+
+  _mfCategory = h.category || 'Onshore';
+  const cats  = ['Onshore','Offshore','RMF','ESG','SSF'];
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach((b, i) =>
+    b.classList.toggle('active', cats[i] === _mfCategory));
+
+  // Switch to manual so existing units + cost are visible
+  _mfInputMethod = 'manual';
+  document.getElementById('mf-input-baht').style.display   = 'none';
+  document.getElementById('mf-input-units').style.display  = 'none';
+  document.getElementById('mf-input-manual').style.display = 'block';
+  document.querySelectorAll('#mf-modal .modal-type-btn').forEach((b, i) => b.classList.toggle('active', i === 2));
+  const totalCost = (Number(h.units) || 0) * (Number(h.buy_price_thb) || 0);
+  document.getElementById('mf-manual-units').value = h.units ? Number(h.units).toLocaleString('en-US') : '';
+  document.getElementById('mf-manual-baht').value  = totalCost > 0 ? totalCost.toLocaleString('en-US') : '';
+  _updateMFCalcDisplay(Number(h.units) || 0, totalCost);
+
+  document.getElementById('mf-delete-btn').style.display = 'block';
+  document.getElementById('mf-modal-overlay').style.display = 'block';
+  document.getElementById('mf-modal').style.display = 'block';
+}
+
+function closeMFModal() {
+  document.getElementById('mf-modal-overlay').style.display = 'none';
+  document.getElementById('mf-modal').style.display = 'none';
+}
+
+function _setMFCat(cat, btn) {
+  _mfCategory = cat;
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  loadMutualFunds();
+}
+
+function _setMFInputMethod(method, btn) {
+  _mfInputMethod = method;
+  document.getElementById('mf-input-baht').style.display   = method === 'baht'   ? 'block' : 'none';
+  document.getElementById('mf-input-units').style.display  = method === 'units'  ? 'block' : 'none';
+  document.getElementById('mf-input-manual').style.display = method === 'manual' ? 'block' : 'none';
+  document.querySelectorAll('#mf-modal .modal-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function _calcMFFromBaht() {
+  if (_mfInputMethod !== 'baht') return;
+  const totalBaht  = _parseNum(document.getElementById('mf-total-baht').value);
+  const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const units = costPerUnit > 0 ? totalBaht / costPerUnit : 0;
+  _updateMFCalcDisplay(units, totalBaht);
+}
+
+function _calcMFFromUnits() {
+  if (_mfInputMethod !== 'units') return;
+  const units       = _parseNum(document.getElementById('mf-total-units-input').value);
+  const costPerUnit  = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const totalBaht   = units * costPerUnit;
+  _updateMFCalcDisplay(units, totalBaht);
+}
+
+function _updateMFCalcDisplay(units, totalBaht) {
+  const el = document.getElementById('mf-calc-result');
+  if (!el) return;
+  if (units > 0 || totalBaht > 0) {
+    el.textContent = units.toFixed(4) + ' Units · ฿' +
+      totalBaht.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    el.style.color = 'var(--text)';
+  } else {
+    el.textContent = '—';
+    el.style.color = 'var(--text-muted)';
+  }
+}
+
+async function saveMF() {
+  const errEl = document.getElementById('mf-modal-error');
+  errEl.textContent = '';
+
+  const fundCode    = document.getElementById('mf-fund-code').value.trim().toUpperCase();
+  const fundName    = document.getElementById('mf-fund-name').value.trim() || null;
+  const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const purchaseDate = document.getElementById('mf-purchase-date').value || null;
+  const notes       = document.getElementById('mf-notes').value.trim() || null;
+
+  if (!fundCode)           { errEl.textContent = 'Fund code is required.'; return; }
+  if (!_mfCategory)        { errEl.textContent = 'Please select a category.'; return; }
+  if (!(costPerUnit > 0))  { errEl.textContent = 'Cost/Unit must be greater than 0.'; return; }
+
+  let units = 0, totalCost = 0;
+  if (_mfInputMethod === 'baht') {
+    totalCost = _parseNum(document.getElementById('mf-total-baht').value);
+    units = costPerUnit > 0 ? totalCost / costPerUnit : 0;
+  } else if (_mfInputMethod === 'units') {
+    units = _parseNum(document.getElementById('mf-total-units-input').value);
+    totalCost = units * costPerUnit;
+  } else {
+    units     = _parseNum(document.getElementById('mf-manual-units').value);
+    totalCost = _parseNum(document.getElementById('mf-manual-baht').value);
+    if (totalCost === 0) totalCost = units * costPerUnit;
+  }
+
+  if (!(units > 0)) { errEl.textContent = 'Units must be greater than 0.'; return; }
+
+  const payload = {
+    user_id: state.userId,
+    fund_code:    fundCode,
+    fund_name:    fundName,
+    category:     _mfCategory,
+    units,
+    buy_price_thb: costPerUnit,
+    buy_date:      purchaseDate,
+    notes
+  };
+
+  const { error } = _mfEditId
+    ? await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId)
+    : await sb.from('mutual_fund_holdings').insert(payload);
+
+  if (error) { errEl.textContent = error.message; return; }
+  closeMFModal();
+  await loadMutualFunds();
+}
+
+async function deleteMF(id) {
+  if (!confirm('Delete this fund holding?')) return;
+  await sb.from('mutual_fund_holdings').delete().eq('id', id);
+  await loadMutualFunds();
+}
+
+async function _deleteMFFromModal() {
+  if (!_mfEditId) return;
+  if (!confirm('Delete this fund holding?')) return;
+  await sb.from('mutual_fund_holdings').delete().eq('id', _mfEditId);
+  closeMFModal();
+  await loadMutualFunds();
+}
+
+async function searchMFFund() {
+  const fundCode = document.getElementById('mf-fund-code').value.trim().toUpperCase();
+  if (!fundCode) { document.getElementById('mf-search-status').textContent = 'Enter a fund code first.'; return; }
+
+  const statusEl = document.getElementById('mf-search-status');
+  const btn      = document.getElementById('mf-search-btn');
+  statusEl.textContent = 'Searching SEC database…';
+  statusEl.style.color = 'var(--text-muted)';
+  btn.disabled = true;
+
+  try {
+    const result = await callGAS('searchMFFund', { fundCode });
+    if (result.ok && result.fundInfo) {
+      const info = result.fundInfo;
+      if (info.fundName) document.getElementById('mf-fund-name').value = info.fundName;
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = '✓ Found' + (info.amc ? ' · ' + info.amc : '');
+    } else {
+      statusEl.style.color = 'var(--warning)';
+      statusEl.textContent = (result.error || 'Not found') + ' — enter details manually';
+    }
+  } catch (_) {
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.textContent = 'Search unavailable — enter details manually';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Cash ──────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ In the Apps Script IDE: **Project Settings → Script Properties → Add propert
 | `CLAUDE_API_KEY` | *(your Anthropic API key)* |
 | `TELEGRAM_BOT_TOKEN` | *(your Telegram bot token)* |
 | `NEWSAPI_KEY` | *(your NewsAPI.org key — add when ready)* |
+| `SEC_API_KEY` | *(subscription key from secopendata.sec.or.th → กองทุน section)* |
 
 > **Important:** The `SUPABASE_SERVICE_KEY` is the `service_role` secret key, NOT the anon/publishable key.
 > Get it from: Supabase Dashboard → Your Project → Settings → API → service_role → Reveal.
