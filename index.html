@@ -3174,11 +3174,22 @@ let _mfLinkName    = '';
 
 async function loadMutualFunds() {
   const el = document.getElementById('mf-content');
+  try {
+    await _loadMutualFundsInner(el);
+  } catch (e) {
+    console.error('[MF] loadMutualFunds crash:', e);
+    showToast('Error loading funds: ' + (e.message || e));
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">' + (e.message || 'Load error') + '</div></div>';
+  }
+}
 
-  const { data: holdings } = await sb.from('mutual_fund_holdings')
+async function _loadMutualFundsInner(el) {
+  const { data: holdings, error: hErr } = await sb.from('mutual_fund_holdings')
     .select('id, fund_code, fund_name, category, units, buy_price_thb, buy_date, notes')
     .eq('user_id', state.userId)
     .order('created_at', { ascending: false });
+
+  if (hErr) throw new Error('DB: ' + hErr.message);
 
   if (!holdings || holdings.length === 0) {
     document.getElementById('mf-hero-wrap').style.display = 'none';
@@ -3531,6 +3542,7 @@ async function saveMF() {
   }
 
   closeMFModal();
+  showToast(_mfEditId ? 'Fund updated' : 'Fund saved — linking NAV in background…');
   await loadMutualFunds();
 
   // Background SEC name match for new holdings
