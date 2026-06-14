@@ -3502,7 +3502,7 @@ async function saveMF() {
 
   if (!(units > 0)) { errEl.textContent = 'Units must be greater than 0.'; return; }
 
-  // fund_code intentionally omitted — will be matched in background
+  // fund_code omitted — matched in background after save
   const payload = {
     user_id:       state.userId,
     fund_name:     fundName,
@@ -3510,20 +3510,31 @@ async function saveMF() {
     units,
     buy_price_thb: costPerUnit,
     buy_date:      purchaseDate,
-    notes
+    notes,
+    fund_code:     null   // explicit null satisfies any remaining constraint
   };
 
-  const { data: saved, error } = _mfEditId
-    ? await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId).select('id').single()
-    : await sb.from('mutual_fund_holdings').insert(payload).select('id').single();
+  if (_mfEditId) {
+    const { error } = await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId);
+    if (error) { errEl.textContent = error.message; return; }
+  } else {
+    const { error } = await sb.from('mutual_fund_holdings').insert(payload);
+    if (error) { errEl.textContent = error.message; return; }
+  }
 
-  if (error) { errEl.textContent = error.message; return; }
   closeMFModal();
   await loadMutualFunds();
 
-  // Background SEC name match (new adds only — edits keep existing fund_code)
-  if (!_mfEditId && saved?.id) {
-    _triggerMFNameMatch(saved.id, fundName);
+  // Background SEC name match for new holdings
+  if (!_mfEditId) {
+    const { data: newRow } = await sb.from('mutual_fund_holdings')
+      .select('id')
+      .eq('user_id', state.userId)
+      .is('fund_code', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (newRow?.id) _triggerMFNameMatch(newRow.id, fundName);
   }
 }
 
