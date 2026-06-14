@@ -20,3 +20,4 @@ In the Apps Script IDE: **Project Settings → Script Properties → Add propert
 1. Open `Code.gs`
 2. Run `setupTriggers()` once to activate all scheduled triggers
 3. Run `DataAgent.fetchAll()` manually to verify data flows into Supabase
+4. Run `DataAgent.testSECApi()` to verify SEC Open Data connectivity and log raw API responses

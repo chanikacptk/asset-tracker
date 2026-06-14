@@ -225,7 +225,43 @@ const DataAgent = (() => {
     });
   }
 
-  // ── Thai Mutual Fund NAV (SEC Open Data API + fallback scrape) ───────────────
+  // ── Thai Mutual Fund NAV (SEC Open Data v2 API + thaifundstoday.com fallback) ─
+  //
+  // Base URL : https://api.sec.or.th
+  // Auth     : header  Ocp-Apim-Subscription-Key: {SEC_API_KEY}
+  // Endpoints:
+  //   GET /v2/fund/general-info/profiles?proj_abbr_name={code}  → fund metadata
+  //   GET /v2/fund/daily-info/nav?proj_abbr_name={code}         → latest daily NAV
+  //   GET /v2/fund/general-info/amcs                            → AMC directory
+
+  var SEC_BASE = 'https://api.sec.or.th';
+
+  /** Helper: GET a SEC v2 endpoint, return parsed body or null */
+  function _secGet(path, apiKey) {
+    try {
+      var resp = UrlFetchApp.fetch(SEC_BASE + path, {
+        muteHttpExceptions: true,
+        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
+      });
+      var code = resp.getResponseCode();
+      if (code !== 200) {
+        Logger.log('[SEC] ' + path + ' → HTTP ' + code);
+        return null;
+      }
+      return JSON.parse(resp.getContentText());
+    } catch (e) {
+      Logger.log('[SEC] fetch error ' + path + ': ' + e.message);
+      return null;
+    }
+  }
+
+  /** Unwrap API response: handles plain array, {data:[...]}, or single object */
+  function _secUnwrap(raw) {
+    if (!raw) return null;
+    if (Array.isArray(raw))             return raw.length ? raw[0] : null;
+    if (raw.data && Array.isArray(raw.data)) return raw.data.length ? raw.data[0] : null;
+    return raw; // single object
+  }
 
   /** Public entry point — called by fetchAll() and the daily 8 AM trigger */
   function fetchThaiMutualFunds() {
@@ -251,10 +287,10 @@ const DataAgent = (() => {
         var nav     = result.nav;
         var navDate = result.date || today;
 
-        // Keep market_data updated for backwards-compat (dashboard, loadMore, calcUserData)
+        // Keep market_data current for dashboard / calcUserData / loadMore
         _upsertMarketData(code, 'mutual_fund', nav, 'THB');
 
-        // Store in mutual_fund_nav for NAV history + 1-day change calculation
+        // Persist in mutual_fund_nav for history + 1-day change
         supabaseUpsert('mutual_fund_nav?on_conflict=fund_code,nav_date', {
           fund_code: code,
           nav_date:  navDate,
@@ -269,102 +305,109 @@ const DataAgent = (() => {
   }
 
   /**
-   * Try SEC Open Data API first, fall back to thaifundstoday.com scrape.
+   * Fetch latest NAV for one fund.
+   * Strategy:
+   *   1. SEC v2  GET /v2/fund/daily-info/nav?proj_abbr_name={code}  (direct, no projId needed)
+   *   2. SEC v2  profile lookup → projId → GET /v2/fund/daily-info/nav?proj_id={id}
+   *   3. Scrape  thaifundstoday.com
    * Returns { nav: Number, date: 'YYYY-MM-DD' } or null.
    */
   function _fetchSECNav(fundCode) {
     var apiKey = Config.SEC_API_KEY();
 
     if (apiKey) {
-      // Look up cached projId from mutual_fund_master
+      // 1. Direct query by abbreviation name (fastest path)
+      var direct = _secFetchNavByAbbrName(fundCode, apiKey);
+      if (direct) return direct;
+
+      // 2. Look up projId (cache first, then API), then re-query NAV by projId
       var master = supabaseRequest('GET',
         'mutual_fund_master?fund_code=eq.' + encodeURIComponent(fundCode) +
         '&select=sec_proj_id&limit=1');
       var projId = (master && master[0]) ? master[0].sec_proj_id : null;
 
-      // No projId cached — fetch fund info from SEC FundFactsheet API
-      if (!projId) {
-        projId = _fetchSECProjId(fundCode, apiKey);
-      }
+      if (!projId) projId = _secFetchProfile(fundCode, apiKey); // also caches metadata
 
       if (projId) {
-        var result = _fetchSECDailyNav(projId, apiKey);
-        if (result) return result;
+        var byId = _secFetchNavByProjId(projId, apiKey);
+        if (byId) return byId;
       }
     }
 
-    // Fallback: scrape thaifundstoday.com
+    // 3. Fallback scrape
     return _fetchThaiFundsTodayNav(fundCode);
   }
 
   /**
-   * Fetch fund's projId from SEC FundFactsheet API and cache in mutual_fund_master.
+   * GET /v2/fund/daily-info/nav?proj_abbr_name={code}
+   * Returns { nav, date } or null.
+   */
+  function _secFetchNavByAbbrName(fundCode, apiKey) {
+    var raw  = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
+    return _secParseNavEntry(raw);
+  }
+
+  /**
+   * GET /v2/fund/daily-info/nav?proj_id={projId}
+   * Returns { nav, date } or null.
+   */
+  function _secFetchNavByProjId(projId, apiKey) {
+    var raw = _secGet('/v2/fund/daily-info/nav?proj_id=' + encodeURIComponent(projId), apiKey);
+    return _secParseNavEntry(raw);
+  }
+
+  /** Parse a NAV API response (array or wrapped) into { nav, date } */
+  function _secParseNavEntry(raw) {
+    var item = _secUnwrap(raw);
+    if (!item) return null;
+    // Field names: snake_case (v2) or camelCase (legacy) — support both
+    var nav = parseFloat(
+      item.nav        || item.nav_value  || item.navValue ||
+      item.last_val   || item.lastVal    || 0
+    );
+    if (!(nav > 0)) return null;
+    return {
+      nav:  nav,
+      date: item.nav_date || item.navDate || _dateStr()
+    };
+  }
+
+  /**
+   * GET /v2/fund/general-info/profiles?proj_abbr_name={code}
+   * Caches result in mutual_fund_master.
    * Returns projId string or null.
    */
-  function _fetchSECProjId(fundCode, apiKey) {
+  function _secFetchProfile(fundCode, apiKey) {
     try {
-      var url  = 'https://api.sec.or.th/FundFactsheet/fund/' + encodeURIComponent(fundCode);
-      var resp = UrlFetchApp.fetch(url, {
-        muteHttpExceptions: true,
-        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
-      });
-      if (resp.getResponseCode() !== 200) return null;
+      var raw  = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
+      var item = _secUnwrap(raw);
+      if (!item) return null;
 
-      var data = JSON.parse(resp.getContentText());
-      var fund = Array.isArray(data) ? data[0] : data;
-      if (!fund || !fund.projId) return null;
+      var projId = String(
+        item.proj_id || item.projId || item.fund_id || item.fundId || ''
+      );
+      if (!projId) return null;
 
-      var projId = String(fund.projId);
-
-      // Cache metadata in mutual_fund_master
+      // Persist metadata so we avoid repeat lookups
       supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
-        fund_code:    fund.projAbbrName || fundCode,
-        fund_name:    fund.projNameEng  || null,
-        fund_name_th: fund.projNameTh   || null,
-        amc:          fund.thaiName     || fund.compName || null,
+        fund_code:    item.proj_abbr_name || item.projAbbrName || fundCode,
+        fund_name:    item.proj_name_en   || item.projNameEng  || null,
+        fund_name_th: item.proj_name_th   || item.projNameTh   || null,
+        amc:          item.amc_name_th    || item.amcNameTh    ||
+                      item.comp_name      || item.compName     || null,
         sec_proj_id:  projId,
         scraped_at:   new Date().toISOString()
       });
 
       return projId;
     } catch (e) {
-      Logger.log('[DataAgent] SEC projId lookup failed for ' + fundCode + ': ' + e.message);
+      Logger.log('[DataAgent] _secFetchProfile failed for ' + fundCode + ': ' + e.message);
       return null;
     }
   }
 
   /**
-   * Fetch latest daily NAV from SEC FundDailyInfo API.
-   * Returns { nav, date } or null.
-   */
-  function _fetchSECDailyNav(projId, apiKey) {
-    try {
-      var url  = 'https://api.sec.or.th/FundDailyInfo/' + projId + '/dailynav';
-      var resp = UrlFetchApp.fetch(url, {
-        muteHttpExceptions: true,
-        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
-      });
-      if (resp.getResponseCode() !== 200) return null;
-
-      var data = JSON.parse(resp.getContentText());
-      if (!data || data.length === 0) return null;
-
-      var entry = data[0]; // API returns most-recent first
-      var nav = parseFloat(entry.nav || entry.navValue || entry.NAV || 0);
-      if (!(nav > 0)) return null;
-
-      return {
-        nav:  nav,
-        date: entry.navDate || entry.nav_date || _dateStr()
-      };
-    } catch (e) {
-      Logger.log('[DataAgent] SEC daily NAV failed for projId ' + projId + ': ' + e.message);
-      return null;
-    }
-  }
-
-  /**
-   * Fallback: scrape NAV from thaifundstoday.com.
+   * Fallback: scrape thaifundstoday.com for NAV.
    * Returns { nav, date } or null.
    */
   function _fetchThaiFundsTodayNav(fundCode) {
@@ -374,9 +417,8 @@ const DataAgent = (() => {
       if (resp.getResponseCode() !== 200) return null;
 
       var html  = resp.getContentText();
-      // Look for a 4-decimal NAV value near a known pattern
-      var match = html.match(/nav[^<"]{0,80}?([\d]{1,6}\.[\d]{4})/i);
-      if (!match) match = html.match(/>[\s]*([\d]{1,6}\.[\d]{4})[\s]*<\/td>/);
+      var match = html.match(/nav[^<"]{0,80}?([\d]{1,6}\.[\d]{4})/i)
+                || html.match(/>[\s]*([\d]{1,6}\.[\d]{4})[\s]*<\/td>/);
       if (match) {
         var nav = parseFloat(match[1]);
         if (nav > 0) return { nav: nav, date: _dateStr() };
@@ -389,49 +431,71 @@ const DataAgent = (() => {
   }
 
   /**
-   * Called from Code.gs via action=searchMFFund.
-   * Queries SEC FundFactsheet API and caches result in mutual_fund_master.
+   * Called from Code.gs action=searchMFFund (frontend "Search" button).
+   * Uses GET /v2/fund/general-info/profiles?proj_abbr_name={code}.
+   * Returns fund info object for the frontend or null.
    */
   function searchSECFund(fundCode) {
     var apiKey = Config.SEC_API_KEY();
     if (!apiKey) return null;
 
     try {
-      var url  = 'https://api.sec.or.th/FundFactsheet/fund/' + encodeURIComponent(fundCode);
-      var resp = UrlFetchApp.fetch(url, {
-        muteHttpExceptions: true,
-        headers: { 'Ocp-Apim-Subscription-Key': apiKey }
-      });
-      if (resp.getResponseCode() !== 200) return null;
+      var raw  = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
+      var item = _secUnwrap(raw);
+      if (!item) return null;
 
-      var data = JSON.parse(resp.getContentText());
-      var fund = Array.isArray(data) ? data[0] : data;
-      if (!fund) return null;
-
-      var projId = fund.projId ? String(fund.projId) : null;
+      var projId = String(
+        item.proj_id || item.projId || item.fund_id || item.fundId || ''
+      );
+      var code = item.proj_abbr_name || item.projAbbrName || fundCode;
 
       if (projId) {
         supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
-          fund_code:    fund.projAbbrName || fundCode,
-          fund_name:    fund.projNameEng  || null,
-          fund_name_th: fund.projNameTh   || null,
-          amc:          fund.thaiName     || fund.compName || null,
+          fund_code:    code,
+          fund_name:    item.proj_name_en || item.projNameEng  || null,
+          fund_name_th: item.proj_name_th || item.projNameTh   || null,
+          amc:          item.amc_name_th  || item.amcNameTh    ||
+                        item.comp_name    || item.compName     || null,
           sec_proj_id:  projId,
           scraped_at:   new Date().toISOString()
         });
       }
 
       return {
-        fundCode:   fund.projAbbrName || fundCode,
-        fundName:   fund.projNameEng  || null,
-        fundNameTh: fund.projNameTh   || null,
-        amc:        fund.thaiName     || fund.compName || null,
-        projId:     projId
+        fundCode:   code,
+        fundName:   item.proj_name_en || item.projNameEng  || null,
+        fundNameTh: item.proj_name_th || item.projNameTh   || null,
+        amc:        item.amc_name_th  || item.amcNameTh    ||
+                    item.comp_name    || item.compName     || null,
+        projId:     projId || null
       };
     } catch (e) {
       Logger.log('[DataAgent] searchSECFund failed: ' + e.message);
       return null;
     }
+  }
+
+  /**
+   * Standalone test — run from GAS IDE to verify SEC API connectivity.
+   * Usage: testSECApi()  → logs profile + NAV for a sample fund.
+   */
+  function testSECApi() {
+    var apiKey = Config.SEC_API_KEY();
+    if (!apiKey) { Logger.log('[testSECApi] SEC_API_KEY not set'); return; }
+
+    // AMC list sanity check
+    var amcs = _secGet('/v2/fund/general-info/amcs', apiKey);
+    Logger.log('[testSECApi] AMC list: HTTP ' + (amcs ? 'OK, ' + (Array.isArray(amcs) ? amcs.length : (amcs.data || []).length) + ' AMCs' : 'FAILED'));
+
+    // Test with a known large fund (KKP US500-UH)
+    var testCode = 'KKP US500-UH';
+    Logger.log('[testSECApi] Profile for ' + testCode + ':');
+    var profile = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(testCode), apiKey);
+    Logger.log(JSON.stringify(profile));
+
+    Logger.log('[testSECApi] NAV for ' + testCode + ':');
+    var nav = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode), apiKey);
+    Logger.log(JSON.stringify(nav));
   }
 
   // ── Real-time alert checks ──────────────────────────────────────────────────
@@ -817,7 +881,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, testSECApi };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
