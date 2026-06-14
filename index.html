@@ -3187,34 +3187,36 @@ async function loadMutualFunds() {
     return;
   }
 
-  // Batch-fetch NAVs from mutual_fund_nav (latest 2 rows per fund for 1-day change)
-  const fundCodes = [...new Set(holdings.map(h => h.fund_code))];
-  const { data: navRows } = await sb.from('mutual_fund_nav')
-    .select('fund_code, nav_date, nav_price')
-    .in('fund_code', fundCodes)
-    .order('nav_date', { ascending: false })
-    .limit(fundCodes.length * 3);
-
-  // Build navMap { fund_code: [latest, prev] }
+  // Only query NAV for holdings that have a fund_code (null = unlinked, no NAV yet)
+  const linkedCodes = [...new Set(holdings.map(h => h.fund_code).filter(c => c))];
   const navMap = {};
-  (navRows || []).forEach(row => {
-    if (!navMap[row.fund_code]) navMap[row.fund_code] = [];
-    if (navMap[row.fund_code].length < 2) navMap[row.fund_code].push(row);
-  });
 
-  // Fallback to market_data for funds without nav history yet
-  const missingCodes = fundCodes.filter(c => !navMap[c] || !navMap[c].length);
-  for (const code of missingCodes) {
-    const price = await getLatestPrice(code);
-    if (price > 0) navMap[code] = [{ nav_price: price, nav_date: null }];
+  if (linkedCodes.length > 0) {
+    const { data: navRows } = await sb.from('mutual_fund_nav')
+      .select('fund_code, nav_date, nav_price')
+      .in('fund_code', linkedCodes)
+      .order('nav_date', { ascending: false })
+      .limit(linkedCodes.length * 3);
+
+    (navRows || []).forEach(row => {
+      if (!navMap[row.fund_code]) navMap[row.fund_code] = [];
+      if (navMap[row.fund_code].length < 2) navMap[row.fund_code].push(row);
+    });
+
+    // Fallback to market_data for linked funds without nav history yet
+    const missingCodes = linkedCodes.filter(c => !navMap[c] || !navMap[c].length);
+    for (const code of missingCodes) {
+      const price = await getLatestPrice(code);
+      if (price > 0) navMap[code] = [{ nav_price: price, nav_date: null }];
+    }
   }
 
-  // Determine last-updated timestamp
-  const latestDate = navRows && navRows.length ? navRows[0].nav_date : null;
+  // Last-updated: most recent nav_date across all linked funds
+  const latestDate = Object.values(navMap).flat().map(r => r.nav_date).filter(Boolean).sort().pop() || null;
 
   // Compute each holding
   _mfListData = holdings.map(h => {
-    const navData     = navMap[h.fund_code] || [];
+    const navData = h.fund_code ? (navMap[h.fund_code] || []) : [];
     const currentNav  = navData[0]?.nav_price  || 0;
     const prevNav     = navData[1]?.nav_price   || 0;
     const costPerUnit = Number(h.buy_price_thb) || 0;
@@ -3478,14 +3480,16 @@ async function saveMF() {
   const errEl = document.getElementById('mf-modal-error');
   errEl.textContent = '';
 
-  const fundName    = document.getElementById('mf-fund-name').value.trim();
-  const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const fundName     = document.getElementById('mf-fund-name').value.trim();
+  const costPerUnit  = _parseNum(document.getElementById('mf-cost-per-unit').value);
   const purchaseDate = document.getElementById('mf-purchase-date').value || null;
-  const notes       = document.getElementById('mf-notes').value.trim() || null;
+  const notes        = document.getElementById('mf-notes').value.trim() || null;
 
-  if (!fundName)           { errEl.textContent = 'Fund name is required.'; return; }
-  if (!_mfCategory)        { errEl.textContent = 'Please select a category.'; return; }
-  if (!(costPerUnit > 0))  { errEl.textContent = 'Cost/Unit must be greater than 0.'; return; }
+  const _err = msg => { errEl.textContent = msg; showToast(msg); };
+
+  if (!fundName)          { _err('Fund name is required.'); return; }
+  if (!_mfCategory)       { _err('Please select a category.'); return; }
+  if (!(costPerUnit > 0)) { _err('Cost/Unit (THB) must be greater than 0.'); return; }
 
   let units = 0, totalCost = 0;
   if (_mfInputMethod === 'baht') {
@@ -3500,7 +3504,7 @@ async function saveMF() {
     if (totalCost === 0) totalCost = units * costPerUnit;
   }
 
-  if (!(units > 0)) { errEl.textContent = 'Units must be greater than 0.'; return; }
+  if (!(units > 0)) { _err('Units must be greater than 0.'); return; }
 
   // fund_code omitted — matched in background after save
   const payload = {
@@ -3510,16 +3514,20 @@ async function saveMF() {
     units,
     buy_price_thb: costPerUnit,
     buy_date:      purchaseDate,
-    notes,
-    fund_code:     null   // explicit null satisfies any remaining constraint
+    notes
   };
 
-  if (_mfEditId) {
-    const { error } = await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId);
-    if (error) { errEl.textContent = error.message; return; }
-  } else {
-    const { error } = await sb.from('mutual_fund_holdings').insert(payload);
-    if (error) { errEl.textContent = error.message; return; }
+  try {
+    if (_mfEditId) {
+      const { error } = await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId);
+      if (error) { _err(error.message); return; }
+    } else {
+      const { error } = await sb.from('mutual_fund_holdings').insert(payload);
+      if (error) { _err(error.message); return; }
+    }
+  } catch (e) {
+    _err(e.message || 'Unexpected error — check console');
+    return;
   }
 
   closeMFModal();
