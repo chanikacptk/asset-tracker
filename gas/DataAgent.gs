@@ -255,11 +255,13 @@ const DataAgent = (() => {
     }
   }
 
-  /** Unwrap API response: handles plain array, {data:[...]}, or single object */
+  /** Unwrap API response: handles plain array, {data:[...]}, {Data:[...]}, or single object */
   function _secUnwrap(raw) {
     if (!raw) return null;
-    if (Array.isArray(raw))             return raw.length ? raw[0] : null;
-    if (raw.data && Array.isArray(raw.data)) return raw.data.length ? raw.data[0] : null;
+    if (Array.isArray(raw)) return raw.length ? raw[0] : null;
+    // Handle both lowercase and capitalized 'data' key (SEC API uses both)
+    var arr = raw.data || raw.Data;
+    if (arr && Array.isArray(arr)) return arr.length ? arr[0] : null;
     return raw; // single object
   }
 
@@ -360,17 +362,23 @@ const DataAgent = (() => {
   function _secParseNavEntry(raw) {
     var item = _secUnwrap(raw);
     if (!item) return null;
+    Logger.log('[SEC] _secParseNavEntry item keys: ' + Object.keys(item).join(', '));
     // Field names: snake_case (v2) or camelCase (legacy) — support both
     var nav = parseFloat(
       item.nav        || item.nav_value      || item.navValue ||
       item.last_val   || item.lastVal        ||
       item.value      || item.net_asset_value || 0
     );
-    if (!(nav > 0)) return null;
-    return {
-      nav:  nav,
-      date: item.nav_date || item.navDate || _dateStr()
-    };
+    if (!(nav > 0)) {
+      Logger.log('[SEC] _secParseNavEntry: nav=0, item=' + JSON.stringify(item).slice(0, 300));
+      return null;
+    }
+    var rawDate = item.nav_date || item.navDate || _dateStr();
+    // Normalize YYYYMMDD → YYYY-MM-DD so the unique constraint stays consistent
+    if (/^\d{8}$/.test(String(rawDate))) {
+      rawDate = rawDate.slice(0, 4) + '-' + rawDate.slice(4, 6) + '-' + rawDate.slice(6, 8);
+    }
+    return { nav: nav, date: rawDate };
   }
 
   /**
@@ -504,22 +512,26 @@ const DataAgent = (() => {
         raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
       }
 
-      // Fallback: try individual keywords (≥4 chars) from the fund name
+      // Fallback: try individual keywords (≥3 chars) from the fund name
       // Handles cases where the stored name differs slightly (e.g. "Balance" vs "Balanced")
+      // Also catches short AMC codes like 'KKP' (3 chars)
       if (!raw || _secIsEmpty(raw)) {
-        var SKIP = { fund: 1, the: 1, and: 1, for: 1 };
+        var SKIP = { the: 1, and: 1, for: 1 };
         var keywords = fundName.split(/\s+/).filter(function(w) {
-          return w.length >= 4 && !SKIP[w.toLowerCase()];
+          return w.length >= 3 && !SKIP[w.toLowerCase()];
         });
+        Logger.log('[DataAgent] matchSECFundByName keyword fallback: ' + keywords.join(', '));
         for (var ki = 0; ki < keywords.length; ki++) {
           var kw = _secGet('/v2/fund/general-info/funds?fund_name=' + encodeURIComponent(keywords[ki]), apiKey);
           if (kw && !_secIsEmpty(kw)) { raw = kw; break; }
         }
       }
 
-      var items = Array.isArray(raw)          ? raw
-                : (raw && raw.data)           ? raw.data
-                : (raw && raw.proj_id)        ? [raw]
+      Logger.log('[DataAgent] matchSECFundByName raw response type: ' + (Array.isArray(raw) ? 'array len=' + raw.length : (raw ? JSON.stringify(raw).slice(0, 200) : 'null')));
+
+      var items = Array.isArray(raw)                     ? raw
+                : (raw && (raw.data || raw.Data))        ? (raw.data || raw.Data)
+                : (raw && (raw.proj_id || raw.projId))   ? [raw]
                 : [];
 
       if (!items.length) return null;
@@ -567,8 +579,10 @@ const DataAgent = (() => {
   /** True when a raw API response is empty (no results). */
   function _secIsEmpty(raw) {
     if (!raw) return true;
-    if (Array.isArray(raw))      return raw.length === 0;
-    if (raw.data)                return raw.data.length === 0;
+    if (Array.isArray(raw)) return raw.length === 0;
+    // Handle both lowercase and capitalized 'data' key
+    var arr = raw.data || raw.Data;
+    if (arr && Array.isArray(arr)) return arr.length === 0;
     return false;
   }
 
@@ -619,15 +633,47 @@ const DataAgent = (() => {
 
     // Also test KKOREPATH to diagnose Bug 1
     var testCode2 = 'KKOREPATH';
-    Logger.log('[testSECApi] NAV direct for ' + testCode2 + ':');
+    Logger.log('[testSECApi] NAV raw for ' + testCode2 + ':');
     var nav2 = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
     Logger.log(JSON.stringify(nav2));
+    Logger.log('[testSECApi] NAV parsed for ' + testCode2 + ': ' + JSON.stringify(_secParseNavEntry(nav2)));
+    Logger.log('[testSECApi] Full _fetchSECNav for ' + testCode2 + ': ' + JSON.stringify(_fetchSECNav(testCode2)));
     Logger.log('[testSECApi] Profile for ' + testCode2 + ':');
     var profile2 = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
     Logger.log(JSON.stringify(profile2));
     Logger.log('[testSECApi] mutual_fund_nav rows for ' + testCode2 + ':');
     var navRows = supabaseRequest('GET', 'mutual_fund_nav?fund_code=eq.' + testCode2 + '&order=nav_date.desc&limit=5');
     Logger.log(JSON.stringify(navRows));
+  }
+
+  /**
+   * Standalone test — diagnose why a fund name isn't matching.
+   * Usage: Change fundName below then run testMatchFundName() from GAS IDE.
+   */
+  function testMatchFundName() {
+    var fundName = 'KKP CorePath Balance';   // ← change this to test other names
+    var apiKey = Config.SEC_API_KEY();
+    if (!apiKey) { Logger.log('[testMatch] SEC_API_KEY not set'); return; }
+
+    var encoded = encodeURIComponent(fundName);
+    Logger.log('[testMatch] Testing name: "' + fundName + '"');
+
+    var r1 = _secGet('/v2/fund/general-info/funds?fund_name=' + encoded, apiKey);
+    Logger.log('[testMatch] /funds?fund_name= → ' + JSON.stringify(r1));
+
+    var r2 = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
+    Logger.log('[testMatch] /profiles?proj_name_en= → ' + JSON.stringify(r2));
+
+    // Keyword fallback
+    var keywords = fundName.split(/\s+/).filter(function(w) { return w.length >= 3; });
+    keywords.forEach(function(kw) {
+      var rk = _secGet('/v2/fund/general-info/funds?fund_name=' + encodeURIComponent(kw), apiKey);
+      Logger.log('[testMatch] keyword "' + kw + '" → ' + JSON.stringify(rk));
+    });
+
+    // Also test full matchSECFundByName result
+    var match = matchSECFundByName(fundName);
+    Logger.log('[testMatch] matchSECFundByName result: ' + JSON.stringify(match));
   }
 
   // ── Real-time alert checks ──────────────────────────────────────────────────
@@ -1013,7 +1059,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi, testMatchFundName };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
