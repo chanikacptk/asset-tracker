@@ -3642,10 +3642,11 @@ async function manualLinkMFFund() {
 
   if (error) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = error.message; return; }
   statusEl.style.color = 'var(--success)';
-  statusEl.textContent = '✓ Linked — fetching NAV…';
-  // Ask GAS to fetch NAV for this code immediately
-  callGAS('fetchThaiMutualFunds').catch(() => {});
-  setTimeout(async () => { closeMFLinkModal(); await loadMutualFunds(); }, 900);
+  statusEl.textContent = '✓ Linked — fetching live NAV…';
+  // Await NAV fetch for this specific fund before refreshing so value shows immediately
+  try { await callGAS('fetchNavSingle', { fundCode: code }); } catch (_) {}
+  closeMFLinkModal();
+  await loadMutualFunds();
 }
 
 // ── Cash ──────────────────────────────────────────────────────────────────────

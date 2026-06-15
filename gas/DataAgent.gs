@@ -276,7 +276,7 @@ const DataAgent = (() => {
 
     var today = _dateStr();
     var seen  = {};
-    funds.forEach(function(f) { seen[f.fund_code] = true; });
+    funds.forEach(function(f) { if (f.fund_code) seen[f.fund_code] = true; });
     var uniqueCodes = Object.keys(seen);
 
     uniqueCodes.forEach(function(code) {
@@ -362,8 +362,9 @@ const DataAgent = (() => {
     if (!item) return null;
     // Field names: snake_case (v2) or camelCase (legacy) — support both
     var nav = parseFloat(
-      item.nav        || item.nav_value  || item.navValue ||
-      item.last_val   || item.lastVal    || 0
+      item.nav        || item.nav_value      || item.navValue ||
+      item.last_val   || item.lastVal        ||
+      item.value      || item.net_asset_value || 0
     );
     if (!(nav > 0)) return null;
     return {
@@ -503,6 +504,19 @@ const DataAgent = (() => {
         raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
       }
 
+      // Fallback: try individual keywords (≥4 chars) from the fund name
+      // Handles cases where the stored name differs slightly (e.g. "Balance" vs "Balanced")
+      if (!raw || _secIsEmpty(raw)) {
+        var SKIP = { fund: 1, the: 1, and: 1, for: 1 };
+        var keywords = fundName.split(/\s+/).filter(function(w) {
+          return w.length >= 4 && !SKIP[w.toLowerCase()];
+        });
+        for (var ki = 0; ki < keywords.length; ki++) {
+          var kw = _secGet('/v2/fund/general-info/funds?fund_name=' + encodeURIComponent(keywords[ki]), apiKey);
+          if (kw && !_secIsEmpty(kw)) { raw = kw; break; }
+        }
+      }
+
       var items = Array.isArray(raw)          ? raw
                 : (raw && raw.data)           ? raw.data
                 : (raw && raw.proj_id)        ? [raw]
@@ -602,6 +616,18 @@ const DataAgent = (() => {
     Logger.log('[testSECApi] NAV for ' + testCode + ':');
     var nav = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode), apiKey);
     Logger.log(JSON.stringify(nav));
+
+    // Also test KKOREPATH to diagnose Bug 1
+    var testCode2 = 'KKOREPATH';
+    Logger.log('[testSECApi] NAV direct for ' + testCode2 + ':');
+    var nav2 = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
+    Logger.log(JSON.stringify(nav2));
+    Logger.log('[testSECApi] Profile for ' + testCode2 + ':');
+    var profile2 = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
+    Logger.log(JSON.stringify(profile2));
+    Logger.log('[testSECApi] mutual_fund_nav rows for ' + testCode2 + ':');
+    var navRows = supabaseRequest('GET', 'mutual_fund_nav?fund_code=eq.' + testCode2 + '&order=nav_date.desc&limit=5');
+    Logger.log(JSON.stringify(navRows));
   }
 
   // ── Real-time alert checks ──────────────────────────────────────────────────

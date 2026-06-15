@@ -100,6 +100,11 @@ function doGet(e) {
         DataAgent.fetchNavForSingleFund(match.fundCode);
         result.updated = true;
       }
+    } else if (action === 'fetchNavSingle') {
+      const fundCode = (e?.parameter?.fundCode || '').toUpperCase().trim();
+      if (!fundCode) throw new Error('fundCode required');
+      DataAgent.fetchNavForSingleFund(fundCode);
+      result.fetched = true;
     } else if (action === 'fetchThaiMutualFunds') {
       DataAgent.fetchThaiMutualFunds();
     } else if (action === 'ping') {
