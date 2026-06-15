@@ -421,10 +421,13 @@ function testMatchFundName() {
 }
 
 function testFetchNavSingle() {
-  // Tests fetching NAV for KKOREPATH and shows what gets written to DB
   Logger.log('[testFetchNavSingle] Fetching NAV for KKOREPATH...');
   DataAgent.fetchNavForSingleFund('KKOREPATH');
   Logger.log('[testFetchNavSingle] Done — check mutual_fund_nav table');
+}
+
+function testNavScrape() {
+  DataAgent.testNavScrape();
 }
 
 function testRealtimeAlerts() {

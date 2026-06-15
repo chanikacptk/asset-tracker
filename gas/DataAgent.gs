@@ -344,8 +344,8 @@ const DataAgent = (() => {
       }
     }
 
-    // 2. Fallback scrape
-    return _fetchThaiFundsTodayNav(fundCode);
+    // 2. Scrape fallbacks (no API key needed)
+    return _fetchThaiFundsTodayNav(fundCode) || _fetchFinnomenaNav(fundCode);
   }
 
   /** Parse a NAV API response (array or wrapped) into { nav, date }. */
@@ -402,18 +402,56 @@ const DataAgent = (() => {
     try {
       var url  = 'https://thaifundstoday.com/funds/' + encodeURIComponent(fundCode);
       var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-      if (resp.getResponseCode() !== 200) return null;
+      var code = resp.getResponseCode();
+      Logger.log('[DataAgent] thaifundstoday HTTP ' + code + ' for ' + fundCode);
+      if (code !== 200) return null;
 
       var html  = resp.getContentText();
-      var match = html.match(/nav[^<"]{0,80}?([\d]{1,6}\.[\d]{4})/i)
-                || html.match(/>[\s]*([\d]{1,6}\.[\d]{4})[\s]*<\/td>/);
+      // Try multiple patterns for NAV value (exactly 4 decimal places = Thai MF standard)
+      var match = html.match(/["']nav["'][^>]*>\s*([\d]{1,6}\.[\d]{4})/i)
+                || html.match(/nav[^<"']{0,80}?([\d]{1,6}\.[\d]{4})/i)
+                || html.match(/>([\d]{1,6}\.[\d]{4})<\/(?:td|span|div|p)>/);
       if (match) {
         var nav = parseFloat(match[1]);
+        Logger.log('[DataAgent] thaifundstoday NAV for ' + fundCode + ': ' + nav);
         if (nav > 0) return { nav: nav, date: _dateStr() };
       }
+      // Log a snippet to help debug regex misses
+      Logger.log('[DataAgent] thaifundstoday no NAV match for ' + fundCode + '. HTML snippet: ' + html.slice(0, 500));
       return null;
     } catch (e) {
       Logger.log('[DataAgent] ThaiFundsToday scrape failed for ' + fundCode + ': ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Scrape finnomena.com as a second fallback NAV source.
+   * Returns { nav, date } or null.
+   */
+  function _fetchFinnomenaNav(fundCode) {
+    try {
+      var url  = 'https://www.finnomena.com/fund/' + encodeURIComponent(fundCode);
+      var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+      var code = resp.getResponseCode();
+      Logger.log('[DataAgent] finnomena HTTP ' + code + ' for ' + fundCode);
+      if (code !== 200) return null;
+
+      var html = resp.getContentText();
+      // Finnomena shows NAV as "14.2500" in structured data or visible text
+      var match = html.match(/["']nav["'][^>]*?[\s:>]+([\d]{1,6}\.[\d]{4})/i)
+                || html.match(/nav[^<]{0,60}?([\d]{1,6}\.[\d]{4})/i)
+                || html.match(/"nav_value"\s*:\s*"?([\d]{1,6}\.[\d]{4})"?/i)
+                || html.match(/"last_val"\s*:\s*"?([\d]{1,6}\.[\d]{4})"?/i);
+      if (match) {
+        var nav = parseFloat(match[1]);
+        Logger.log('[DataAgent] finnomena NAV for ' + fundCode + ': ' + nav);
+        if (nav > 0) return { nav: nav, date: _dateStr() };
+      }
+      Logger.log('[DataAgent] finnomena no NAV match for ' + fundCode);
+      return null;
+    } catch (e) {
+      Logger.log('[DataAgent] finnomena scrape failed for ' + fundCode + ': ' + e.message);
       return null;
     }
   }
@@ -642,6 +680,15 @@ const DataAgent = (() => {
     // Full match attempt
     var match = matchSECFundByName(fundName);
     Logger.log('[testMatch] matchSECFundByName result: ' + JSON.stringify(match));
+  }
+
+  /** Test scrape fallbacks directly — no SEC API key needed. Run from GAS IDE. */
+  function testNavScrape() {
+    var code = 'KKOREPATH';
+    Logger.log('[testNavScrape] thaifundstoday:');
+    Logger.log(JSON.stringify(_fetchThaiFundsTodayNav(code)));
+    Logger.log('[testNavScrape] finnomena:');
+    Logger.log(JSON.stringify(_fetchFinnomenaNav(code)));
   }
 
   // ── Real-time alert checks ──────────────────────────────────────────────────
@@ -1027,7 +1074,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi, testMatchFundName };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi, testMatchFundName, testNavScrape };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
