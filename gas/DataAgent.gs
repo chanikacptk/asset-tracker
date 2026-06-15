@@ -319,13 +319,8 @@ const DataAgent = (() => {
     var apiKey = Config.SEC_API_KEY();
 
     if (apiKey) {
-      // 1. Direct NAV by abbreviation name
-      var rawNav = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
-      Logger.log('[SEC] nav?proj_abbr_name=' + fundCode + ': ' + (rawNav === null ? 'null/404' : JSON.stringify(rawNav).slice(0, 300)));
-      var result = _secParseNavEntry(rawNav);
-      if (result) return result;
-
-      // 2. Look up projId (cache first, then API)
+      // nav?proj_abbr_name= returns HTTP 400 — must use proj_id.
+      // Step 1: get proj_id from profiles (cache-first)
       var master = supabaseRequest('GET',
         'mutual_fund_master?fund_code=eq.' + encodeURIComponent(fundCode) +
         '&select=sec_proj_id&limit=1');
@@ -341,16 +336,16 @@ const DataAgent = (() => {
         }
       }
 
-      // 3. NAV by projId
+      // Step 2: fetch NAV by proj_id
       if (projId) {
         var rawById = _secGet('/v2/fund/daily-info/nav?proj_id=' + encodeURIComponent(projId), apiKey);
         Logger.log('[SEC] nav?proj_id=' + projId + ': ' + (rawById === null ? 'null/404' : JSON.stringify(rawById).slice(0, 300)));
-        var r2 = _secParseNavEntry(rawById);
-        if (r2) return r2;
+        var navResult = _secParseNavEntry(rawById);
+        if (navResult) return navResult;
       }
     }
 
-    // 4. Scrape fallbacks (no API key needed)
+    // Scrape fallbacks (no API key needed)
     return _fetchThaiFundsTodayNav(fundCode) || _fetchFinnomenaNav(fundCode);
   }
 
@@ -518,33 +513,26 @@ const DataAgent = (() => {
       var encoded = encodeURIComponent(fundName);
       var raw = null;
 
-      // Confirmed working search endpoints (v2):
-      //   profiles     → has proj_name_en, proj_name_th, proj_abbr_name
-      //   specifications → may have additional name fields
+      // profiles endpoint confirmed working with: proj_name_en, proj_name_th, proj_abbr_name
+      // specifications endpoint: proj_abbr_name returns 400 — not used here
 
       // 1. profiles by English name
       raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
       Logger.log('[DataAgent] profiles?proj_name_en=' + fundName + ' → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
 
-      // 2. specifications by English name
-      if (!raw || _secIsEmpty(raw)) {
-        raw = _secGet('/v2/fund/general-info/specifications?proj_name_en=' + encoded, apiKey);
-        Logger.log('[DataAgent] specifications?proj_name_en → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
-      }
-
-      // 3. profiles by Thai name
+      // 2. profiles by Thai name
       if (!raw || _secIsEmpty(raw)) {
         raw = _secGet('/v2/fund/general-info/profiles?proj_name_th=' + encoded, apiKey);
         Logger.log('[DataAgent] profiles?proj_name_th → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
       }
 
-      // 4. profiles by abbreviation (catches case where user typed the code)
+      // 3. profiles by abbreviation (catches case where user typed the code)
       if (!raw || _secIsEmpty(raw)) {
         raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
         Logger.log('[DataAgent] profiles?proj_abbr_name → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
       }
 
-      // 5. keyword fallback — each word ≥3 chars, handles name typos/truncation
+      // 4. keyword fallback — each word ≥3 chars, handles "Balance" vs "Balanced" etc.
       if (!raw || _secIsEmpty(raw)) {
         var SKIP = { the: 1, and: 1, for: 1 };
         var keywords = fundName.split(/\s+/).filter(function(w) {
@@ -555,8 +543,6 @@ const DataAgent = (() => {
           var kenc = encodeURIComponent(keywords[ki]);
           raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + kenc, apiKey);
           if (raw && !_secIsEmpty(raw)) { Logger.log('[DataAgent] hit on keyword: ' + keywords[ki]); break; }
-          raw = _secGet('/v2/fund/general-info/specifications?proj_name_en=' + kenc, apiKey);
-          if (raw && !_secIsEmpty(raw)) { Logger.log('[DataAgent] hit on spec keyword: ' + keywords[ki]); break; }
           raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + kenc, apiKey);
           if (raw && !_secIsEmpty(raw)) { Logger.log('[DataAgent] hit on abbr keyword: ' + keywords[ki]); break; }
           raw = null;
@@ -648,15 +634,11 @@ const DataAgent = (() => {
     var amcs = _secGet('/v2/fund/general-info/amcs', apiKey);
     Logger.log('[testSECApi] AMC list: HTTP ' + (amcs ? 'OK, ' + (Array.isArray(amcs) ? amcs.length : (amcs.data || []).length) + ' AMCs' : 'FAILED'));
 
-    // Test with a known large fund (KKP US500-UH)
-    var testCode = 'KKP US500-UH';
-    Logger.log('[testSECApi] Profile for ' + testCode + ':');
+    // Sanity check: profiles endpoint with a known code (no spaces)
+    var testCode = 'KKOREPATH';
+    Logger.log('[testSECApi] profiles?proj_abbr_name=' + testCode + ':');
     var profile = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(testCode), apiKey);
     Logger.log(JSON.stringify(profile));
-
-    Logger.log('[testSECApi] NAV for ' + testCode + ':');
-    var nav = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode), apiKey);
-    Logger.log(JSON.stringify(nav));
 
     // Also test KKOREPATH to diagnose Bug 1
     // Test confirmed v2 endpoints for KKOREPATH
@@ -691,12 +673,10 @@ const DataAgent = (() => {
     var terms = [fundName, 'KKP', 'CorePath', 'Balance', 'Balanced', 'KKOREPATH'];
     terms.forEach(function(t) {
       var enc = encodeURIComponent(t);
-      ['profiles', 'specifications'].forEach(function(ep) {
-        var r = _secGet('/v2/fund/general-info/' + ep + '?proj_name_en=' + enc, apiKey);
-        Logger.log('[testMatch] ' + ep + '?proj_name_en=' + t + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 150)));
-        var r2 = _secGet('/v2/fund/general-info/' + ep + '?proj_abbr_name=' + enc, apiKey);
-        Logger.log('[testMatch] ' + ep + '?proj_abbr_name=' + t + ' → ' + (r2 === null ? 'null/404' : JSON.stringify(r2).slice(0, 150)));
-      });
+      var r1 = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + enc, apiKey);
+      Logger.log('[testMatch] profiles?proj_name_en=' + t + ' → ' + (r1 === null ? 'null/404' : JSON.stringify(r1).slice(0, 150)));
+      var r2 = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + enc, apiKey);
+      Logger.log('[testMatch] profiles?proj_abbr_name=' + t + ' → ' + (r2 === null ? 'null/404' : JSON.stringify(r2).slice(0, 150)));
     });
     var match = matchSECFundByName(fundName);
     Logger.log('[testMatch] matchSECFundByName result: ' + JSON.stringify(match));
