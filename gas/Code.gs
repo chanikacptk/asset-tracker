@@ -430,6 +430,10 @@ function testNavScrape() {
   DataAgent.testNavScrape();
 }
 
+function testSECParams() {
+  DataAgent.testSECParams();
+}
+
 function testRealtimeAlerts() {
   const alerts = DataAgent.checkRealtimeAlerts();
   Logger.log('[testRealtimeAlerts] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));

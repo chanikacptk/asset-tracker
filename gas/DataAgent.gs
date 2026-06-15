@@ -401,27 +401,25 @@ const DataAgent = (() => {
    */
   function _fetchThaiFundsTodayNav(fundCode) {
     try {
-      var url  = 'https://thaifundstoday.com/funds/' + encodeURIComponent(fundCode);
-      var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+      // thaifundstoday.com is a Next.js SPA — the HTML page has no data.
+      // Try their internal API endpoint instead.
+      var apiUrl = 'https://thaifundstoday.com/api/funds/' + encodeURIComponent(fundCode);
+      var resp = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
       var code = resp.getResponseCode();
-      Logger.log('[DataAgent] thaifundstoday HTTP ' + code + ' for ' + fundCode);
-      if (code !== 200) return null;
-
-      var html  = resp.getContentText();
-      // Try multiple patterns for NAV value (exactly 4 decimal places = Thai MF standard)
-      var match = html.match(/["']nav["'][^>]*>\s*([\d]{1,6}\.[\d]{4})/i)
-                || html.match(/nav[^<"']{0,80}?([\d]{1,6}\.[\d]{4})/i)
-                || html.match(/>([\d]{1,6}\.[\d]{4})<\/(?:td|span|div|p)>/);
-      if (match) {
-        var nav = parseFloat(match[1]);
-        Logger.log('[DataAgent] thaifundstoday NAV for ' + fundCode + ': ' + nav);
+      Logger.log('[DataAgent] thaifundstoday API HTTP ' + code + ' for ' + fundCode);
+      if (code === 200) {
+        var json = JSON.parse(resp.getContentText());
+        Logger.log('[DataAgent] thaifundstoday API response: ' + JSON.stringify(json).slice(0, 300));
+        // Try common field names for NAV
+        var nav = parseFloat(
+          (json && (json.nav || json.last_val || json.lastVal ||
+          (json.data && (json.data.nav || json.data.last_val)) || 0))
+        );
         if (nav > 0) return { nav: nav, date: _dateStr() };
       }
-      // Log a snippet to help debug regex misses
-      Logger.log('[DataAgent] thaifundstoday no NAV match for ' + fundCode + '. HTML snippet: ' + html.slice(0, 500));
       return null;
     } catch (e) {
-      Logger.log('[DataAgent] ThaiFundsToday scrape failed for ' + fundCode + ': ' + e.message);
+      Logger.log('[DataAgent] ThaiFundsToday failed for ' + fundCode + ': ' + e.message);
       return null;
     }
   }
@@ -689,6 +687,36 @@ const DataAgent = (() => {
     Logger.log(JSON.stringify(_fetchThaiFundsTodayNav(code)));
     Logger.log('[testNavScrape] finnomena:');
     Logger.log(JSON.stringify(_fetchFinnomenaNav(code)));
+  }
+
+  /**
+   * Discover the correct SEC v2 parameter format.
+   * Tries path params, camelCase, and no-param calls.
+   * Run from GAS IDE — paste results to see which format works.
+   */
+  function testSECParams() {
+    var apiKey = Config.SEC_API_KEY();
+    if (!apiKey) { Logger.log('No SEC_API_KEY'); return; }
+    var code = 'KKOREPATH';
+
+    // Hypothesis A: path parameter  /profiles/{code}
+    var a1 = _secGet('/v2/fund/general-info/profiles/' + code, apiKey);
+    Logger.log('[testSECParams] profiles/' + code + ' → ' + (a1 === null ? 'null/404' : JSON.stringify(a1).slice(0, 200)));
+
+    // Hypothesis B: different query param names
+    var paramNames = ['abbr_name', 'proj_abbr', 'fund_abbr', 'name', 'code', 'symbol', 'projAbbrName'];
+    paramNames.forEach(function(p) {
+      var r = _secGet('/v2/fund/general-info/profiles?' + p + '=' + encodeURIComponent(code), apiKey);
+      Logger.log('[testSECParams] profiles?' + p + '=' + code + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 150)));
+    });
+
+    // Hypothesis C: no filter — returns all funds (paginated)
+    var all = _secGet('/v2/fund/general-info/profiles', apiKey);
+    Logger.log('[testSECParams] profiles (no params) → ' + (all === null ? 'null/404' : JSON.stringify(all).slice(0, 300)));
+
+    // Also test nav with path param
+    var navPath = _secGet('/v2/fund/daily-info/nav/' + code, apiKey);
+    Logger.log('[testSECParams] nav/' + code + ' → ' + (navPath === null ? 'null/404' : JSON.stringify(navPath).slice(0, 200)));
   }
 
   // ── Real-time alert checks ──────────────────────────────────────────────────
@@ -1074,7 +1102,7 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi, testMatchFundName, testNavScrape };
+  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo, fetchThaiMutualFunds, searchSECFund, matchSECFundByName, fetchNavForSingleFund, testSECApi, testMatchFundName, testNavScrape, testSECParams };
 })();
 
 // ── Standalone test runners (visible in GAS function picker) ──────────────────
