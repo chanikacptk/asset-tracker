@@ -309,8 +309,8 @@ const DataAgent = (() => {
   /**
    * Fetch latest NAV for one fund.
    * Strategy:
-   *   1. SEC v2  GET /v2/fund/daily-info/nav?proj_abbr_name={code}  (direct, no projId needed)
-   *   2. SEC v2  profile lookup → projId → GET /v2/fund/daily-info/nav?proj_id={id}
+   *   1. SEC v1  GET /FundFactsheet/fund/{code}  → projId + possibly NAV directly
+   *   2. SEC v1  GET /FundDailyInfo/{projId}/dailynav  → daily NAV
    *   3. Scrape  thaifundstoday.com
    * Returns { nav: Number, date: 'YYYY-MM-DD' } or null.
    */
@@ -318,63 +318,53 @@ const DataAgent = (() => {
     var apiKey = Config.SEC_API_KEY();
 
     if (apiKey) {
-      // 1. Direct query by abbreviation name (fastest path)
-      var direct = _secFetchNavByAbbrName(fundCode, apiKey);
-      if (direct) return direct;
+      // 1. FundFactsheet/fund/{code} — gets fund profile, may include current NAV
+      var factsheet = _secGet('/FundFactsheet/fund/' + encodeURIComponent(fundCode), apiKey);
+      Logger.log('[SEC] FundFactsheet/' + fundCode + ': ' + (factsheet ? JSON.stringify(factsheet).slice(0, 300) : 'null/404'));
 
-      // 2. Look up projId (cache first, then API), then re-query NAV by projId
-      var master = supabaseRequest('GET',
-        'mutual_fund_master?fund_code=eq.' + encodeURIComponent(fundCode) +
-        '&select=sec_proj_id&limit=1');
-      var projId = (master && master[0]) ? master[0].sec_proj_id : null;
+      if (factsheet && !_secIsEmpty(factsheet)) {
+        // Cache fund metadata while we have it
+        _secCacheProfile(fundCode, factsheet);
 
-      if (!projId) projId = _secFetchProfile(fundCode, apiKey); // also caches metadata
+        // NAV may be embedded directly in factsheet response
+        var directNav = _secParseNavEntry(factsheet);
+        if (directNav) return directNav;
 
-      if (projId) {
-        var byId = _secFetchNavByProjId(projId, apiKey);
-        if (byId) return byId;
+        // Otherwise extract projId and call FundDailyInfo
+        var fsItem = _secUnwrap(factsheet);
+        var projId = fsItem && String(
+          fsItem.proj_id || fsItem.projId || fsItem.Proj_id || ''
+        );
+        if (projId) {
+          var daily = _secGet('/FundDailyInfo/' + encodeURIComponent(projId) + '/dailynav', apiKey);
+          Logger.log('[SEC] FundDailyInfo/' + projId + '/dailynav: ' + (daily ? JSON.stringify(daily).slice(0, 300) : 'null/404'));
+          var navResult = _secParseNavEntry(daily);
+          if (navResult) return navResult;
+        }
       }
     }
 
-    // 3. Fallback scrape
+    // 2. Fallback scrape
     return _fetchThaiFundsTodayNav(fundCode);
   }
 
-  /**
-   * GET /v2/fund/daily-info/nav?proj_abbr_name={code}
-   * Returns { nav, date } or null.
-   */
-  function _secFetchNavByAbbrName(fundCode, apiKey) {
-    var raw  = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
-    return _secParseNavEntry(raw);
-  }
-
-  /**
-   * GET /v2/fund/daily-info/nav?proj_id={projId}
-   * Returns { nav, date } or null.
-   */
-  function _secFetchNavByProjId(projId, apiKey) {
-    var raw = _secGet('/v2/fund/daily-info/nav?proj_id=' + encodeURIComponent(projId), apiKey);
-    return _secParseNavEntry(raw);
-  }
-
-  /** Parse a NAV API response (array or wrapped) into { nav, date } */
+  /** Parse a NAV API response (array or wrapped) into { nav, date }. */
   function _secParseNavEntry(raw) {
     var item = _secUnwrap(raw);
     if (!item) return null;
-    Logger.log('[SEC] _secParseNavEntry item keys: ' + Object.keys(item).join(', '));
-    // Field names: snake_case (v2) or camelCase (legacy) — support both
+    Logger.log('[SEC] _secParseNavEntry keys: ' + Object.keys(item).join(', '));
+    // Cover snake_case, camelCase, and title-case field names used across SEC API versions
     var nav = parseFloat(
-      item.nav        || item.nav_value      || item.navValue ||
-      item.last_val   || item.lastVal        ||
-      item.value      || item.net_asset_value || 0
+      item.nav        || item.nav_value      || item.navValue      ||
+      item.last_val   || item.lastVal        || item.last_nav       ||
+      item.value      || item.net_asset_value || item.sell_price    || 0
     );
     if (!(nav > 0)) {
-      Logger.log('[SEC] _secParseNavEntry: nav=0, item=' + JSON.stringify(item).slice(0, 300));
+      Logger.log('[SEC] _secParseNavEntry: nav=0 from item=' + JSON.stringify(item).slice(0, 300));
       return null;
     }
-    var rawDate = item.nav_date || item.navDate || _dateStr();
-    // Normalize YYYYMMDD → YYYY-MM-DD so the unique constraint stays consistent
+    var rawDate = item.nav_date || item.navDate || item.nav_Date || _dateStr();
+    // Normalize YYYYMMDD → YYYY-MM-DD (unique constraint needs consistent format)
     if (/^\d{8}$/.test(String(rawDate))) {
       rawDate = rawDate.slice(0, 4) + '-' + rawDate.slice(4, 6) + '-' + rawDate.slice(6, 8);
     }
@@ -382,36 +372,25 @@ const DataAgent = (() => {
   }
 
   /**
-   * GET /v2/fund/general-info/profiles?proj_abbr_name={code}
-   * Caches result in mutual_fund_master.
-   * Returns projId string or null.
+   * Extract and cache fund metadata from a FundFactsheet response.
+   * Does not throw — metadata caching is best-effort.
    */
-  function _secFetchProfile(fundCode, apiKey) {
+  function _secCacheProfile(fundCode, raw) {
     try {
-      var raw  = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
       var item = _secUnwrap(raw);
-      if (!item) return null;
-
-      var projId = String(
-        item.proj_id || item.projId || item.fund_id || item.fundId || ''
-      );
-      if (!projId) return null;
-
-      // Persist metadata so we avoid repeat lookups
+      if (!item) return;
+      var projId = String(item.proj_id || item.projId || item.Proj_id || '');
       supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
         fund_code:    item.proj_abbr_name || item.projAbbrName || fundCode,
         fund_name:    item.proj_name_en   || item.projNameEng  || null,
         fund_name_th: item.proj_name_th   || item.projNameTh   || null,
         amc:          item.amc_name_th    || item.amcNameTh    ||
                       item.comp_name      || item.compName     || null,
-        sec_proj_id:  projId,
+        sec_proj_id:  projId || null,
         scraped_at:   new Date().toISOString()
       });
-
-      return projId;
     } catch (e) {
-      Logger.log('[DataAgent] _secFetchProfile failed for ' + fundCode + ': ' + e.message);
-      return null;
+      Logger.log('[DataAgent] _secCacheProfile failed: ' + e.message);
     }
   }
 
@@ -441,7 +420,7 @@ const DataAgent = (() => {
 
   /**
    * Called from Code.gs action=searchMFFund (frontend "Search" button).
-   * Uses GET /v2/fund/general-info/profiles?proj_abbr_name={code}.
+   * GET /FundFactsheet/fund/{code} — v1 endpoint.
    * Returns fund info object for the frontend or null.
    */
   function searchSECFund(fundCode) {
@@ -449,26 +428,14 @@ const DataAgent = (() => {
     if (!apiKey) return null;
 
     try {
-      var raw  = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
+      var raw  = _secGet('/FundFactsheet/fund/' + encodeURIComponent(fundCode), apiKey);
       var item = _secUnwrap(raw);
       if (!item) return null;
 
-      var projId = String(
-        item.proj_id || item.projId || item.fund_id || item.fundId || ''
-      );
-      var code = item.proj_abbr_name || item.projAbbrName || fundCode;
+      var projId = String(item.proj_id || item.projId || item.Proj_id || '');
+      var code   = item.proj_abbr_name || item.projAbbrName || fundCode;
 
-      if (projId) {
-        supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
-          fund_code:    code,
-          fund_name:    item.proj_name_en || item.projNameEng  || null,
-          fund_name_th: item.proj_name_th || item.projNameTh   || null,
-          amc:          item.amc_name_th  || item.amcNameTh    ||
-                        item.comp_name    || item.compName     || null,
-          sec_proj_id:  projId,
-          scraped_at:   new Date().toISOString()
-        });
-      }
+      _secCacheProfile(code, raw);
 
       return {
         fundCode:   code,
@@ -487,54 +454,63 @@ const DataAgent = (() => {
   /**
    * Search SEC database by fund name (Thai or English).
    * Called from Code.gs action=matchMFFund after a user saves a new holding.
+   *
+   * Strategy (all v1 endpoints — v2 returns 404 for this subscription):
+   *   1. FundDailyInfo/search/fundInfoByNameOrAbbr?term={fullName}
+   *   2. FundDailyInfo/search/fundInfoByNameOrAbbr?term={keyword} for each word ≥3 chars
+   *   3. FundDailyInfo/search/fundInfo?term={keyword} (alternate param pattern)
+   *   4. FundFactsheet/fund/{keyword} — try each keyword as a direct abbr lookup
+   *
    * Returns { fundCode, fundName, fundNameTh, amc, projId } or null.
    */
   function matchSECFundByName(fundName) {
     var apiKey = Config.SEC_API_KEY();
-    if (!apiKey) return null;
+    if (!apiKey) { Logger.log('[DataAgent] matchSECFundByName: no SEC_API_KEY'); return null; }
 
     try {
-      var encoded = encodeURIComponent(fundName);
+      var raw = null;
 
-      // Try the dedicated funds search endpoint first
-      var raw = _secGet('/v2/fund/general-info/funds?fund_name=' + encoded, apiKey);
+      // Build search terms: full name first, then individual words ≥3 chars
+      var SKIP = { the: 1, and: 1, for: 1 };
+      var keywords = fundName.split(/\s+/).filter(function(w) {
+        return w.length >= 3 && !SKIP[w.toLowerCase()];
+      });
+      var terms = [fundName].concat(keywords);
 
-      // Fallback: profiles endpoint with English name query
-      if (!raw || _secIsEmpty(raw)) {
-        raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
-      }
-      // Fallback: profiles with Thai name
-      if (!raw || _secIsEmpty(raw)) {
-        raw = _secGet('/v2/fund/general-info/profiles?proj_name_th=' + encoded, apiKey);
-      }
-      // Fallback: profiles with abbreviation
-      if (!raw || _secIsEmpty(raw)) {
-        raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
-      }
+      // Strategy 1 & 2: FundDailyInfo search endpoint (most likely to support name search)
+      var searchEndpoints = [
+        '/FundDailyInfo/search/fundInfoByNameOrAbbr?term=',
+        '/FundDailyInfo/search/fundInfoByNameOrAbbr?fundName=',
+        '/FundDailyInfo/search?term=',
+        '/FundDailyInfo/search?fundName='
+      ];
 
-      // Fallback: try individual keywords (≥3 chars) from the fund name
-      // Handles cases where the stored name differs slightly (e.g. "Balance" vs "Balanced")
-      // Also catches short AMC codes like 'KKP' (3 chars)
-      if (!raw || _secIsEmpty(raw)) {
-        var SKIP = { the: 1, and: 1, for: 1 };
-        var keywords = fundName.split(/\s+/).filter(function(w) {
-          return w.length >= 3 && !SKIP[w.toLowerCase()];
-        });
-        Logger.log('[DataAgent] matchSECFundByName keyword fallback: ' + keywords.join(', '));
-        for (var ki = 0; ki < keywords.length; ki++) {
-          var kw = _secGet('/v2/fund/general-info/funds?fund_name=' + encodeURIComponent(keywords[ki]), apiKey);
-          if (kw && !_secIsEmpty(kw)) { raw = kw; break; }
+      outer:
+      for (var ei = 0; ei < searchEndpoints.length; ei++) {
+        for (var ti = 0; ti < terms.length; ti++) {
+          var r = _secGet(searchEndpoints[ei] + encodeURIComponent(terms[ti]), apiKey);
+          Logger.log('[DataAgent] ' + searchEndpoints[ei] + terms[ti] + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 100)));
+          if (r && !_secIsEmpty(r)) { raw = r; break outer; }
         }
       }
 
-      Logger.log('[DataAgent] matchSECFundByName raw response type: ' + (Array.isArray(raw) ? 'array len=' + raw.length : (raw ? JSON.stringify(raw).slice(0, 200) : 'null')));
+      // Strategy 3: direct FundFactsheet/fund/{keyword} lookup for each word as abbr guess
+      if (!raw || _secIsEmpty(raw)) {
+        for (var ki = 0; ki < keywords.length; ki++) {
+          var fr = _secGet('/FundFactsheet/fund/' + encodeURIComponent(keywords[ki]), apiKey);
+          Logger.log('[DataAgent] FundFactsheet/fund/' + keywords[ki] + ' → ' + (fr === null ? 'null/404' : JSON.stringify(fr).slice(0, 100)));
+          if (fr && !_secIsEmpty(fr)) { raw = fr; break; }
+        }
+      }
+
+      Logger.log('[DataAgent] matchSECFundByName final raw: ' + (raw ? JSON.stringify(raw).slice(0, 200) : 'null'));
 
       var items = Array.isArray(raw)                     ? raw
                 : (raw && (raw.data || raw.Data))        ? (raw.data || raw.Data)
                 : (raw && (raw.proj_id || raw.projId))   ? [raw]
                 : [];
 
-      if (!items.length) return null;
+      if (!items.length) { Logger.log('[DataAgent] matchSECFundByName: no items'); return null; }
 
       // Pick best match: prefer where name contains search term
       var q = fundName.toLowerCase();
@@ -549,18 +525,7 @@ const DataAgent = (() => {
       var projId = String(best.proj_id || best.projId || '');
       var code   = best.proj_abbr_name || best.projAbbrName || null;
 
-      // Cache in mutual_fund_master
-      if (code) {
-        supabaseUpsert('mutual_fund_master?on_conflict=fund_code', {
-          fund_code:    code,
-          fund_name:    best.proj_name_en || best.projNameEng || null,
-          fund_name_th: best.proj_name_th || best.projNameTh  || null,
-          amc:          best.amc_name_th  || best.amcNameTh   ||
-                        best.comp_name    || best.compName    || null,
-          sec_proj_id:  projId || null,
-          scraped_at:   new Date().toISOString()
-        });
-      }
+      if (code) _secCacheProfile(code, [best]);
 
       return {
         fundCode:   code,
@@ -632,15 +597,14 @@ const DataAgent = (() => {
     Logger.log(JSON.stringify(nav));
 
     // Also test KKOREPATH to diagnose Bug 1
+    // Test v1 endpoints for KKOREPATH (Bug 1 diagnosis)
     var testCode2 = 'KKOREPATH';
-    Logger.log('[testSECApi] NAV raw for ' + testCode2 + ':');
-    var nav2 = _secGet('/v2/fund/daily-info/nav?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
-    Logger.log(JSON.stringify(nav2));
-    Logger.log('[testSECApi] NAV parsed for ' + testCode2 + ': ' + JSON.stringify(_secParseNavEntry(nav2)));
-    Logger.log('[testSECApi] Full _fetchSECNav for ' + testCode2 + ': ' + JSON.stringify(_fetchSECNav(testCode2)));
-    Logger.log('[testSECApi] Profile for ' + testCode2 + ':');
-    var profile2 = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(testCode2), apiKey);
-    Logger.log(JSON.stringify(profile2));
+    Logger.log('[testSECApi] === v1 endpoints for ' + testCode2 + ' ===');
+    Logger.log('[testSECApi] FundFactsheet/fund/' + testCode2 + ':');
+    var fs2 = _secGet('/FundFactsheet/fund/' + encodeURIComponent(testCode2), apiKey);
+    Logger.log(JSON.stringify(fs2));
+    Logger.log('[testSECApi] _secParseNavEntry on factsheet: ' + JSON.stringify(_secParseNavEntry(fs2)));
+    Logger.log('[testSECApi] Full _fetchSECNav(' + testCode2 + '): ' + JSON.stringify(_fetchSECNav(testCode2)));
     Logger.log('[testSECApi] mutual_fund_nav rows for ' + testCode2 + ':');
     var navRows = supabaseRequest('GET', 'mutual_fund_nav?fund_code=eq.' + testCode2 + '&order=nav_date.desc&limit=5');
     Logger.log(JSON.stringify(navRows));
@@ -655,23 +619,27 @@ const DataAgent = (() => {
     var apiKey = Config.SEC_API_KEY();
     if (!apiKey) { Logger.log('[testMatch] SEC_API_KEY not set'); return; }
 
-    var encoded = encodeURIComponent(fundName);
     Logger.log('[testMatch] Testing name: "' + fundName + '"');
+    Logger.log('[testMatch] v1 search endpoint probes:');
 
-    var r1 = _secGet('/v2/fund/general-info/funds?fund_name=' + encoded, apiKey);
-    Logger.log('[testMatch] /funds?fund_name= → ' + JSON.stringify(r1));
-
-    var r2 = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
-    Logger.log('[testMatch] /profiles?proj_name_en= → ' + JSON.stringify(r2));
-
-    // Keyword fallback
-    var keywords = fundName.split(/\s+/).filter(function(w) { return w.length >= 3; });
-    keywords.forEach(function(kw) {
-      var rk = _secGet('/v2/fund/general-info/funds?fund_name=' + encodeURIComponent(kw), apiKey);
-      Logger.log('[testMatch] keyword "' + kw + '" → ' + JSON.stringify(rk));
+    var searchTerms = [fundName, 'KKP', 'CorePath', 'Balance'];
+    var searchEndpoints = [
+      '/FundDailyInfo/search/fundInfoByNameOrAbbr?term=',
+      '/FundDailyInfo/search/fundInfoByNameOrAbbr?fundName=',
+      '/FundDailyInfo/search?term='
+    ];
+    searchEndpoints.forEach(function(ep) {
+      searchTerms.forEach(function(t) {
+        var r = _secGet(ep + encodeURIComponent(t), apiKey);
+        Logger.log('[testMatch] ' + ep + t + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 120)));
+      });
     });
 
-    // Also test full matchSECFundByName result
+    Logger.log('[testMatch] FundFactsheet/fund/KKOREPATH direct:');
+    var direct = _secGet('/FundFactsheet/fund/KKOREPATH', apiKey);
+    Logger.log(JSON.stringify(direct));
+
+    // Full match attempt
     var match = matchSECFundByName(fundName);
     Logger.log('[testMatch] matchSECFundByName result: ' + JSON.stringify(match));
   }
