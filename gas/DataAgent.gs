@@ -458,7 +458,7 @@ const DataAgent = (() => {
 
   /**
    * Called from Code.gs action=searchMFFund (frontend "Search" button).
-   * GET /FundFactsheet/fund/{code} — v1 endpoint.
+   * GET /v2/fund/general-info/profiles?proj_abbr_name={code} — confirmed working.
    * Returns fund info object for the frontend or null.
    */
   function searchSECFund(fundCode) {
@@ -466,7 +466,7 @@ const DataAgent = (() => {
     if (!apiKey) return null;
 
     try {
-      var raw  = _secGet('/FundFactsheet/fund/' + encodeURIComponent(fundCode), apiKey);
+      var raw  = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encodeURIComponent(fundCode), apiKey);
       var item = _secUnwrap(raw);
       if (!item) return null;
 
@@ -493,11 +493,14 @@ const DataAgent = (() => {
    * Search SEC database by fund name (Thai or English).
    * Called from Code.gs action=matchMFFund after a user saves a new holding.
    *
-   * Strategy (all v1 endpoints — v2 returns 404 for this subscription):
-   *   1. FundDailyInfo/search/fundInfoByNameOrAbbr?term={fullName}
-   *   2. FundDailyInfo/search/fundInfoByNameOrAbbr?term={keyword} for each word ≥3 chars
-   *   3. FundDailyInfo/search/fundInfo?term={keyword} (alternate param pattern)
-   *   4. FundFactsheet/fund/{keyword} — try each keyword as a direct abbr lookup
+   * Confirmed working endpoint: GET /v2/fund/general-info/profiles
+   * (v2/fund/general-info/funds returns 404 — does not exist)
+   *
+   * Strategy:
+   *   1. profiles?proj_name_en={fullName}
+   *   2. profiles?proj_name_th={fullName}
+   *   3. profiles?proj_abbr_name={fullName}  ← catches if user typed the abbr
+   *   4. Keyword fallback: repeat 1+3 for each word ≥3 chars (handles "Balance" vs "Balanced")
    *
    * Returns { fundCode, fundName, fundNameTh, amc, projId } or null.
    */
@@ -506,38 +509,37 @@ const DataAgent = (() => {
     if (!apiKey) { Logger.log('[DataAgent] matchSECFundByName: no SEC_API_KEY'); return null; }
 
     try {
+      var encoded = encodeURIComponent(fundName);
       var raw = null;
 
-      // Build search terms: full name first, then individual words ≥3 chars
-      var SKIP = { the: 1, and: 1, for: 1 };
-      var keywords = fundName.split(/\s+/).filter(function(w) {
-        return w.length >= 3 && !SKIP[w.toLowerCase()];
-      });
-      var terms = [fundName].concat(keywords);
+      // 1–3: search by full name using confirmed-working profiles endpoint
+      raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + encoded, apiKey);
+      Logger.log('[DataAgent] profiles?proj_name_en=' + fundName + ' → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
 
-      // Strategy 1 & 2: FundDailyInfo search endpoint (most likely to support name search)
-      var searchEndpoints = [
-        '/FundDailyInfo/search/fundInfoByNameOrAbbr?term=',
-        '/FundDailyInfo/search/fundInfoByNameOrAbbr?fundName=',
-        '/FundDailyInfo/search?term=',
-        '/FundDailyInfo/search?fundName='
-      ];
-
-      outer:
-      for (var ei = 0; ei < searchEndpoints.length; ei++) {
-        for (var ti = 0; ti < terms.length; ti++) {
-          var r = _secGet(searchEndpoints[ei] + encodeURIComponent(terms[ti]), apiKey);
-          Logger.log('[DataAgent] ' + searchEndpoints[ei] + terms[ti] + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 100)));
-          if (r && !_secIsEmpty(r)) { raw = r; break outer; }
-        }
+      if (!raw || _secIsEmpty(raw)) {
+        raw = _secGet('/v2/fund/general-info/profiles?proj_name_th=' + encoded, apiKey);
+        Logger.log('[DataAgent] profiles?proj_name_th → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
       }
 
-      // Strategy 3: direct FundFactsheet/fund/{keyword} lookup for each word as abbr guess
       if (!raw || _secIsEmpty(raw)) {
+        raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + encoded, apiKey);
+        Logger.log('[DataAgent] profiles?proj_abbr_name → ' + (raw === null ? 'null/404' : JSON.stringify(raw).slice(0, 120)));
+      }
+
+      // 4: keyword fallback — each word ≥3 chars, handles name typos/truncation
+      if (!raw || _secIsEmpty(raw)) {
+        var SKIP = { the: 1, and: 1, for: 1 };
+        var keywords = fundName.split(/\s+/).filter(function(w) {
+          return w.length >= 3 && !SKIP[w.toLowerCase()];
+        });
+        Logger.log('[DataAgent] keyword fallback: ' + keywords.join(', '));
         for (var ki = 0; ki < keywords.length; ki++) {
-          var fr = _secGet('/FundFactsheet/fund/' + encodeURIComponent(keywords[ki]), apiKey);
-          Logger.log('[DataAgent] FundFactsheet/fund/' + keywords[ki] + ' → ' + (fr === null ? 'null/404' : JSON.stringify(fr).slice(0, 100)));
-          if (fr && !_secIsEmpty(fr)) { raw = fr; break; }
+          var kenc = encodeURIComponent(keywords[ki]);
+          raw = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + kenc, apiKey);
+          if (raw && !_secIsEmpty(raw)) { Logger.log('[DataAgent] hit on keyword: ' + keywords[ki]); break; }
+          raw = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + kenc, apiKey);
+          if (raw && !_secIsEmpty(raw)) { Logger.log('[DataAgent] hit on abbr keyword: ' + keywords[ki]); break; }
+          raw = null;
         }
       }
 
@@ -548,7 +550,7 @@ const DataAgent = (() => {
                 : (raw && (raw.proj_id || raw.projId))   ? [raw]
                 : [];
 
-      if (!items.length) { Logger.log('[DataAgent] matchSECFundByName: no items'); return null; }
+      if (!items.length) { Logger.log('[DataAgent] matchSECFundByName: no items found'); return null; }
 
       // Pick best match: prefer where name contains search term
       var q = fundName.toLowerCase();
@@ -559,6 +561,8 @@ const DataAgent = (() => {
         return en.includes(q) || th.includes(q) || abbr.includes(q)
                || q.includes(en.slice(0, 10));
       }) || items[0];
+
+      Logger.log('[DataAgent] best match: ' + JSON.stringify(best).slice(0, 200));
 
       var projId = String(best.proj_id || best.projId || '');
       var code   = best.proj_abbr_name || best.projAbbrName || null;
@@ -658,24 +662,16 @@ const DataAgent = (() => {
     if (!apiKey) { Logger.log('[testMatch] SEC_API_KEY not set'); return; }
 
     Logger.log('[testMatch] Testing name: "' + fundName + '"');
-    Logger.log('[testMatch] v1 search endpoint probes:');
 
-    var searchTerms = [fundName, 'KKP', 'CorePath', 'Balance'];
-    var searchEndpoints = [
-      '/FundDailyInfo/search/fundInfoByNameOrAbbr?term=',
-      '/FundDailyInfo/search/fundInfoByNameOrAbbr?fundName=',
-      '/FundDailyInfo/search?term='
-    ];
-    searchEndpoints.forEach(function(ep) {
-      searchTerms.forEach(function(t) {
-        var r = _secGet(ep + encodeURIComponent(t), apiKey);
-        Logger.log('[testMatch] ' + ep + t + ' → ' + (r === null ? 'null/404' : JSON.stringify(r).slice(0, 120)));
-      });
+    // Test confirmed-working profiles endpoint with various params
+    var terms = [fundName, 'KKP', 'CorePath', 'Balance', 'Balanced', 'KKOREPATH'];
+    terms.forEach(function(t) {
+      var enc = encodeURIComponent(t);
+      var r1 = _secGet('/v2/fund/general-info/profiles?proj_name_en=' + enc, apiKey);
+      Logger.log('[testMatch] profiles?proj_name_en=' + t + ' → ' + (r1 === null ? 'null/404' : JSON.stringify(r1).slice(0, 150)));
+      var r2 = _secGet('/v2/fund/general-info/profiles?proj_abbr_name=' + enc, apiKey);
+      Logger.log('[testMatch] profiles?proj_abbr_name=' + t + ' → ' + (r2 === null ? 'null/404' : JSON.stringify(r2).slice(0, 150)));
     });
-
-    Logger.log('[testMatch] FundFactsheet/fund/KKOREPATH direct:');
-    var direct = _secGet('/FundFactsheet/fund/KKOREPATH', apiKey);
-    Logger.log(JSON.stringify(direct));
 
     // Full match attempt
     var match = matchSECFundByName(fundName);
