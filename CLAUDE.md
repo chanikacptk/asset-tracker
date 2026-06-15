@@ -199,32 +199,51 @@ Called from frontend via `callGAS(action, params)`:
 | SET Index | Yahoo Finance `^SET.BK` | `SET` in `market_data` |
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
-| Thai MF NAVs | SEC Open Data v2 API → thaifundstoday.com fallback | fund code in `market_data` + `mutual_fund_nav` |
+| Thai MF NAVs | SEC Open Data v2 API → finnomena.com scrape fallback | fund code in `market_data` + `mutual_fund_nav` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
 
+**SEC Open Data v2 API — confirmed behaviour (discovered 2026-06-15):**
+
+Working endpoints (base `https://api.sec.or.th`, auth header `Ocp-Apim-Subscription-Key`):
+- `GET /v2/fund/general-info/profiles` — paginated fund list, 100/page, cursor-based
+- `GET /v2/fund/daily-info/nav?proj_id={id}` — daily NAV for one fund by proj_id
+- `GET /v2/fund/factsheet/urls` — factsheet document links
+- `GET /v2/fund/general-info/specifications` — fund specs (query params TBD)
+
+**CRITICAL: no per-fund filter params exist.** All query params (`?proj_abbr_name=`, `?name=`, `?code=`, etc.) return HTTP 400. Path params return 404. The only way to look up a fund is to paginate `profiles` until you find it, then cache `proj_id`.
+
+`profiles` response shape: `{ "message":"success", "page_size":100, "next_cursor":"...", "items":[{...}] }`
+Each item: `proj_id` (string e.g. `"M0001_2558"`), `proj_abbr_name`, `proj_name_en`, `proj_name_th`, `comp_name_th`
+Next page: `GET /v2/fund/general-info/profiles?cursor={next_cursor}`
+
 **SEC Open Data MF NAV chain** (`_fetchSECNav()` in DataAgent.gs):
-1. `GET /v2/fund/daily-info/nav?proj_abbr_name={code}` — direct by abbreviation (fastest)
-2. `GET /v2/fund/general-info/profiles?proj_abbr_name={code}` — fetch projId, cache in `mutual_fund_master`
-3. `GET /v2/fund/daily-info/nav?proj_id={projId}` — retry by projId
-4. Scrape `thaifundstoday.com/funds/{code}` — HTML fallback
-
-Auth header: `Ocp-Apim-Subscription-Key: {SEC_API_KEY}`. Both snake_case and camelCase field names are handled via `||` fallbacks.
-
-NAV is written to both `market_data` (backwards-compat for dashboard/loadMore/calcUserData) and `mutual_fund_nav` (history for 1-day change).
+1. Check `mutual_fund_master.sec_proj_id` cache for this fund
+2. If not cached → `_secFindFund(fundCode, null, apiKey)` paginates `profiles` to find `proj_id`, caches it
+3. `GET /v2/fund/daily-info/nav?proj_id={proj_id}` — get NAV
+4. Fallback: `thaifundstoday.com/api/funds/{code}` JSON API (site is Next.js SPA — HTML scraping is useless)
+5. Fallback: `finnomena.com/fund/{code}` HTML scrape
 
 **MF name→code matching** (`matchSECFundByName()` in DataAgent.gs):
 - Called after user saves a new fund holding (via `matchMFFund` GAS action)
-- Tries `/v2/fund/general-info/funds?fund_name=`, then `/profiles?proj_name_en=`, then `proj_name_th=`, then `proj_abbr_name=`
-- Picks best match (name contains search term), caches in `mutual_fund_master`
-- On match: updates `mutual_fund_holdings.fund_code` + calls `fetchNavForSingleFund()` immediately
+- Calls `_secFindFund(null, fundName, apiKey)` — paginates `profiles`, matches by `proj_name_en` contains search term
+- On match: caches in `mutual_fund_master`, updates `mutual_fund_holdings.fund_code`, calls `fetchNavForSingleFund()` immediately
+
+**`_secFindFund(fundCode, fundName, apiKey)`** in DataAgent.gs:
+- Paginates up to 60 pages (6 000 funds)
+- Matches exact `proj_abbr_name` (code lookup) or `proj_name_en` contains (name lookup)
+- Returns the item object or null
 
 **Gold price chain** (`_fetchGoldSpotPrice()` in DataAgent.gs): each source logs its HTTP code + raw body to the GAS execution log for diagnosis. Yahoo Finance forex symbols (`XAUUSD=X`) are unreliable from GAS server IPs — equity/ETF prices (GLD) are used instead as fallback.
 
 **Standalone tests** — run from GAS IDE:
 - `testGoldPrice()`, `testBondScrape()` — existing
-- `testSECApi()` — hits all 3 SEC v2 endpoints, logs raw response (use to verify field names)
+- `testSECApi()` — paginates profiles for KKOREPATH, fetches NAV by proj_id, logs everything
+- `testSECParams()` — discovers correct SEC API parameter format (run when debugging 400 errors)
+- `testMatchFundName()` — probes name search for 'KKP CorePath Balance'
+- `testNavScrape()` — tests thaifundstoday JSON API + finnomena scrape for KKOREPATH
+- `testFetchNavSingle()` — runs full `fetchNavForSingleFund('KKOREPATH')` and checks DB
 - `testFetchThaiMutualFunds()` — full NAV fetch + upsert for all held funds
-- `testMatchMFFund()` — name→code match for a hardcoded test fund name
+- `testMatchMFFund()` — name→code match for a hardcoded fund name
 
 ---
 
@@ -434,15 +453,16 @@ MF-specific classes:
 
 ## What's left to do (Mutual Fund page)
 
-### Needs verification / testing
-- **`testSECApi()`** — run from GAS IDE to confirm SEC API field names match what `_secParseNavEntry` and `_secFetchProfile` expect. If field names differ, update the `||` chains in those functions.
-- **`testMatchMFFund()`** — run with a real fund name you hold (edit the hardcoded name in Code.gs first). Confirm `match.fundCode` is returned and `mutual_fund_nav` gets a row.
-- **Daily 8 AM trigger** — `fetchThaiMutualFunds()` is called inside `DataAgent.fetchAll()` which is called by `onDailyTrigger`. Verify NAV rows appear in `mutual_fund_nav` the next morning.
+### Needs verification / testing (as of 2026-06-15)
+- **`testSECParams()`** — run to confirm `nav?proj_id=` returns a valid NAV response for KKOREPATH. If it does, Bug 1 is fully solved. Log the raw response to confirm field name (`last_val` or similar).
+- **`testFetchNavSingle()`** — run after `testSECParams()` succeeds; confirms NAV writes to `mutual_fund_nav` and value shows in app.
+- **`testMatchMFFund()`** — run with 'KKP CorePath Balance' to confirm `_secFindFund` paginates and finds KKOREPATH (Bug 2).
+- **Daily 8 AM trigger** — after GAS is redeployed, verify NAV rows appear in `mutual_fund_nav` the next morning. First run for each fund will paginate profiles (slow); subsequent runs use cached `proj_id` (fast).
 
 ### Known gaps
-- **`mutual_fund_holdings` has no `created_at` column** — list is ordered by `buy_date` instead. Consider adding `created_at timestamptz DEFAULT now()` in a future migration 013 if insertion-order display matters.
+- **`_secFindFund` is slow on first run** — paginates up to 60 pages (6 000 funds) to find a fund by code or name. After the first successful match, `proj_id` is cached in `mutual_fund_master` and subsequent calls go directly to `nav?proj_id=`. No fix needed; acceptable for one-time cost.
+- **`mutual_fund_holdings` has no `created_at` column** — list is ordered by `buy_date` instead. Future migration 013 should add `created_at timestamptz DEFAULT now()`.
 - **1-day change requires 2 consecutive days of NAV data** — the badge won't appear until the daily trigger has run on two separate days.
 - **Background name match only fires on new adds** — editing an existing unlinked holding does not re-trigger the SEC search. User must tap the 🟡 badge to link manually.
-- **`mutual_fund_holdings` has no `created_at`** — the background match query after save uses `.is('fund_code', null).order('buy_date', desc)` to find the just-inserted row, which is fragile if the user adds two funds on the same day with no purchase date. Migration 013 should add `created_at`.
-- **NAV on home dashboard / loadMore** — still reads from `market_data` via `getLatestPrice()`. Accurate only after GAS daily run populates `market_data`. No change needed — this is intentional for backwards-compat.
-- **Partner view** — reads `mutual_fund_holdings` and uses `getLatestPrice()`. Works but won't show 1-day change (no access to `mutual_fund_nav` directly). Acceptable for now.
+- **NAV on home dashboard / loadMore** — still reads from `market_data` via `getLatestPrice()`. Accurate only after GAS daily run. Intentional for backwards-compat.
+- **Partner view** — reads `mutual_fund_holdings` and uses `getLatestPrice()`. Works but won't show 1-day change. Acceptable for now.
