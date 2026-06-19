@@ -78,35 +78,6 @@ function doGet(e) {
       const info = DataAgent.scrapeBondInfo(bondCode);
       if (!info) throw new Error('Bond not found or scrape failed — use manual input');
       result.bondInfo = info;
-    } else if (action === 'searchMFFund') {
-      const fundCode = (e?.parameter?.fundCode || '').toUpperCase().trim();
-      if (!fundCode) throw new Error('fundCode required');
-      const info = DataAgent.searchSECFund(fundCode);
-      if (!info) throw new Error('Fund not found in SEC database — enter details manually');
-      result.fundInfo = info;
-    } else if (action === 'matchMFFund') {
-      const fundName  = (e?.parameter?.fundName  || '').trim();
-      const holdingId = (e?.parameter?.holdingId || '').trim();
-      if (!fundName) throw new Error('fundName required');
-      const match = DataAgent.matchSECFundByName(fundName);
-      result.match = match || null;
-      if (match?.fundCode && holdingId) {
-        // Update fund_code directly in Supabase (service_role bypasses RLS)
-        supabaseRequest('PATCH',
-          'mutual_fund_holdings?id=eq.' + holdingId,
-          { fund_code: match.fundCode }
-        );
-        // Fetch and persist NAV immediately so card shows live value
-        DataAgent.fetchNavForSingleFund(match.fundCode);
-        result.updated = true;
-      }
-    } else if (action === 'fetchNavSingle') {
-      const fundCode = (e?.parameter?.fundCode || '').toUpperCase().trim();
-      if (!fundCode) throw new Error('fundCode required');
-      DataAgent.fetchNavForSingleFund(fundCode);
-      result.fetched = true;
-    } else if (action === 'fetchThaiMutualFunds') {
-      DataAgent.fetchThaiMutualFunds();
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
@@ -402,39 +373,8 @@ function testMonthlyTrigger() {
   onMonthlyTrigger();
 }
 
-function testFetchThaiMutualFunds() {
-  DataAgent.fetchThaiMutualFunds();
-}
-
-function testSECApi() {
-  DataAgent.testSECApi();
-}
-
-function testMatchMFFund() {
-  // Edit the fund name below to test name→code matching
-  const match = DataAgent.matchSECFundByName('KKP CorePath Balanced');
-  Logger.log('[testMatchMFFund] result: ' + JSON.stringify(match));
-}
-
-function testMatchFundName() {
-  DataAgent.testMatchFundName();
-}
-
-function testFetchNavSingle() {
-  Logger.log('[testFetchNavSingle] Fetching NAV for KKOREPATH...');
-  DataAgent.fetchNavForSingleFund('KKOREPATH');
-  Logger.log('[testFetchNavSingle] Done — check mutual_fund_nav table');
-}
-
-function testNavScrape() {
-  DataAgent.testNavScrape();
-}
-
-function testSECParams() {
-  DataAgent.testSECParams();
-}
-
 function testRealtimeAlerts() {
   const alerts = DataAgent.checkRealtimeAlerts();
   Logger.log('[testRealtimeAlerts] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
 }
+

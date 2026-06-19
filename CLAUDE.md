@@ -2,7 +2,9 @@
 
 ## What this is
 
-A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, Thai mutual funds, cash (savings/FD/FCD), insurance, private investments, and Thai bonds. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
+A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash (savings/FD/FCD), insurance, private investments, and Thai bonds. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
+
+> **Mutual Funds removed 2026-06-19** — the MF feature (page, GAS SEC/NAV code, and the `mutual_fund_*` tables) was fully removed to be rebuilt from scratch. See **"Mutual Funds — rebuild plan"** at the bottom of this file.
 
 ## Live URL
 
@@ -92,9 +94,6 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | Table | Key columns |
 |---|---|
 | `gold_holdings` | id, user_id, name, purchase_date, troy_oz, avg_cost_usd, notes |
-| `mutual_fund_holdings` | id, user_id, fund_code (nullable), fund_name, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`), units, buy_price_thb, buy_date, notes |
-| `mutual_fund_master` | fund_code PK, fund_name, fund_name_th, category, amc, sec_proj_id, scraped_at — SEC API cache |
-| `mutual_fund_nav` | id, fund_code, nav_date, nav_price — daily NAV history, UNIQUE(fund_code, nav_date) |
 | `cash_accounts` | id, user_id, name, sub_type (`saving`/`fixed_deposit`/`fcd`), bank, balance (always THB), currency, interest_rate, start/maturity_date, fcd_amount, fcd_purchase_rate |
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
 | `private_investments` | id, user_id, name, current_valuation, currency |
@@ -126,8 +125,8 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
-- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `mutual_fund_holdings`, `thai_bonds`
-- `bond_master`, `mutual_fund_master`, `mutual_fund_nav` are read-only for anon; GAS writes them via service_role
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `thai_bonds`
+- `bond_master` is read-only for anon; GAS writes it via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
 ### Migrations applied (all ✓)
@@ -143,8 +142,9 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 009  RLS FORCE + ENABLE on all tables + app_config write lockdown
 010  thai_bonds extended columns + bond_master cache table + write RLS
 011  mutual_fund_holdings: add notes, expand category CHECK (→ Onshore/Offshore/RMF/ESG/SSF),
-     create mutual_fund_master + mutual_fund_nav tables
-012  mutual_fund_holdings.fund_code: DROP NOT NULL (fund code now matched in background)
+     create mutual_fund_master + mutual_fund_nav tables  [superseded by 013]
+012  mutual_fund_holdings.fund_code: DROP NOT NULL (fund code now matched in background)  [superseded by 013]
+013  DROP mutual_fund_nav + mutual_fund_holdings + mutual_fund_master (MF feature removed, rebuild fresh)
 ```
 
 ---
@@ -187,8 +187,6 @@ Called from frontend via `callGAS(action, params)`:
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
 | `scrapeBondInfo` | DataAgent.scrapeBondInfo(bondCode) — scrapes ThaiBMA, caches in bond_master |
-| `fetchThaiMutualFunds` | DataAgent.fetchThaiMutualFunds() — fetch NAV for all held funds from SEC API |
-| `matchMFFund` | DataAgent.matchSECFundByName(fundName) — name→code match, updates holding + fetches NAV immediately. Params: `fundName`, `holdingId` |
 
 ## Market data sources (DataAgent)
 
@@ -199,51 +197,14 @@ Called from frontend via `callGAS(action, params)`:
 | SET Index | Yahoo Finance `^SET.BK` | `SET` in `market_data` |
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
-| Thai MF NAVs | SEC Open Data v2 API → finnomena.com scrape fallback | fund code in `market_data` + `mutual_fund_nav` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
 
-**SEC Open Data v2 API — confirmed behaviour (discovered 2026-06-15):**
-
-Working endpoints (base `https://api.sec.or.th`, auth header `Ocp-Apim-Subscription-Key`):
-- `GET /v2/fund/general-info/profiles` — paginated fund list, 100/page, cursor-based
-- `GET /v2/fund/daily-info/nav?proj_id={id}` — daily NAV for one fund by proj_id
-- `GET /v2/fund/factsheet/urls` — factsheet document links
-- `GET /v2/fund/general-info/specifications` — fund specs (query params TBD)
-
-**CRITICAL: no per-fund filter params exist.** All query params (`?proj_abbr_name=`, `?name=`, `?code=`, etc.) return HTTP 400. Path params return 404. The only way to look up a fund is to paginate `profiles` until you find it, then cache `proj_id`.
-
-`profiles` response shape: `{ "message":"success", "page_size":100, "next_cursor":"...", "items":[{...}] }`
-Each item: `proj_id` (string e.g. `"M0001_2558"`), `proj_abbr_name`, `proj_name_en`, `proj_name_th`, `comp_name_th`
-Next page: `GET /v2/fund/general-info/profiles?cursor={next_cursor}`
-
-**SEC Open Data MF NAV chain** (`_fetchSECNav()` in DataAgent.gs):
-1. Check `mutual_fund_master.sec_proj_id` cache for this fund
-2. If not cached → `_secFindFund(fundCode, null, apiKey)` paginates `profiles` to find `proj_id`, caches it
-3. `GET /v2/fund/daily-info/nav?proj_id={proj_id}` — get NAV
-4. Fallback: `thaifundstoday.com/api/funds/{code}` JSON API (site is Next.js SPA — HTML scraping is useless)
-5. Fallback: `finnomena.com/fund/{code}` HTML scrape
-
-**MF name→code matching** (`matchSECFundByName()` in DataAgent.gs):
-- Called after user saves a new fund holding (via `matchMFFund` GAS action)
-- Calls `_secFindFund(null, fundName, apiKey)` — paginates `profiles`, matches by `proj_name_en` contains search term
-- On match: caches in `mutual_fund_master`, updates `mutual_fund_holdings.fund_code`, calls `fetchNavForSingleFund()` immediately
-
-**`_secFindFund(fundCode, fundName, apiKey)`** in DataAgent.gs:
-- Paginates up to 60 pages (6 000 funds)
-- Matches exact `proj_abbr_name` (code lookup) or `proj_name_en` contains (name lookup)
-- Returns the item object or null
+> Thai Mutual Fund NAV fetching (SEC Open Data API + scrapers) was removed 2026-06-19. See **"Mutual Funds — rebuild plan"** at the bottom for prior findings and the fresh-start design.
 
 **Gold price chain** (`_fetchGoldSpotPrice()` in DataAgent.gs): each source logs its HTTP code + raw body to the GAS execution log for diagnosis. Yahoo Finance forex symbols (`XAUUSD=X`) are unreliable from GAS server IPs — equity/ETF prices (GLD) are used instead as fallback.
 
 **Standalone tests** — run from GAS IDE:
 - `testGoldPrice()`, `testBondScrape()` — existing
-- `testSECApi()` — paginates profiles for KKOREPATH, fetches NAV by proj_id, logs everything
-- `testSECParams()` — discovers correct SEC API parameter format (run when debugging 400 errors)
-- `testMatchFundName()` — probes name search for 'KKP CorePath Balance'
-- `testNavScrape()` — tests thaifundstoday JSON API + finnomena scrape for KKOREPATH
-- `testFetchNavSingle()` — runs full `fetchNavForSingleFund('KKOREPATH')` and checks DB
-- `testFetchThaiMutualFunds()` — full NAV fetch + upsert for all held funds
-- `testMatchMFFund()` — name→code match for a hardcoded fund name
 
 ---
 
@@ -270,14 +231,6 @@ _cashSelectedBank   // bank code in cash modal
 _cashType           // 'saving' | 'fixed_deposit' | 'fcd'
 _cashFdStatus       // 'active' | 'matured'
 _goldEditId         // gold modal: null = add, uuid = edit
-_mfListData         // computed MF holdings array (with currentNav, plPct, etc.)
-_mfEditId           // MF modal: null = add, uuid = edit
-_mfSortKey          // 'value_desc' | 'value_asc' | 'pl_desc' | 'name_asc'
-_mfExpandedId       // ID of currently expanded MF card (null = all collapsed)
-_mfCategory         // selected category in MF modal
-_mfInputMethod      // 'baht' | 'units' | 'manual'
-_mfLinkId           // holding being linked in link modal
-_mfLinkName         // fund name for the link modal
 _bondEditId         // bond modal: null = add, uuid = edit
 _bondInputMethod    // 'baht' | 'units' | 'manual'
 _bondListData       // cached bond array for list/sort/search
@@ -296,7 +249,6 @@ dashboard     Home — net worth, Me/Combined toggle, donut, asset cards
 us            US Portfolio — combined metric cards, tab per portfolio, holdings table
 gold          Gold — metric cards, S/R bar, holdings table, add/edit modal
 cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
-mf            Mutual Funds — KKP-style cards, hero summary, sort dropdown, expand/collapse details
 insurance     Insurance policies
 private       Private investments
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
@@ -310,7 +262,7 @@ partner       Partner view (no nav entry; navigate('partner') directly)
 
 Nav highlight logic:
 - `nav-analysis` → analysis, monthly, weekly, allportfolio, dca
-- `nav-more` → gold, mf, insurance, private, **bonds**
+- `nav-more` → gold, insurance, private, **bonds**
 - `nav-cash` → cash
 - others → `nav-${page}`
 
@@ -318,7 +270,7 @@ Nav highlight logic:
 
 ### Home dashboard
 - `loadDashboard()` — parallel fetch both users, renders hero + user cards + donut + asset grid
-- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD, otherUSD }`
+- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD, otherUSD }`
 - `switchDonutMode('me'|'combined')` — re-renders donut from `_dbCache` without re-fetching
 - `_renderAssetSummary(segments, totalUSD)` — 2-column card grid below donut
 
@@ -340,25 +292,8 @@ Nav highlight logic:
 - FCD: `balance = fcd_amount × fcd_purchase_rate`
 
 ### Asset hub (More page)
-- `loadMore()` — fetches live THB values for all 5 asset types in parallel, renders each row as: icon + name | ฿value + % of subtotal | ›
-- % is share of the five-asset subtotal (gold + insurance + private + MF + bonds), not total portfolio
-
-### Mutual Funds
-- `loadMutualFunds()` — fetches holdings, batch-fetches NAV from `mutual_fund_nav` (linked funds only, skips null fund_code to avoid PostgREST `.in([null])` crash), falls back to `market_data`, renders hero + sort + cards
-- `_loadMutualFundsInner(el)` — inner implementation wrapped by try-catch; DB error surfaced as toast
-- `_renderMFHero(latestDate)` — total value + P/L hero card with decimal split display
-- `_renderMFList()` — sorts `_mfListData`, renders KKP-style expandable cards
-- Card shows: category badge, 🟢/🟡 NAV status badge, 1D change badge (linked only), fund name bold, fund code mono subtitle, current value, P/L arrow + % + THB
-- `toggleMFExpand(id)` — expand/collapse detail section (cost value, units, market price, cost/unit, fund code, profile/link button)
-- `setMFSort(key)` — re-sorts without re-fetching
-- `_mfCatStyle(cat)` — returns inline CSS for category badge colour (Onshore=blue, Offshore=orange, RMF=purple, ESG=green, SSF=amber)
-- `openAddMF()` / `openEditMF(id)` / `closeMFModal()` / `saveMF()` / `deleteMF(id)` / `_deleteMFFromModal()`
-- `saveMF()`: validates fund name (required) + category + cost/unit + units; inserts WITHOUT fund_code; shows success toast; calls `_triggerMFNameMatch()` in background
-- `_triggerMFNameMatch(holdingId, fundName)` — calls GAS `matchMFFund`; on match refreshes list to show green badge
-- `openMFLinkModal(id, name)` / `closeMFLinkModal()` — link modal for unlinked funds
-- `autoMatchMFFund()` — calls GAS `matchMFFund`, closes modal + refreshes on success
-- `manualLinkMFFund()` — writes fund_code directly to DB, triggers `fetchThaiMutualFunds` GAS action
-- **`mutual_fund_holdings.buy_date` is used for sort order** — table has no `created_at` column
+- `loadMore()` — fetches live THB values for all 4 asset types in parallel, renders each row as: icon + name | ฿value + % of subtotal | ›
+- % is share of the four-asset subtotal (gold + insurance + private + bonds), not total portfolio
 
 ### Thai Bonds
 - `loadBonds()` — fetches holdings, renders KPI cards → donut dashboard → 90d alert → bond list
@@ -428,21 +363,6 @@ Project-specific how-to guides in `skills/`:
 - `deploy-gas.md` — updating GAS files, redeploying web app, trigger management
 - `supabase-migration.md` — migration template, RLS boilerplate, checklist, PIN-auth caveat
 
-## CSS additions (2026-06-15 session)
-
-MF-specific classes:
-- `.mf-hero` / `.mf-hero-header` / `.mf-hero-lbl` / `.mf-hero-ts` / `.mf-hero-total` / `.mf-hero-dec` / `.mf-hero-pl` — hero summary card
-- `.mf-sort-select` — pill-style sort dropdown (SVG chevron via background-image)
-- `.mf-fund-card` / `.mf-card-head` / `.mf-card-left` / `.mf-card-right` / `.mf-card-badges` — fund card layout
-- `.mf-cat-badge` — category colour pill (inline style from `_mfCatStyle()`)
-- `.mf-card-code` / `.mf-card-name` / `.mf-card-value` / `.mf-card-pl` / `.mf-card-chevron` — card typography
-- `.mf-card-detail` / `.mf-detail-row` / `.mf-detail-lbl` / `.mf-detail-val` / `.mf-detail-actions` — expandable section
-- `.mf-profile-btn` — "View fund profile →" / "Link fund code →" button
-- `.mf-cat-pill` / `.mf-cat-pill.active` — category pills in add/edit modal
-- `.mf-nav-badge.linked` (green) / `.mf-nav-badge.unlinked` (orange, tappable) — NAV link status
-
----
-
 ## What's NOT implemented (schema exists, no UI)
 
 - Crypto holdings (`crypto_holdings` table)
@@ -451,18 +371,42 @@ MF-specific classes:
 
 ---
 
-## What's left to do (Mutual Fund page)
+## Mutual Funds — rebuild plan (fresh start, drafted 2026-06-19)
 
-### Needs verification / testing (as of 2026-06-15)
-- **`testSECParams()`** — run to confirm `nav?proj_id=` returns a valid NAV response for KKOREPATH. If it does, Bug 1 is fully solved. Log the raw response to confirm field name (`last_val` or similar).
-- **`testFetchNavSingle()`** — run after `testSECParams()` succeeds; confirms NAV writes to `mutual_fund_nav` and value shows in app.
-- **`testMatchMFFund()`** — run with 'KKP CorePath Balance' to confirm `_secFindFund` paginates and finds KKOREPATH (Bug 2).
-- **Daily 8 AM trigger** — after GAS is redeployed, verify NAV rows appear in `mutual_fund_nav` the next morning. First run for each fund will paginate profiles (slow); subsequent runs use cached `proj_id` (fast).
+The previous MF implementation was removed because two things kept breaking:
+1. **Keying in a new fund threw errors.** Saving a holding was coupled to an external NAV/code lookup. If the SEC API call failed, returned 400, or the fund wasn't found, the save flow surfaced the error. PostgREST also crashed on `.in([null])` when a holding had no `fund_code`.
+2. **NAV fetching never worked reliably.** The SEC Open Data v2 API has **no per-fund filter** — finding one fund meant paginating all ~11 500 funds via `?next_cursor=`. The real target fund (KKOREPATH / KKP CorePath Balanced) was not even present in the API, and every scraper fallback (thaifundstoday, finnomena, Morningstar, KKP site) was client-rendered, 404, or IP-blocked from GAS.
 
-### Known gaps
-- **`_secFindFund` is slow on first run** — paginates up to 60 pages (6 000 funds) to find a fund by code or name. After the first successful match, `proj_id` is cached in `mutual_fund_master` and subsequent calls go directly to `nav?proj_id=`. No fix needed; acceptable for one-time cost.
-- **`mutual_fund_holdings` has no `created_at` column** — list is ordered by `buy_date` instead. Future migration 013 should add `created_at timestamptz DEFAULT now()`.
-- **1-day change requires 2 consecutive days of NAV data** — the badge won't appear until the daily trigger has run on two separate days.
-- **Background name match only fires on new adds** — editing an existing unlinked holding does not re-trigger the SEC search. User must tap the 🟡 badge to link manually.
-- **NAV on home dashboard / loadMore** — still reads from `market_data` via `getLatestPrice()`. Accurate only after GAS daily run. Intentional for backwards-compat.
-- **Partner view** — reads `mutual_fund_holdings` and uses `getLatestPrice()`. Works but won't show 1-day change. Acceptable for now.
+### Core principle for the rebuild
+**Adding a holding must never call an external API and must never block on NAV.** Saving a fund = a pure DB insert of what the user typed. NAV is a *separate, optional, never-fatal* layer. This alone eliminates the "error when I key in a new fund" class of bugs.
+
+### Recommended approach: manual-NAV-first, automation optional
+Treat MF like the bond/private pages — the user owns the numbers; automation is a convenience that can fail silently.
+
+**Phase 1 — holdings + manual NAV (no external calls, ships clean)**
+1. **Migration 014** — recreate tables, simpler than before:
+   - `mutual_fund_holdings`: `id, user_id, fund_name NOT NULL, category, units, avg_cost_thb, current_nav_thb (nullable), nav_updated_at (nullable), buy_date, notes, created_at timestamptz DEFAULT now()`. **No `fund_code` requirement.** Add the `created_at` column this time.
+   - Skip `mutual_fund_master` / `mutual_fund_nav` entirely for Phase 1 — store the latest NAV directly on the holding (`current_nav_thb`). Add a history table only if a 1-day-change badge is actually wanted later.
+   - RLS: anon read + anon insert/update/delete (same pattern as `thai_bonds`).
+2. **MF page + modal** — add/edit/delete a fund: name, category, units, avg cost, and an editable **Current NAV (THB)** field the user can type. Value = `units × current_nav_thb`. P/L = vs `units × avg_cost_thb`.
+3. **Wire back into dashboard/asset-hub** — re-add `mfUSD` to `calcUserData()`, the home donut (`_seg`), the "Other" card, `loadMore()`, and partner view. (Search this file's git history for the removed lines — they show exactly where each `mfUSD`/`mfTHB` line went.)
+4. Result: fully working MF tracking with zero error surface, because nothing leaves the browser except Supabase writes.
+
+**Phase 2 — optional automated NAV refresh (additive, never blocks saves)**
+- Add a single GAS action `refreshMFNav` run by the daily trigger and a manual "Refresh NAV" button. It updates `current_nav_thb` + `nav_updated_at` and **swallows all errors** (logs only) — a failed refresh never affects the holding or the UI.
+- **Pick the NAV source deliberately before coding.** Validate it with a throwaay `UrlFetchApp` test in the GAS IDE first — confirm it returns JSON (not client-rendered HTML) and isn't IP-blocked from Google's servers. Candidates, in rough order of reliability:
+  1. **SEC Open Data v2** `GET /v2/fund/daily-info/nav?proj_id={id}` — works *only* if the fund exists in SEC and you have its `proj_id`. Have the **user paste the SEC `proj_id` once** (store on the holding) instead of paginating 11 500 funds to discover it. Confirm the held funds are actually in SEC first.
+  2. **AMC / settrade / wealthmagik JSON endpoints** — check whether the specific AMCs (e.g. KKP) expose a JSON NAV endpoint.
+  3. **Manual only** — if no reliable source exists for a given fund, leave it manual. That's an acceptable end state, not a failure.
+- Do **not** reintroduce: blind pagination of the whole SEC catalogue, name→code fuzzy matching, or HTML scraping of Next.js client-rendered pages. Those were the unreliable parts.
+
+### Hard rules carried over from the failure
+- `getLatestPrice()` / any `.in(...)` PostgREST query must filter out null ids **before** the call.
+- The "Add Fund" button must never `await` a GAS call. Save first, return to the list, *then* (optionally) kick a fire-and-forget refresh.
+- Every external fetch in GAS uses `muteHttpExceptions: true` and is wrapped so it can only log, never throw into a user path.
+
+### Deploy steps when implementing
+1. Run migration 014 in Supabase SQL editor (save the file to `supabase/migrations/` first).
+2. Build the page following `skills/add-asset-page.md`.
+3. If doing Phase 2, paste updated GAS into the Apps Script IDE and redeploy the Web App (see `skills/deploy-gas.md`).
+4. Bump `sw.js` cache version.

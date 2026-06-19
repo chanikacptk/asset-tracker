@@ -87,18 +87,8 @@ CREATE TABLE IF NOT EXISTS gold_holdings (
 -- ============================================================
 -- THAI MUTUAL FUNDS
 -- ============================================================
-
-CREATE TABLE IF NOT EXISTS mutual_fund_holdings (
-  id           uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  fund_code    text NOT NULL,
-  fund_name    text,
-  category     text NOT NULL CHECK (category IN ('RMF', 'ESG', 'other')),
-  units        numeric(18, 6) NOT NULL DEFAULT 0,
-  buy_price_thb numeric(12, 4) NOT NULL DEFAULT 0,
-  buy_date     date,
-  UNIQUE (user_id, fund_code)
-);
+-- Removed 2026-06-19 (migration 013): mutual fund feature dropped to be
+-- rebuilt from scratch. Tables will be reintroduced by a future migration.
 
 -- ============================================================
 -- CASH
@@ -275,7 +265,6 @@ ALTER TABLE holdings             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE watchlist            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE crypto_holdings      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gold_holdings        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE mutual_fund_holdings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cash_accounts        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insurance_policies   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private_investments  ENABLE ROW LEVEL SECURITY;
@@ -298,7 +287,6 @@ CREATE POLICY "anon_read_all" ON holdings         FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON watchlist        FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON crypto_holdings  FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON gold_holdings    FOR SELECT USING (true);
-CREATE POLICY "anon_read_all" ON mutual_fund_holdings FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON cash_accounts    FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON insurance_policies   FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON private_investments  FOR SELECT USING (true);
