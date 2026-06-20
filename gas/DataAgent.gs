@@ -638,8 +638,11 @@ const DataAgent = (() => {
         return [];
       }
       const j = JSON.parse(body);
-      // Response root may be an array, or wrapped in { data: [...] }
-      const items = Array.isArray(j) ? j : (Array.isArray(j.data) ? j.data : [j]);
+      // SEC v2 wraps rows in { message, page_size, next_cursor, items: [...] }
+      const items = Array.isArray(j) ? j
+                  : Array.isArray(j.items) ? j.items
+                  : Array.isArray(j.data)  ? j.data
+                  : [j];
       return items.filter(x => x && x.last_val != null);
     } catch (e) {
       Logger.log('[MF NAV] ' + projId + ' fetch/parse error: ' + e.message);
@@ -795,7 +798,10 @@ function testSingleFundNAV() {
 
     if (code === 200) {
       const j = JSON.parse(body);
-      const items = Array.isArray(j) ? j : (Array.isArray(j.data) ? j.data : [j]);
+      const items = Array.isArray(j) ? j
+                  : Array.isArray(j.items) ? j.items
+                  : Array.isArray(j.data)  ? j.data
+                  : [j];
       items.forEach(it => Logger.log('   → class="' + it.fund_class_name + '"  nav_date=' +
         it.nav_date + '  last_val=' + it.last_val));
     }
