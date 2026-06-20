@@ -435,7 +435,11 @@ body {
   <div id="page-mf" class="page">
     <div class="top-bar">
       <div class="page-title">Mutual Funds</div>
-      <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="mf-refresh-btn" onclick="refreshMFNav()" title="Refresh NAV from SEC"
+          style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
+        <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      </div>
     </div>
     <div style="height:12px"></div>
     <div id="mf-hero-wrap" style="display:none;margin-bottom:12px">
@@ -582,6 +586,22 @@ body {
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Current NAV (THB / unit) <span style="font-weight:400;text-transform:none">(optional)</span></div>
     <input id="mf-current-nav" type="text" inputmode="numeric" placeholder="e.g. 11.2500" oninput="_numInputFmt(this)"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:16px">
+
+    <!-- SEC proj_id (optional — enables daily auto-refresh) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">SEC proj_id <span style="font-weight:400;text-transform:none">(optional — enables auto NAV refresh)</span></div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input id="mf-sec-proj-id" type="text" placeholder="e.g. M0209_2554"
+        style="flex:1;min-width:0;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'JetBrains Mono',monospace">
+      <button id="mf-class-lookup-btn" onclick="lookupMFClasses()"
+        style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Find classes</button>
+    </div>
+    <div id="mf-class-status" style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Find it by searching the fund at secopendata.sec.or.th and copying the proj_id. Leave blank to keep NAV manual.</div>
+
+    <!-- Fund class (required for auto-refresh when proj_id has multiple classes) -->
+    <select id="mf-class-select" onchange="_onMFClassSelect(this.value)"
+      style="display:none;width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:8px"></select>
+    <input id="mf-sec-class-name" type="text" placeholder="Exact fund class name (for auto-refresh)"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;margin-bottom:16px">
 
     <!-- Notes (collapsible) -->
     <div style="margin-bottom:16px">
@@ -3211,7 +3231,7 @@ async function loadMutualFunds() {
 
 async function _loadMutualFundsInner(el) {
   const { data: holdings, error: hErr } = await sb.from('mutual_fund_holdings')
-    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_updated_at, buy_date, notes')
+    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_updated_at, sec_proj_id, sec_fund_class_name, buy_date, notes')
     .eq('user_id', state.userId)
     .order('created_at', { ascending: false });
 
@@ -3234,7 +3254,10 @@ async function _loadMutualFundsInner(el) {
     const currentValue = hasNav ? units * currentNav : costValue;
     const plThb        = hasNav ? currentValue - costValue : 0;
     const plPct        = (hasNav && costValue > 0) ? (plThb / costValue) * 100 : 0;
-    return { ...h, units, costPerUnit, hasNav, currentNav, costValue, currentValue, plThb, plPct };
+    // Auto-NAV = linked to SEC (has proj_id) AND refreshed within 48h
+    const freshNav     = h.nav_updated_at && (Date.now() - new Date(h.nav_updated_at).getTime()) < 48 * 3600 * 1000;
+    const isAuto       = !!h.sec_proj_id && freshNav;
+    return { ...h, units, costPerUnit, hasNav, currentNav, costValue, currentValue, plThb, plPct, isAuto };
   });
 
   // Last-updated = most recent nav_updated_at across holdings
@@ -3299,9 +3322,9 @@ function _renderMFList() {
       ? `<span class="mf-cat-badge" style="${_mfCatStyle(h.category)}">${h.category}</span>`
       : '';
 
-    const navBadge = h.hasNav
-      ? `<span class="mf-nav-badge set">🟢 NAV set</span>`
-      : `<span class="mf-nav-badge unset">🟡 NAV not set</span>`;
+    const navBadge = h.isAuto
+      ? `<span class="mf-nav-badge set">🟢 Auto NAV</span>`
+      : `<span class="mf-nav-badge unset">🟡 Manual NAV</span>`;
 
     const plLine = h.hasNav
       ? `<div class="mf-card-pl" style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</div>`
@@ -3364,9 +3387,14 @@ function _mfCatStyle(cat) {
 // ── MF CRUD ────────────────────────────────────────────────────────────────────
 
 function _mfModalReset() {
-  ['mf-fund-name','mf-cost-per-unit','mf-purchase-date','mf-current-nav',
+  ['mf-fund-name','mf-cost-per-unit','mf-purchase-date','mf-current-nav','mf-sec-proj-id','mf-sec-class-name',
    'mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const classSel = document.getElementById('mf-class-select');
+  classSel.style.display = 'none'; classSel.innerHTML = '';
+  document.getElementById('mf-class-status').textContent =
+    'Find it by searching the fund at secopendata.sec.or.th and copying the proj_id. Leave blank to keep NAV manual.';
+  document.getElementById('mf-class-status').style.color = 'var(--text-muted)';
   document.getElementById('mf-modal-error').textContent = '';
   document.getElementById('mf-calc-result').textContent = '—';
   document.getElementById('mf-calc-result').style.color = 'var(--text-muted)';
@@ -3415,6 +3443,8 @@ async function openEditMF(id) {
     Number(h.avg_cost_thb) > 0 ? Number(h.avg_cost_thb).toLocaleString('en-US') : '';
   document.getElementById('mf-current-nav').value =
     Number(h.current_nav_thb) > 0 ? Number(h.current_nav_thb).toLocaleString('en-US') : '';
+  document.getElementById('mf-sec-proj-id').value = h.sec_proj_id || '';
+  document.getElementById('mf-sec-class-name').value = h.sec_fund_class_name || '';
 
   if (h.notes) {
     document.getElementById('mf-notes').value = h.notes;
@@ -3512,6 +3542,8 @@ async function saveMF() {
   const costPerUnit  = _parseNum(document.getElementById('mf-cost-per-unit').value);
   const purchaseDate = document.getElementById('mf-purchase-date').value || null;
   const currentNav   = _parseNum(document.getElementById('mf-current-nav').value);
+  const secProjId    = document.getElementById('mf-sec-proj-id').value.trim() || null;
+  const secClassName = document.getElementById('mf-sec-class-name').value.trim() || null;
   const notes        = document.getElementById('mf-notes').value.trim() || null;
 
   if (!fundName)          { _err('Fund name is required.'); return; }
@@ -3542,7 +3574,9 @@ async function saveMF() {
     avg_cost_thb:    costPerUnit,
     current_nav_thb: currentNav > 0 ? currentNav : null,
     nav_updated_at:  currentNav > 0 ? new Date().toISOString() : null,
-    buy_date:        purchaseDate,
+    sec_proj_id:         secProjId,
+    sec_fund_class_name: secClassName,
+    buy_date:            purchaseDate,
     notes
   };
 
@@ -3611,6 +3645,59 @@ async function saveMFNav() {
 
   closeMFNavModal();
   showToast('NAV updated');
+  await loadMutualFunds();
+}
+
+// ── MF SEC auto-NAV (Phase 2) ──────────────────────────────────────────────────
+
+// Look up the fund classes for a pasted proj_id so the user picks the exact one.
+async function lookupMFClasses() {
+  const projId = document.getElementById('mf-sec-proj-id').value.trim();
+  const statusEl = document.getElementById('mf-class-status');
+  const selEl    = document.getElementById('mf-class-select');
+  const btn      = document.getElementById('mf-class-lookup-btn');
+  if (!projId) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'Enter a proj_id first.'; return; }
+
+  statusEl.style.color = 'var(--text-muted)';
+  statusEl.textContent = 'Searching SEC…';
+  btn.disabled = true;
+  const res = await callGAS('mfLookupClasses', { projId });
+  btn.disabled = false;
+
+  if (!res || !res.ok) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Lookup failed — you can still type the class name manually.'; return; }
+  const classes = res.classes || [];
+  if (!classes.length) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'No NAV classes found for this proj_id.'; selEl.style.display = 'none'; return; }
+
+  selEl.innerHTML = '<option value="">— pick the class you hold —</option>' +
+    classes.map(c => `<option value="${(c.fund_class_name || '').replace(/"/g,'&quot;')}">${c.fund_class_name} — ฿${Number(c.last_val).toFixed(4)} (${c.nav_date || ''})</option>`).join('');
+  selEl.style.display = 'block';
+
+  if (classes.length === 1) {
+    document.getElementById('mf-sec-class-name').value = classes[0].fund_class_name || '';
+    selEl.value = classes[0].fund_class_name || '';
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = '✓ 1 class found (฿' + Number(classes[0].last_val).toFixed(4) + ') — linked.';
+  } else {
+    statusEl.style.color = 'var(--text)';
+    statusEl.textContent = classes.length + ' classes found — pick the one you hold.';
+  }
+}
+
+function _onMFClassSelect(val) {
+  if (val) document.getElementById('mf-sec-class-name').value = val;
+}
+
+// Manual "Refresh NAV" — fire the same GAS job the daily trigger runs.
+async function refreshMFNav() {
+  const btn = document.getElementById('mf-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳'; }
+  const res = await callGAS('refreshMFNav');
+  if (res && res.ok && res.mf) {
+    showToast(`NAV refresh: ${res.mf.updated} updated, ${res.mf.skipped} skipped`);
+  } else if (res && res.ok) {
+    showToast('NAV refresh complete');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '↻'; }
   await loadMutualFunds();
 }
 

@@ -607,7 +607,140 @@ const DataAgent = (() => {
     return info;
   }
 
-  return { fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels, fetchGoldPrice, scrapeBondInfo };
+  // ── Mutual Fund NAV (SEC Open Data v2) ──────────────────────────────────────
+  // Phase 2: optional, additive, NEVER throws into a user path. A failed refresh
+  // logs and skips — it never clears or overwrites a manually-entered NAV.
+
+  const SEC_NAV_URL = 'https://api.sec.or.th/v2/fund/daily-info/nav';
+
+  /**
+   * Fetch raw NAV rows for a proj_id over a date window.
+   * Returns an array of items: { proj_id, fund_class_name, nav_date, last_val, sell_price, buy_price }.
+   * Returns [] on any error/non-200 (never throws).
+   */
+  function _fetchSecNav(projId, startDate, endDate) {
+    const key = Config.SEC_API_KEY();
+    if (!key) { Logger.log('[MF NAV] SEC_API_KEY not set — skipping'); return []; }
+    const url = SEC_NAV_URL +
+      '?proj_id=' + encodeURIComponent(projId) +
+      '&start_nav_date=' + startDate +
+      '&end_nav_date=' + endDate;
+    try {
+      const r = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' },
+        muteHttpExceptions: true
+      });
+      const code = r.getResponseCode();
+      const body = r.getContentText() || '';
+      if (code !== 200) {
+        Logger.log('[MF NAV] ' + projId + ' HTTP ' + code + ': ' + body.substring(0, 200));
+        return [];
+      }
+      const j = JSON.parse(body);
+      // Response root may be an array, or wrapped in { data: [...] }
+      const items = Array.isArray(j) ? j : (Array.isArray(j.data) ? j.data : [j]);
+      return items.filter(x => x && x.last_val != null);
+    } catch (e) {
+      Logger.log('[MF NAV] ' + projId + ' fetch/parse error: ' + e.message);
+      return [];
+    }
+  }
+
+  /** yyyy-MM-dd in Bangkok, offset days back from today (0 = today). */
+  function _bkkDate(daysBack) {
+    const d = new Date();
+    d.setDate(d.getDate() - (daysBack || 0));
+    return Utilities.formatDate(d, 'Asia/Bangkok', 'yyyy-MM-dd');
+  }
+
+  /**
+   * Look up the available fund classes + latest NAV for a proj_id.
+   * Used by the "Find classes" UI so the user can pick the exact class they hold.
+   * Returns [{ fund_class_name, last_val, nav_date }] (one per class, latest date). Never throws.
+   */
+  function lookupMFClasses(projId) {
+    if (!projId) return [];
+    const items = _fetchSecNav(projId, _bkkDate(10), _bkkDate(0));
+    const byClass = {};
+    items.forEach(it => {
+      const name = it.fund_class_name || '';
+      if (!byClass[name] || (it.nav_date || '') > (byClass[name].nav_date || '')) {
+        byClass[name] = { fund_class_name: name, last_val: it.last_val, nav_date: it.nav_date };
+      }
+    });
+    return Object.keys(byClass).map(k => byClass[k]);
+  }
+
+  /**
+   * Daily refresh: for every holding with a sec_proj_id, fetch the latest NAV and
+   * update current_nav_thb + nav_updated_at. Errors per-holding are logged & skipped;
+   * a holding's existing (manual) NAV is left untouched on any failure/no-match.
+   * Returns { checked, updated, skipped }.
+   */
+  function refreshMFNav() {
+    let holdings = [];
+    try {
+      holdings = supabaseRequest('GET',
+        'mutual_fund_holdings?sec_proj_id=not.is.null' +
+        '&select=id,fund_name,sec_proj_id,sec_fund_class_name') || [];
+    } catch (e) {
+      Logger.log('[MF NAV] could not load holdings: ' + e.message);
+      return { checked: 0, updated: 0, skipped: 0 };
+    }
+
+    Logger.log('[MF NAV] refresh start — ' + holdings.length + ' holding(s) with proj_id');
+    let updated = 0, skipped = 0;
+    // Query a small window so we still get the latest published NAV across weekends/holidays.
+    const start = _bkkDate(7), end = _bkkDate(0);
+
+    holdings.forEach(h => {
+      try {
+        const items = _fetchSecNav(h.sec_proj_id, start, end);
+        if (!items.length) { Logger.log('[MF NAV] ' + h.fund_name + ': no rows'); skipped++; return; }
+
+        // Match the exact class the user holds. If none stored and only one class exists, use it.
+        let candidates = items;
+        if (h.sec_fund_class_name) {
+          candidates = items.filter(it => (it.fund_class_name || '') === h.sec_fund_class_name);
+        } else {
+          const classes = {}; items.forEach(it => classes[it.fund_class_name || ''] = true);
+          if (Object.keys(classes).length > 1) {
+            Logger.log('[MF NAV] ' + h.fund_name + ': multiple classes, no class stored — skipping (ambiguous)');
+            skipped++; return;
+          }
+        }
+        if (!candidates.length) {
+          Logger.log('[MF NAV] ' + h.fund_name + ': class "' + h.sec_fund_class_name + '" not in response — skipping');
+          skipped++; return;
+        }
+
+        // Pick the most recent nav_date among matches.
+        candidates.sort((a, b) => (b.nav_date || '').localeCompare(a.nav_date || ''));
+        const nav = Number(candidates[0].last_val);
+        if (!(nav > 0)) { Logger.log('[MF NAV] ' + h.fund_name + ': invalid last_val — skipping'); skipped++; return; }
+
+        supabaseRequest('PATCH', 'mutual_fund_holdings?id=eq.' + h.id, {
+          current_nav_thb: nav,
+          nav_updated_at:  new Date().toISOString()
+        });
+        Logger.log('[MF NAV] ' + h.fund_name + ' → ' + nav + ' THB (' + candidates[0].nav_date + ')');
+        updated++;
+      } catch (e) {
+        // Never throw — a bad row must not abort the rest or touch the manual value.
+        Logger.log('[MF NAV] ' + (h.fund_name || h.id) + ' error: ' + e.message);
+        skipped++;
+      }
+    });
+
+    Logger.log('[MF NAV] refresh done — updated ' + updated + ', skipped ' + skipped);
+    return { checked: holdings.length, updated: updated, skipped: skipped };
+  }
+
+  return {
+    fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels,
+    fetchGoldPrice, scrapeBondInfo, refreshMFNav, lookupMFClasses
+  };
 })();
 
 // ── Standalone test runners only defined here (all others live in Code.gs) ────
@@ -620,4 +753,53 @@ function testGoldPrice()  {
 function testBondScrape() {
   const result = DataAgent.scrapeBondInfo('SCB276A');
   Logger.log('[testBondScrape] result: ' + JSON.stringify(result));
+}
+
+/**
+ * testSingleFundNAV — confirmed SEC Open Data v2 NAV call (KKP CorePath Balanced).
+ *
+ * GET https://api.sec.or.th/v2/fund/daily-info/nav
+ *     ?proj_id=M0209_2554&start_nav_date=…&end_nav_date=…
+ * Header: Ocp-Apim-Subscription-Key. Logs status + body + parsed per-class NAV
+ * (last_val). Note: one proj_id returns several fund_class_name variants — the
+ * refresh job matches the exact class the user holds.
+ *
+ * Run from the GAS IDE → select testSingleFundNAV → Run → View → Logs.
+ */
+function testSingleFundNAV() {
+  const PROJ_ID = 'M0209_2554';            // KKP CorePath Balanced
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testSingleFundNAV] proj_id=' + PROJ_ID +
+    '  SEC_API_KEY: ' + (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING — set it in Script Properties'));
+  if (!KEY) return;
+
+  // Last 10 days so we always capture a published NAV (weekends/holidays have none).
+  const end   = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+  const d0    = new Date(); d0.setDate(d0.getDate() - 10);
+  const start = Utilities.formatDate(d0, 'Asia/Bangkok', 'yyyy-MM-dd');
+  const url = 'https://api.sec.or.th/v2/fund/daily-info/nav' +
+    '?proj_id=' + encodeURIComponent(PROJ_ID) +
+    '&start_nav_date=' + start + '&end_nav_date=' + end;
+
+  try {
+    const r = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' },
+      muteHttpExceptions: true
+    });
+    const code = r.getResponseCode();
+    const body = r.getContentText() || '';
+    Logger.log('GET ' + url);
+    Logger.log('HTTP ' + code);
+    Logger.log('BODY: ' + (body.length > 2000 ? body.substring(0, 2000) + ' …[truncated]' : body));
+
+    if (code === 200) {
+      const j = JSON.parse(body);
+      const items = Array.isArray(j) ? j : (Array.isArray(j.data) ? j.data : [j]);
+      items.forEach(it => Logger.log('   → class="' + it.fund_class_name + '"  nav_date=' +
+        it.nav_date + '  last_val=' + it.last_val));
+    }
+  } catch (e) {
+    Logger.log('[testSingleFundNAV] EXCEPTION: ' + e.message);
+  }
 }

@@ -260,6 +260,8 @@ CREATE TABLE IF NOT EXISTS mutual_fund_holdings (
   avg_cost_thb    numeric(14, 4) NOT NULL DEFAULT 0,   -- cost per unit (THB)
   current_nav_thb numeric(14, 4),                       -- latest NAV per unit (THB), manual; nullable
   nav_updated_at  timestamptz,
+  sec_proj_id         text,                             -- SEC Open Data proj_id (optional) — enables daily NAV refresh
+  sec_fund_class_name text,                             -- exact SEC fund_class_name to match (one proj_id has many classes)
   buy_date        date,
   notes           text,
   created_at      timestamptz NOT NULL DEFAULT now()

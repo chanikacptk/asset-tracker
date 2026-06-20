@@ -22,7 +22,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v44`) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v46`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -98,7 +98,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
 | `private_investments` | id, user_id, name, current_valuation, currency |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
-| `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable, manual)*, nav_updated_at *(nullable)*, buy_date, notes, created_at — Phase 1: manual NAV only, no external fetch |
+| `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable, manual)*, nav_updated_at *(nullable)*, sec_proj_id *(nullable)*, sec_fund_class_name *(nullable — exact SEC class to match; one proj_id has many classes)*, buy_date, notes, created_at — Phase 1: manual NAV; Phase 2: optional SEC daily auto-refresh |
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
 | `bond_master` | bond_code PK, bond_name, issuer, credit_rating, coupon_rate, coupon_type, issued_date, maturity_date, scraped_at — ThaiBMA scrape cache |
 
@@ -130,7 +130,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 - `bond_master` is read-only for anon; GAS writes it via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
-### Migrations applied (001–013 ✓; **014 pending — run in Supabase SQL editor**)
+### Migrations applied (001–013 ✓; **014 + 015 pending — run in Supabase SQL editor**)
 ```
 001  app_config table
 002  users.avatar + name
@@ -147,6 +147,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 012  mutual_fund_holdings.fund_code: DROP NOT NULL (fund code now matched in background)  [superseded by 013]
 013  DROP mutual_fund_nav + mutual_fund_holdings + mutual_fund_master (MF feature removed, rebuild fresh)
 014  mutual_fund_holdings recreated (Phase 1): insert-only, manual current_nav_thb, anon RW RLS
+015  mutual_fund_holdings.sec_proj_id + sec_fund_class_name (Phase 2): optional SEC link for daily NAV refresh
 ```
 
 ---
@@ -170,6 +171,7 @@ Files are copy-pasted into Apps Script IDE — not auto-deployed from this repo.
 **Run `setupTriggers()` once** from GAS IDE:
 - Daily @ 8AM → `onDailyTrigger` (weekdays: fetch → analyze → news → notify; monthly on day 1; weekly on Monday)
 - Every 5 min → `onRealtimeTrigger` (crypto/gold ±5%, S/R proximity ±1%)
+- Daily @ 8PM → `onMFNavTrigger` (mutual-fund NAV refresh; `atHour(20)` uses project TZ — set it to **Asia/Bangkok**)
 
 ## GAS web app actions
 
@@ -189,6 +191,8 @@ Called from frontend via `callGAS(action, params)`:
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
 | `scrapeBondInfo` | DataAgent.scrapeBondInfo(bondCode) — scrapes ThaiBMA, caches in bond_master |
+| `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with `sec_proj_id`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV |
+| `mfLookupClasses` | DataAgent.lookupMFClasses(projId) — returns `[{fund_class_name, last_val, nav_date}]` for the "Find classes" picker |
 
 ## Market data sources (DataAgent)
 
@@ -200,6 +204,7 @@ Called from frontend via `callGAS(action, params)`:
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
+| Mutual fund NAV | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); `last_val` = NAV/unit, matched on exact `fund_class_name` | `current_nav_thb` on `mutual_fund_holdings` |
 
 > Thai Mutual Fund NAV fetching (SEC Open Data API + scrapers) was removed 2026-06-19. See **"Mutual Funds — rebuild plan"** at the bottom for prior findings and the fresh-start design.
 
@@ -207,6 +212,7 @@ Called from frontend via `callGAS(action, params)`:
 
 **Standalone tests** — run from GAS IDE:
 - `testGoldPrice()`, `testBondScrape()` — existing
+- `testSingleFundNAV()` — Phase 2 spike: calls SEC Fund Daily Info API for one fund (proj_id `M0209_2554`), logs raw status+body, surfaces parsed `last_val` NAV. Run before building the daily refresh job.
 
 ---
 
@@ -296,6 +302,7 @@ Nav highlight logic:
 - Modal: Buy/Sell type toggle (Sell reserved for future tx history — saving still records a holding), free-text fund name with local `<datalist>` autocomplete (NOT an API call), category pills (Onshore/Offshore/RMF/ESG/SSF/Other), 3 input methods (Total Baht / Total Units / Manual) reusing `_numInputFmt`/`_parseNum`, optional Current NAV, collapsible notes.
 - `openAddMF()` / `openEditMF(id)` / `saveMF()` / `deleteMF(id)` / `_deleteMFFromModal()` — `saveMF()` is a pure DB insert/update; **never awaits a GAS/external call**.
 - `openMFNavModal(id, name)` / `saveMFNav()` — "Update NAV" button edits `current_nav_thb` + `nav_updated_at` only.
+- **Phase 2 (SEC auto-NAV)**: modal has optional `sec_proj_id` + `sec_fund_class_name`; "Find classes" → `lookupMFClasses()` calls GAS `mfLookupClasses`, populates a class dropdown (`_onMFClassSelect`). Top-bar ↻ → `refreshMFNav()` calls GAS `refreshMFNav` then reloads. Badge: 🟢 **Auto NAV** when `sec_proj_id` set AND `nav_updated_at` < 48h old, else 🟡 **Manual NAV** (`isAuto` on each row).
 - Globals: `_mfListData`, `_mfEditId`, `_mfSortKey`, `_mfExpandedId`, `_mfCategory`, `_mfInputMethod`, `_mfType`, `_mfNavId`.
 
 ### Cash
@@ -360,7 +367,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v44`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v46`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
@@ -406,7 +413,9 @@ Treat MF like the bond/private pages — the user owns the numbers; automation i
 3. **Wire back into dashboard/asset-hub** — re-add `mfUSD` to `calcUserData()`, the home donut (`_seg`), the "Other" card, `loadMore()`, and partner view. (Search this file's git history for the removed lines — they show exactly where each `mfUSD`/`mfTHB` line went.)
 4. Result: fully working MF tracking with zero error surface, because nothing leaves the browser except Supabase writes.
 
-**Phase 2 — optional automated NAV refresh (additive, never blocks saves)**
+**Phase 2 — optional automated NAV refresh (additive, never blocks saves) — ✅ DONE 2026-06-20**
+> Built with the **SEC Open Data v2** endpoint (validated working): `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` with `Ocp-Apim-Subscription-Key`. `last_val` is the NAV/unit. **One proj_id returns several `fund_class_name` variants** (…-ES, …-SSF) with different NAVs, so the user stores both `sec_proj_id` and the exact `sec_fund_class_name` (the modal's "Find classes" picker calls `mfLookupClasses` to list them). `refreshMFNav` (daily 8PM trigger `onMFNavTrigger` + manual ↻ button) queries a 7-day window, matches the exact class, takes the most recent `nav_date`, and PATCHes `current_nav_thb`+`nav_updated_at`. Per-holding failures log & skip — never throw, never touch a manual value. Verified ~18.11 THB for KKP CorePath Balanced (`M0209_2554`).
+
 - Add a single GAS action `refreshMFNav` run by the daily trigger and a manual "Refresh NAV" button. It updates `current_nav_thb` + `nav_updated_at` and **swallows all errors** (logs only) — a failed refresh never affects the holding or the UI.
 - **Pick the NAV source deliberately before coding.** Validate it with a throwaay `UrlFetchApp` test in the GAS IDE first — confirm it returns JSON (not client-rendered HTML) and isn't IP-blocked from Google's servers. Candidates, in rough order of reliability:
   1. **SEC Open Data v2** `GET /v2/fund/daily-info/nav?proj_id={id}` — works *only* if the fund exists in SEC and you have its `proj_id`. Have the **user paste the SEC `proj_id` once** (store on the holding) instead of paginating 11 500 funds to discover it. Confirm the held funds are actually in SEC first.

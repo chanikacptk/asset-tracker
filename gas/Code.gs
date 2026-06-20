@@ -78,6 +78,12 @@ function doGet(e) {
       const info = DataAgent.scrapeBondInfo(bondCode);
       if (!info) throw new Error('Bond not found or scrape failed — use manual input');
       result.bondInfo = info;
+    } else if (action === 'refreshMFNav') {
+      result.mf = DataAgent.refreshMFNav();
+    } else if (action === 'mfLookupClasses') {
+      const projId = (e?.parameter?.projId || '').trim();
+      if (!projId) throw new Error('projId required');
+      result.classes = DataAgent.lookupMFClasses(projId);
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
@@ -255,6 +261,16 @@ function onRealtimeTrigger() {
   }
 }
 
+// Daily mutual-fund NAV refresh (8PM Bangkok). Additive + non-fatal: refreshMFNav
+// logs & skips per-holding failures and never touches a manually-entered NAV.
+function onMFNavTrigger() {
+  try {
+    DataAgent.refreshMFNav();
+  } catch (e) {
+    Logger.log('[Orchestrator] MF NAV trigger error: ' + e.message);
+  }
+}
+
 // ── Mid-month revision check (run on 15th via daily trigger) ──────────────────
 
 function onMidMonthCheck() {
@@ -283,7 +299,15 @@ function setupTriggers() {
     .everyMinutes(5)
     .create();
 
-  Logger.log('[Orchestrator] Triggers set up: daily@8AM + every5min');
+  // Daily 8PM mutual-fund NAV refresh (atHour uses the project timezone — set it to
+  // Asia/Bangkok in Project Settings so this fires at 20:00 Bangkok).
+  ScriptApp.newTrigger('onMFNavTrigger')
+    .timeBased()
+    .everyDays(1)
+    .atHour(20)
+    .create();
+
+  Logger.log('[Orchestrator] Triggers set up: daily@8AM + every5min + mfNav@8PM');
 }
 
 // ── Supabase helpers ──────────────────────────────────────────────────────────
