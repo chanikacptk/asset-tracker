@@ -22,7 +22,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v52`) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v54`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -206,7 +206,7 @@ Called from frontend via `callGAS(action, params)`:
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
-| Mutual fund NAV | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...] }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
+| Mutual fund NAV | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...], next_cursor, page_size }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date; `_secApiItems` follows `next_cursor` pagination (≤10 pages) so all rows are fetched | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
 | Mutual fund search | SEC Open Data v2 `GET /v2/fund/general-info/profiles?fund_class_name=` — partial name matching works (e.g. "KKP CorePath" → 12 results); fields: `proj_id`, `fund_class_name`, `proj_name_en`, `comp_name_en` (AMC) | frontend display only |
 
 > Thai Mutual Fund NAV fetching (SEC Open Data API + scrapers) was removed 2026-06-19. See **"Mutual Funds — rebuild plan"** at the bottom for prior findings and the fresh-start design.
@@ -282,10 +282,10 @@ Nav highlight logic:
 ## Key functions
 
 ### Home dashboard
-- `loadDashboard()` — parallel fetch both users, renders hero + user cards + donut + asset grid
+- `loadDashboard()` — parallel fetch both users, renders hero + user cards + donut; asset summary is rendered by `_refreshDonut` (not by `loadDashboard` itself)
 - `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD, otherUSD }`
 - `switchDonutMode('me'|'combined')` — re-renders donut from `_dbCache` without re-fetching
-- `_renderAssetSummary(segments, totalUSD)` — 2-column card grid below donut
+- `_refreshDonut()` → `_renderAssetSummary(segments, totalUSD)` — 2-column card grid (`#db-port-summary`) below donut; one card per donut segment, percentages match exactly. **Note**: the old `#db-metrics` 2×2 grid (US Portfolio / Cash / Gold / Other) was removed 2026-06-20 — it was duplicate stale code.
 
 ### US Portfolio
 - `loadUSPortfolio()` — builds tabs + calls `_computeUSCombinedMetrics` and `loadPortfolioTab` in parallel
@@ -384,7 +384,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v52`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v54`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
@@ -431,12 +431,18 @@ Treat MF like the bond/private pages — the user owns the numbers; automation i
 4. Result: fully working MF tracking with zero error surface, because nothing leaves the browser except Supabase writes.
 
 **Phase 2 — optional automated NAV refresh (additive, never blocks saves) — ✅ DONE 2026-06-20**
-> Built with the **SEC Open Data v2** endpoint (validated working): `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` with `Ocp-Apim-Subscription-Key`. Response is `{ items: [...] }` (not a root array — `items` key fixed in production after confirming with live logs). `last_val` is the NAV/unit. **One proj_id returns several `fund_class_name` variants** (…-ES, …-SSF) with different NAVs, so the user stores both `sec_proj_id` and the exact `sec_fund_class_name`. `refreshMFNav` (daily 8PM trigger `onMFNavTrigger` + manual ↻ button) queries a **7-day window** (robust across weekends/holidays), matches the exact class, takes the most recent `nav_date`, and PATCHes `current_nav_thb` + `nav_date` + `nav_updated_at`. Per-holding failures log & skip — never throw, never touch a manual value. **NAV lag is fund-specific** (not just weekends): SEC publishes days after the valuation date; `nav_date` vs `nav_updated_at` makes this visible. Verified ~18.11 THB for KKP CorePath Balanced (`M0209_2554`).
+> Built with the **SEC Open Data v2** endpoint (validated working): `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` with `Ocp-Apim-Subscription-Key`. Response is `{ items: [...], next_cursor, page_size }` (not a root array — `items` key fixed in production after confirming with live logs). `last_val` is the NAV/unit. **One proj_id returns several `fund_class_name` variants** (…-ES, …-SSF) with different NAVs, so the user stores both `sec_proj_id` and the exact `sec_fund_class_name`. `refreshMFNav` (daily 8PM trigger `onMFNavTrigger` + manual ↻ button) queries a **14-day window** (covers long SEC publishing lag + Thai holidays), follows `next_cursor` pagination to get all rows, matches the exact class, takes the most recent `nav_date`, and PATCHes `current_nav_thb` + `nav_date` + `nav_updated_at`. Per-holding failures log & skip — never throw, never touch a manual value. **NAV lag is fund-specific** (not just weekends): SEC publishes days after the valuation date; `nav_date` vs `nav_updated_at` makes this visible. Verified ~18.11 THB for KKP CorePath Balanced (`M0209_2554`).
 
 **Phase 2 additions (same session) — ✅ DONE 2026-06-20**
 > **SEC fund-name search**: `lookupMFFunds(q)` hits `/v2/fund/general-info/profiles?fund_class_name=` (partial matching confirmed, e.g. "KKP CorePath" → 12 results across 4 funds × 3 classes). Fields: `proj_id`, `fund_class_name`, `proj_name_en`, `comp_name_en` (AMC — note: response has no `amc_name` field; use `comp_name_en`). In the modal, **🔍 Search SEC database** button → tappable result list → tapping auto-fills `sec_proj_id` + `sec_fund_class_name`. GAS action: `mfSearchFunds?q=`.
 > **`nav_date` column** (migration 016): stores the SEC valuation date separately from `nav_updated_at` (last-polled timestamp). Hero shows `"checked DD Mon · latest NAV DD Mon"` (newest across funds). Card badge: `🟢 Auto NAV · DD Mon`. Card detail: separate "NAV date (SEC)" + "Last checked" rows. This makes SEC publishing lag visible instead of mysterious.
 > **`inputmode="decimal"` sweep**: all 26 money/rate/unit fields now show the numeric pad with a decimal-point key on iOS/Android. `type="text"` fields kept as-is (comma formatter `_numInputFmt` breaks with `type="number"`). Integer-only duration fields left alone.
+
+**NAV staleness fixes — ✅ DONE 2026-06-20 (follow-up)**
+> Three bugs caused stale/wrong NAV display:
+> 1. **`_secApiItems` only fetched page 1** — SEC paginates with `next_cursor`; a fund with multiple classes over a 14-day window (e.g. 4 classes × 14 days = 56 rows) overflows one page and the newest rows were never seen. Fixed: `_secApiItems` now follows `next_cursor` in a loop (≤10 pages), collecting all rows before returning.
+> 2. **7-day window too narrow** — funds where SEC publishing lag exceeds 7 days returned 0 rows and were silently skipped, leaving stale NAV in the DB. Fixed: `refreshMFNav` now uses a **14-day window** (`_bkkDate(14)` → `_bkkDate(0)`).
+> 3. **`_fmtShortDate` broke on full ISO timestamps** — `nav_updated_at` is a timestamp (`"2026-06-20T08:15:00Z"`), but the helper appended `T00:00:00` unconditionally, producing an unparseable string → "Last checked" showed "Invalid Date" in the expanded card detail. Fixed: now checks `dateStr.includes('T')` before appending.
 
 - Add a single GAS action `refreshMFNav` run by the daily trigger and a manual "Refresh NAV" button. It updates `current_nav_thb` + `nav_updated_at` and **swallows all errors** (logs only) — a failed refresh never affects the holding or the UI.
 - **Pick the NAV source deliberately before coding.** Validate it with a throwaay `UrlFetchApp` test in the GAS IDE first — confirm it returns JSON (not client-rendered HTML) and isn't IP-blocked from Google's servers. Candidates, in rough order of reliability:
