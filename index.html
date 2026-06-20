@@ -3304,10 +3304,10 @@ function _renderMFHero(latestTs) {
   const tsEl = document.getElementById('mf-updated-ts');
   if (latestTs) {
     const checked = new Date(latestTs).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
-    const linkedWithDate = _mfListData.filter(h => h.sec_proj_id && h.nav_date);
-    const oldestNavDate  = linkedWithDate.map(h => h.nav_date).sort()[0] || null;
-    tsEl.textContent = oldestNavDate
-      ? 'checked ' + checked + ' · NAV as of ' + _fmtShortDate(oldestNavDate)
+    const linkedWithDate  = _mfListData.filter(h => h.sec_proj_id && h.nav_date);
+    const latestNavDate   = linkedWithDate.map(h => h.nav_date).sort().pop() || null;
+    tsEl.textContent = latestNavDate
+      ? 'checked ' + checked + ' · latest NAV ' + _fmtShortDate(latestNavDate)
       : 'checked ' + checked;
   } else {
     tsEl.textContent = 'NAV not set';
