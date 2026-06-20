@@ -700,7 +700,7 @@ const DataAgent = (() => {
         proj_id: projId,
         fund_class_name: cls,
         proj_name_en: it.proj_name_en || it.proj_name_th || '',
-        amc_name: it.amc_name || it.unique_id || ''
+        amc_name: it.comp_name_en || it.comp_name_th || ''
       });
     });
     Logger.log('[SEC] profiles "' + query + '" → ' + out.length + ' result(s)');

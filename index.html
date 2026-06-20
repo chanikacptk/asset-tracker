@@ -3728,7 +3728,7 @@ async function searchMFFunds() {
   statusEl.style.color = 'var(--text)';
   statusEl.textContent = _mfSearchResults.length + ' match(es) — tap the one you hold:';
   resEl.innerHTML = _mfSearchResults.map((f, i) => {
-    const sub = [f.proj_name_en, f.amc_name].filter(Boolean).join(' · ');
+    const sub = f.amc_name || '';
     return `<div class="mf-search-row" onclick="_pickMFFund(${i})">
       <div class="mf-search-row-name">${f.fund_class_name || '(unnamed class)'}</div>
       <div class="mf-search-row-sub"><span class="mf-search-row-pid">${f.proj_id}</span>${sub ? ' · ' + sub : ''}</div>
