@@ -335,9 +335,6 @@ body {
     <!-- Asset summary cards -->
     <div id="db-port-summary" style="display:none;margin-bottom:14px"></div>
 
-    <!-- 2×2 category cards -->
-    <div class="g2x" id="db-metrics" style="margin-bottom:14px"></div>
-
     <!-- Rate date -->
     <div id="db-rate-date" style="font-size:10px;color:var(--text-muted);text-align:center;padding-bottom:4px"></div>
   </div>
@@ -2015,24 +2012,6 @@ async function loadDashboard() {
   _syncDonutToggleUI();
   _refreshDonut();
 
-  // 2×2 category cards (combined, respects currency toggle)
-  const safeDiv = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—';
-  const addUSD = key => (myData[key] || 0) + (partnerData[key] || 0);
-  const combUsPort = myData.portfolios.reduce((s, p) => s + p.valueUSD, 0)
-                   + partnerData.portfolios.reduce((s, p) => s + p.valueUSD, 0);
-  const otherUSD = addUSD('mfUSD') + addUSD('privateUSD') + addUSD('insuranceUSD') + addUSD('cryptoUSD');
-  const cards = [
-    { label: 'US Portfolio', val: fmtVal(combUsPort),           sub: safeDiv(combUsPort, combUSD),           dot: '#3b82f6', nav: 'us'   },
-    { label: 'Cash',         val: fmtVal(addUSD('cashUSD')),    sub: safeDiv(addUSD('cashUSD'), combUSD),    dot: '#06b6d4', nav: 'cash' },
-    { label: 'Gold',         val: fmtVal(addUSD('goldUSD')),    sub: safeDiv(addUSD('goldUSD'), combUSD),    dot: '#fbbf24', nav: ''     },
-    { label: 'Other',        val: fmtVal(otherUSD),             sub: 'MF · Private · Insurance',             dot: '#94a3b8', nav: ''     },
-  ];
-  document.getElementById('db-metrics').innerHTML = cards.map(c => `
-    <div class="card2"${c.nav ? ` style="cursor:pointer" onclick="navigate('${c.nav}')"` : ''}>
-      <div class="m-lbl"><span style="color:${c.dot}">●</span> ${c.label}</div>
-      <div class="m-val">${c.val}</div>
-      <div class="m-sub">${c.sub}</div>
-    </div>`).join('');
 }
 
 function switchDonutMode(mode) {
