@@ -3245,7 +3245,7 @@ async function loadMutualFunds() {
 
 async function _loadMutualFundsInner(el) {
   const { data: holdings, error: hErr } = await sb.from('mutual_fund_holdings')
-    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_updated_at, sec_proj_id, sec_fund_class_name, buy_date, notes')
+    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_date, nav_updated_at, sec_proj_id, sec_fund_class_name, buy_date, notes')
     .eq('user_id', state.userId)
     .order('created_at', { ascending: false });
 
@@ -3274,7 +3274,7 @@ async function _loadMutualFundsInner(el) {
     return { ...h, units, costPerUnit, hasNav, currentNav, costValue, currentValue, plThb, plPct, isAuto };
   });
 
-  // Last-updated = most recent nav_updated_at across holdings
+  // Most recent nav_updated_at (when we last checked SEC)
   const latestTs = _mfListData.map(h => h.nav_updated_at).filter(Boolean).sort().pop() || null;
 
   _renderMFHero(latestTs);
@@ -3300,10 +3300,15 @@ function _renderMFHero(latestTs) {
   document.getElementById('mf-hero-pl').innerHTML =
     `<span style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</span>`;
 
+  // Hero timestamp: "checked DD Mon · as of DD Mon" for linked funds, or just the check date
   const tsEl = document.getElementById('mf-updated-ts');
   if (latestTs) {
-    const d = new Date(latestTs);
-    tsEl.textContent = 'NAV updated ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const checked = new Date(latestTs).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+    const linkedWithDate = _mfListData.filter(h => h.sec_proj_id && h.nav_date);
+    const oldestNavDate  = linkedWithDate.map(h => h.nav_date).sort()[0] || null;
+    tsEl.textContent = oldestNavDate
+      ? 'checked ' + checked + ' · NAV as of ' + _fmtShortDate(oldestNavDate)
+      : 'checked ' + checked;
   } else {
     tsEl.textContent = 'NAV not set';
   }
@@ -3336,8 +3341,9 @@ function _renderMFList() {
       ? `<span class="mf-cat-badge" style="${_mfCatStyle(h.category)}">${h.category}</span>`
       : '';
 
+    const navDateStr = h.nav_date ? ' · ' + _fmtShortDate(h.nav_date) : '';
     const navBadge = h.isAuto
-      ? `<span class="mf-nav-badge set">🟢 Auto NAV</span>`
+      ? `<span class="mf-nav-badge set">🟢 Auto NAV${navDateStr}</span>`
       : `<span class="mf-nav-badge unset">🟡 Manual NAV</span>`;
 
     const plLine = h.hasNav
@@ -3350,6 +3356,8 @@ function _renderMFList() {
         <div class="mf-detail-row"><span class="mf-detail-lbl">Units held</span><span class="mf-detail-val">${h.units.toFixed(4)} Unit</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Cost / Unit</span><span class="mf-detail-val">${h.costPerUnit > 0 ? h.costPerUnit.toFixed(4) : '—'} THB</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Current NAV</span><span class="mf-detail-val">${h.hasNav ? h.currentNav.toFixed(4) : '—'} THB</span></div>
+        ${h.nav_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">NAV date (SEC)</span><span class="mf-detail-val">${_fmtShortDate(h.nav_date)}</span></div>` : ''}
+        ${h.nav_updated_at ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Last checked</span><span class="mf-detail-val">${_fmtShortDate(h.nav_updated_at)}</span></div>` : ''}
         ${h.buy_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Purchase date</span><span class="mf-detail-val">${_fmtShortDate(h.buy_date)}</span></div>` : ''}
         ${h.notes ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Notes</span><span class="mf-detail-val" style="max-width:60%;text-align:right">${h.notes}</span></div>` : ''}
         <div class="mf-detail-actions">

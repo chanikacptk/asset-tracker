@@ -757,7 +757,8 @@ const DataAgent = (() => {
 
         supabaseRequest('PATCH', 'mutual_fund_holdings?id=eq.' + h.id, {
           current_nav_thb: nav,
-          nav_updated_at:  new Date().toISOString()
+          nav_date:        candidates[0].nav_date || null,  // SEC valuation date
+          nav_updated_at:  new Date().toISOString()         // when we last fetched
         });
         Logger.log('[MF NAV] ' + h.fund_name + ' → ' + nav + ' THB (' + candidates[0].nav_date + ')');
         updated++;
