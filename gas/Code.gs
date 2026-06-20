@@ -84,6 +84,10 @@ function doGet(e) {
       const projId = (e?.parameter?.projId || '').trim();
       if (!projId) throw new Error('projId required');
       result.classes = DataAgent.lookupMFClasses(projId);
+    } else if (action === 'mfSearchFunds') {
+      const q = (e?.parameter?.q || '').trim();
+      if (!q) throw new Error('q required');
+      result.funds = DataAgent.lookupMFFunds(q);
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {

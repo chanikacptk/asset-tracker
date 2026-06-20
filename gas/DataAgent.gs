@@ -611,20 +611,17 @@ const DataAgent = (() => {
   // Phase 2: optional, additive, NEVER throws into a user path. A failed refresh
   // logs and skips — it never clears or overwrites a manually-entered NAV.
 
-  const SEC_NAV_URL = 'https://api.sec.or.th/v2/fund/daily-info/nav';
+  const SEC_NAV_URL      = 'https://api.sec.or.th/v2/fund/daily-info/nav';
+  const SEC_PROFILES_URL = 'https://api.sec.or.th/v2/fund/general-info/profiles';
 
   /**
-   * Fetch raw NAV rows for a proj_id over a date window.
-   * Returns an array of items: { proj_id, fund_class_name, nav_date, last_val, sell_price, buy_price }.
-   * Returns [] on any error/non-200 (never throws).
+   * GET a SEC Open Data v2 endpoint and return its rows.
+   * SEC v2 wraps rows in { message, page_size, next_cursor, items: [...] }.
+   * Returns [] on any missing key / non-200 / parse error (never throws).
    */
-  function _fetchSecNav(projId, startDate, endDate) {
+  function _secApiItems(url, tag) {
     const key = Config.SEC_API_KEY();
-    if (!key) { Logger.log('[MF NAV] SEC_API_KEY not set — skipping'); return []; }
-    const url = SEC_NAV_URL +
-      '?proj_id=' + encodeURIComponent(projId) +
-      '&start_nav_date=' + startDate +
-      '&end_nav_date=' + endDate;
+    if (!key) { Logger.log('[SEC] ' + tag + ': SEC_API_KEY not set — skipping'); return []; }
     try {
       const r = UrlFetchApp.fetch(url, {
         method: 'get',
@@ -633,21 +630,28 @@ const DataAgent = (() => {
       });
       const code = r.getResponseCode();
       const body = r.getContentText() || '';
-      if (code !== 200) {
-        Logger.log('[MF NAV] ' + projId + ' HTTP ' + code + ': ' + body.substring(0, 200));
-        return [];
-      }
+      if (code !== 200) { Logger.log('[SEC] ' + tag + ' HTTP ' + code + ': ' + body.substring(0, 200)); return []; }
       const j = JSON.parse(body);
-      // SEC v2 wraps rows in { message, page_size, next_cursor, items: [...] }
-      const items = Array.isArray(j) ? j
-                  : Array.isArray(j.items) ? j.items
-                  : Array.isArray(j.data)  ? j.data
-                  : [j];
-      return items.filter(x => x && x.last_val != null);
+      return Array.isArray(j) ? j
+           : Array.isArray(j.items) ? j.items
+           : Array.isArray(j.data)  ? j.data
+           : [j];
     } catch (e) {
-      Logger.log('[MF NAV] ' + projId + ' fetch/parse error: ' + e.message);
+      Logger.log('[SEC] ' + tag + ' fetch/parse error: ' + e.message);
       return [];
     }
+  }
+
+  /**
+   * Fetch raw NAV rows for a proj_id over a date window.
+   * Returns items: { proj_id, fund_class_name, nav_date, last_val, ... }. Never throws.
+   */
+  function _fetchSecNav(projId, startDate, endDate) {
+    const url = SEC_NAV_URL +
+      '?proj_id=' + encodeURIComponent(projId) +
+      '&start_nav_date=' + startDate +
+      '&end_nav_date=' + endDate;
+    return _secApiItems(url, 'nav ' + projId).filter(x => x && x.last_val != null);
   }
 
   /** yyyy-MM-dd in Bangkok, offset days back from today (0 = today). */
@@ -673,6 +677,34 @@ const DataAgent = (() => {
       }
     });
     return Object.keys(byClass).map(k => byClass[k]);
+  }
+
+  /**
+   * Search SEC fund profiles by (partial) fund name so the user can find a fund's
+   * proj_id without digging through the API docs. Returns de-duplicated results:
+   * [{ proj_id, fund_class_name, proj_name_en, amc_name }]. Never throws.
+   */
+  function lookupMFFunds(query) {
+    if (!query) return [];
+    const url = SEC_PROFILES_URL + '?fund_class_name=' + encodeURIComponent(query);
+    const items = _secApiItems(url, 'profiles "' + query + '"');
+    const seen = {}, out = [];
+    items.forEach(it => {
+      const projId = it.proj_id;
+      if (!projId) return;
+      const cls = it.fund_class_name || it.proj_abbr_name || it.proj_name_en || '';
+      const k = projId + '|' + cls;
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push({
+        proj_id: projId,
+        fund_class_name: cls,
+        proj_name_en: it.proj_name_en || it.proj_name_th || '',
+        amc_name: it.amc_name || it.unique_id || ''
+      });
+    });
+    Logger.log('[SEC] profiles "' + query + '" → ' + out.length + ' result(s)');
+    return out.slice(0, 30);
   }
 
   /**
@@ -742,7 +774,7 @@ const DataAgent = (() => {
 
   return {
     fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels,
-    fetchGoldPrice, scrapeBondInfo, refreshMFNav, lookupMFClasses
+    fetchGoldPrice, scrapeBondInfo, refreshMFNav, lookupMFClasses, lookupMFFunds
   };
 })();
 
@@ -808,4 +840,34 @@ function testSingleFundNAV() {
   } catch (e) {
     Logger.log('[testSingleFundNAV] EXCEPTION: ' + e.message);
   }
+}
+
+/**
+ * testSearchMFFunds — validate the SEC fund-name search (general-info/profiles).
+ * Logs the raw response body (to confirm field names) + the mapped results.
+ * Run from the GAS IDE → select testSearchMFFunds → Run → View → Logs.
+ */
+function testSearchMFFunds() {
+  const QUERY = 'KKP CorePath';
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testSearchMFFunds] query="' + QUERY + '"  SEC_API_KEY: ' +
+    (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING'));
+  if (!KEY) return;
+
+  const url = 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=' + encodeURIComponent(QUERY);
+  try {
+    const r = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' },
+      muteHttpExceptions: true
+    });
+    Logger.log('GET ' + url);
+    Logger.log('HTTP ' + r.getResponseCode());
+    const body = r.getContentText() || '';
+    Logger.log('RAW BODY: ' + (body.length > 2500 ? body.substring(0, 2500) + ' …[truncated]' : body));
+  } catch (e) {
+    Logger.log('[testSearchMFFunds] raw fetch EXCEPTION: ' + e.message);
+  }
+
+  Logger.log('MAPPED: ' + JSON.stringify(DataAgent.lookupMFFunds(QUERY), null, 2));
 }
