@@ -250,6 +250,21 @@ CREATE TABLE IF NOT EXISTS thai_bonds (
   purchase_price_thb numeric(14, 2) NOT NULL DEFAULT 0
 );
 
+-- Mutual fund holdings (Phase 1: manual NAV, no external fetch) — see migration 014
+CREATE TABLE IF NOT EXISTS mutual_fund_holdings (
+  id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  fund_name       text NOT NULL,
+  category        text CHECK (category IN ('Onshore','Offshore','RMF','ESG','SSF','Other')),
+  units           numeric(18, 4) NOT NULL DEFAULT 0,
+  avg_cost_thb    numeric(14, 4) NOT NULL DEFAULT 0,   -- cost per unit (THB)
+  current_nav_thb numeric(14, 4),                       -- latest NAV per unit (THB), manual; nullable
+  nav_updated_at  timestamptz,
+  buy_date        date,
+  notes           text,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
@@ -277,6 +292,7 @@ ALTER TABLE dca_plan_items       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news_items           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications_log    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE thai_bonds           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mutual_fund_holdings ENABLE ROW LEVEL SECURITY;
 
 -- Allow anon/authenticated roles to read all rows (app enforces user_id filtering)
 -- GAS uses service role (bypasses RLS) for all writes
@@ -299,6 +315,7 @@ CREATE POLICY "anon_read_all" ON dca_plan_items   FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON news_items       FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON notifications_log FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON thai_bonds       FOR SELECT USING (true);
+CREATE POLICY "anon_read_all" ON mutual_fund_holdings FOR SELECT USING (true);
 
 -- Frontend writes (anon key): only own DCA plan approvals and valuation updates
 -- Everything else written by GAS (service role, bypasses RLS)
@@ -310,3 +327,10 @@ CREATE POLICY "anon_update_private_investments" ON private_investments
 
 CREATE POLICY "anon_update_cash_accounts" ON cash_accounts
   FOR UPDATE USING (true) WITH CHECK (true);
+
+CREATE POLICY "anon_insert_mutual_fund_holdings" ON mutual_fund_holdings
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "anon_update_mutual_fund_holdings" ON mutual_fund_holdings
+  FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "anon_delete_mutual_fund_holdings" ON mutual_fund_holdings
+  FOR DELETE USING (true);

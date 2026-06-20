@@ -390,6 +390,12 @@ body {
         <div id="more-val-private" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
         <span class="more-arrow">›</span>
       </div>
+      <div class="more-row" onclick="navigate('mf')">
+        <span class="more-icon">📂</span>
+        <div style="flex:1;min-width:0"><div class="more-label">Mutual Funds</div></div>
+        <div id="more-val-mf" class="more-val-slot"><div class="more-val-num" style="color:var(--text-muted)">—</div></div>
+        <span class="more-arrow">›</span>
+      </div>
       <div class="more-row" onclick="navigate('bonds')">
         <span class="more-icon">📜</span>
         <div style="flex:1;min-width:0"><div class="more-label">Thai Bonds</div></div>
@@ -423,6 +429,191 @@ body {
       <div class="card2" id="gold-sr-card" style="padding:12px 16px"></div>
     </div>
     <div id="gold-content"></div>
+  </div>
+
+  <!-- MUTUAL FUNDS -->
+  <div id="page-mf" class="page">
+    <div class="top-bar">
+      <div class="page-title">Mutual Funds</div>
+      <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+    </div>
+    <div style="height:12px"></div>
+    <div id="mf-hero-wrap" style="display:none;margin-bottom:12px">
+      <div class="mf-hero">
+        <div class="mf-hero-header">
+          <span class="mf-hero-lbl">Current Value</span>
+          <span id="mf-updated-ts" class="mf-hero-ts">—</span>
+        </div>
+        <div id="mf-hero-total" class="mf-hero-total">—</div>
+        <div id="mf-hero-pl" class="mf-hero-pl">—</div>
+      </div>
+    </div>
+    <div id="mf-sort-wrap" style="display:none;margin-bottom:14px">
+      <select id="mf-sort-select" class="mf-sort-select" onchange="setMFSort(this.value)">
+        <option value="value_desc">Total value: High → Low</option>
+        <option value="value_asc">Total value: Low → High</option>
+        <option value="pl_desc">P/L %: High → Low</option>
+        <option value="name_asc">Fund name: A → Z</option>
+      </select>
+    </div>
+    <div id="mf-content"></div>
+  </div>
+
+  <!-- Static fund-name autocomplete (local, NOT a live API call) -->
+  <datalist id="mf-fund-name-list">
+    <option value="KKP CorePath Balanced"></option>
+    <option value="KKP GNP RMF-H"></option>
+    <option value="KKP PGE-H"></option>
+    <option value="K Global Equity Fund"></option>
+    <option value="K China A Shares Equity Fund"></option>
+    <option value="K-USA Equity Fund"></option>
+    <option value="K Positive Change Equity Fund"></option>
+    <option value="SCB US Equity (SCBS&P500)"></option>
+    <option value="SCB Global Healthcare"></option>
+    <option value="SCB Dividend Stock Open End Fund"></option>
+    <option value="TMBGQG TMB Global Quality Growth"></option>
+    <option value="ONE-UGG-RA One Ultimate Global Growth"></option>
+    <option value="B-INNOTECH Bualuang Global Innovation and Technology"></option>
+    <option value="Bualuang Top-Ten Fund"></option>
+    <option value="ASP-USTECH Asset Plus US Technology"></option>
+    <option value="KFGBRAND-A Krungsri Global Brands Equity"></option>
+    <option value="KFHHCARE-A Krungsri Healthcare Hub"></option>
+    <option value="UGIS-N United Global Income Strategy"></option>
+    <option value="TISCO US Equity Fund"></option>
+    <option value="Principal Global Equity ESG Fund"></option>
+  </datalist>
+
+  <!-- MF MODAL -->
+  <div id="mf-modal-overlay" onclick="closeMFModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+  <div id="mf-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:94dvh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700" id="mf-modal-title">Add Holding</div>
+      <button onclick="closeMFModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+
+    <!-- Type: Buy / Sell (Sell reserved for future transaction history) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Type</div>
+    <div style="display:flex;gap:6px;margin-bottom:16px">
+      <button class="modal-type-btn active" id="mf-type-buy" onclick="_setMFType('buy',this)">Buy</button>
+      <button class="modal-type-btn" id="mf-type-sell" onclick="_setMFType('sell',this)">Sell</button>
+    </div>
+
+    <!-- Fund Name (free text + local autocomplete) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund Name</div>
+    <input id="mf-fund-name" type="text" list="mf-fund-name-list" autocomplete="off" placeholder="Search or type, e.g. KKP CorePath Balanced"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:16px">
+
+    <!-- Category -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Category</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      <button class="mf-cat-pill active" onclick="_setMFCat('Onshore',this)">Onshore</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('Offshore',this)">Offshore</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('RMF',this)">RMF</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('ESG',this)">ESG</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('SSF',this)">SSF</button>
+      <button class="mf-cat-pill" onclick="_setMFCat('Other',this)">Other</button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0 16px"></div>
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">Purchase Details</div>
+
+    <!-- Investment method -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Investment Method</div>
+    <div style="display:flex;gap:6px;margin-bottom:16px">
+      <button class="modal-type-btn active" onclick="_setMFInputMethod('baht',this)">Total Baht</button>
+      <button class="modal-type-btn" onclick="_setMFInputMethod('units',this)">Total Units</button>
+      <button class="modal-type-btn" onclick="_setMFInputMethod('manual',this)">Manual</button>
+    </div>
+
+    <!-- Total Baht input -->
+    <div id="mf-input-baht">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Amount (THB)</div>
+      <input id="mf-total-baht" type="text" inputmode="numeric" placeholder="e.g. 100,000"
+        oninput="_numInputFmt(this);_calcMFFromBaht()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+    </div>
+
+    <!-- Total Units input -->
+    <div id="mf-input-units" style="display:none">
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
+      <input id="mf-total-units-input" type="text" inputmode="numeric" placeholder="e.g. 10,000.0000"
+        oninput="_numInputFmt(this);_calcMFFromUnits()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+    </div>
+
+    <!-- Manual input -->
+    <div id="mf-input-manual" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total Units</div>
+          <input id="mf-manual-units" type="text" inputmode="numeric" placeholder="e.g. 10,000" oninput="_numInputFmt(this)"
+            style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Total (THB)</div>
+          <input id="mf-manual-baht" type="text" inputmode="numeric" placeholder="e.g. 100,000" oninput="_numInputFmt(this)"
+            style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+        </div>
+      </div>
+    </div>
+
+    <!-- Calculated result display -->
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:var(--radius-sm);padding:11px 14px;margin-bottom:14px">
+      <span style="font-size:12px;color:var(--text-muted)">Units · Total Cost</span>
+      <span id="mf-calc-result" style="font-size:15px;font-weight:700;color:var(--text-muted)">—</span>
+    </div>
+
+    <!-- Cost/Unit + Purchase date -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Cost/Unit (THB)</div>
+        <input id="mf-cost-per-unit" type="text" inputmode="numeric" placeholder="e.g. 10.5500"
+          oninput="_numInputFmt(this);_calcMFFromBaht();_calcMFFromUnits()"
+          style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Purchase Date</div>
+        <input id="mf-purchase-date" type="date"
+          style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
+      </div>
+    </div>
+
+    <!-- Current NAV (manual, optional) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Current NAV (THB / unit) <span style="font-weight:400;text-transform:none">(optional)</span></div>
+    <input id="mf-current-nav" type="text" inputmode="numeric" placeholder="e.g. 11.2500" oninput="_numInputFmt(this)"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:16px">
+
+    <!-- Notes (collapsible) -->
+    <div style="margin-bottom:16px">
+      <a id="mf-notes-toggle" onclick="_toggleMFNotes()" style="font-size:13px;color:var(--accent);cursor:pointer;font-weight:600">+ Add note</a>
+      <div id="mf-notes-wrap" style="display:none;margin-top:8px">
+        <input id="mf-notes" type="text" placeholder="e.g. Monthly DCA"
+          style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
+      </div>
+    </div>
+
+    <div id="mf-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary" id="mf-modal-save-btn" onclick="saveMF()">Add Holding</button>
+    <div style="height:12px"></div>
+    <button id="mf-delete-btn" onclick="_deleteMFFromModal()"
+      style="display:none;width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--danger);background:transparent;color:var(--danger);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
+      Delete this holding
+    </button>
+  </div>
+
+  <!-- MF UPDATE-NAV MODAL (manual, no API call) -->
+  <div id="mf-nav-overlay" onclick="closeMFNavModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:302;backdrop-filter:blur(3px)"></div>
+  <div id="mf-nav-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:303;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(28px + var(--safe-bottom))">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="font-size:16px;font-weight:700">Update NAV</div>
+      <button onclick="closeMFNavModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div id="mf-nav-fname" style="font-size:13px;color:var(--text-muted);margin-bottom:16px"></div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Current NAV (THB / unit)</div>
+    <input id="mf-nav-input" type="text" inputmode="numeric" placeholder="e.g. 11.2500" oninput="_numInputFmt(this)"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px">
+    <div id="mf-nav-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary" onclick="saveMFNav()">Save NAV</button>
   </div>
 
   <!-- CASH -->
@@ -1175,6 +1366,97 @@ html.dark .bond-coupon-row { background:rgba(22,163,74,0.1);border-color:rgba(22
 }
 html.dark .bond-maturing-card { background:rgba(217,119,6,0.12); }
 
+/* ── Mutual Fund Page ─────────────────────────────────────────────────────── */
+.mf-hero {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 18px 16px;
+}
+.mf-hero-header {
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;
+}
+.mf-hero-lbl {
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.6px;
+}
+.mf-hero-ts { font-size:11px;color:var(--text-muted); }
+.mf-hero-total {
+  font-size:34px;font-weight:800;letter-spacing:-.5px;line-height:1.1;margin-bottom:8px;
+}
+.mf-hero-dec { font-size:22px;font-weight:700; }
+.mf-hero-pl { font-size:14px;font-weight:600; }
+
+.mf-sort-select {
+  -webkit-appearance:none;appearance:none;
+  border:1px solid var(--border);border-radius:20px;
+  padding:9px 36px 9px 16px;color:var(--text);
+  background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;outline:none;
+}
+html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+
+.mf-fund-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;margin-bottom:10px;
+}
+.mf-card-head {
+  display:flex;align-items:flex-start;justify-content:space-between;
+  cursor:pointer;gap:12px;user-select:none;
+}
+.mf-card-left { flex:1;min-width:0; }
+.mf-card-badges { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:7px; }
+.mf-cat-badge {
+  display:inline-block;padding:3px 10px;border-radius:12px;
+  font-size:11px;font-weight:700;letter-spacing:.2px;
+}
+.mf-card-code { font-size:16px;font-weight:700;color:var(--text); }
+.mf-card-name { font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.4; }
+.mf-card-right { text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end; }
+.mf-card-chevron {
+  font-size:13px;color:var(--text-muted);margin-bottom:5px;
+  display:inline-block;transition:transform 0.2s;
+}
+.mf-card-chevron.open { transform:rotate(180deg); }
+.mf-card-value { font-size:17px;font-weight:700;color:var(--text);white-space:nowrap; }
+.mf-card-pl { font-size:12px;font-weight:600;margin-top:3px;white-space:nowrap; }
+
+.mf-card-detail {
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+}
+.mf-detail-row {
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:13px;padding:4px 0;
+}
+.mf-detail-lbl { color:var(--text-muted); }
+.mf-detail-val { font-weight:600;color:var(--text); }
+.mf-detail-actions { display:flex;align-items:center;gap:8px;margin-top:12px; }
+.mf-nav-btn {
+  flex:1;border:1px solid var(--border);border-radius:20px;
+  padding:9px 16px;font-size:13px;font-weight:600;color:var(--text);
+  background:transparent;cursor:pointer;font-family:inherit;
+  transition:border-color 0.15s,color 0.15s;
+}
+.mf-nav-btn:hover { border-color:var(--accent);color:var(--accent); }
+
+.mf-cat-pill {
+  padding:8px 14px;border-radius:20px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:600;
+  cursor:pointer;transition:all 0.15s;font-family:inherit;
+}
+.mf-cat-pill.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+
+/* NAV status badge on fund cards */
+.mf-nav-badge {
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:600;letter-spacing:.2px;
+  padding:2px 8px;border-radius:10px;
+}
+.mf-nav-badge.set {
+  background:rgba(22,163,74,.1);color:var(--success);border:1px solid rgba(22,163,74,.2);
+}
+.mf-nav-badge.unset {
+  background:rgba(217,119,6,.1);color:var(--warning);border:1px solid rgba(217,119,6,.25);
+}
+
 /* More page rows */
 .more-row {
   display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface);
@@ -1526,7 +1808,7 @@ async function _loadGasUrl() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 const _NAV_ANALYSIS_PAGES = new Set(['analysis','monthly','weekly','allportfolio','dca']);
-const _NAV_ASSET_PAGES    = new Set(['gold','insurance','private','bonds']);
+const _NAV_ASSET_PAGES    = new Set(['gold','mf','insurance','private','bonds']);
 
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1544,6 +1826,7 @@ async function loadPage(page) {
   else if (page === 'us')      await loadUSPortfolio();
   else if (page === 'more')    await loadMore();
   else if (page === 'gold')    await loadGold();
+  else if (page === 'mf')      await loadMutualFunds();
   else if (page === 'cash')    await loadCash();
   else if (page === 'insurance') await loadInsurance();
   else if (page === 'private') await loadPrivate();
@@ -1648,7 +1931,7 @@ async function loadDashboard() {
 
   // Fetch both users in parallel
   const empty = { totalUSD: 0, costBasisUSD: 0, gainLossUSD: 0, portfolios: [],
-                  cashUSD: 0, goldUSD: 0, privateUSD: 0, insuranceUSD: 0, bondsUSD: 0, cryptoUSD: 0, otherUSD: 0 };
+                  cashUSD: 0, goldUSD: 0, mfUSD: 0, privateUSD: 0, insuranceUSD: 0, bondsUSD: 0, cryptoUSD: 0, otherUSD: 0 };
   let partnerName = 'Partner', partnerAvatar = '😊';
   if (state.partnerId) {
     const { data: pu } = await sb.from('users').select('name, avatar').eq('id', state.partnerId).maybeSingle();
@@ -1700,12 +1983,15 @@ async function loadDashboard() {
 
   // 2×2 category cards (combined, respects currency toggle)
   const safeDiv = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '—';
-  const otherUSD = addUSD('privateUSD') + addUSD('insuranceUSD') + addUSD('cryptoUSD');
+  const addUSD = key => (myData[key] || 0) + (partnerData[key] || 0);
+  const combUsPort = myData.portfolios.reduce((s, p) => s + p.valueUSD, 0)
+                   + partnerData.portfolios.reduce((s, p) => s + p.valueUSD, 0);
+  const otherUSD = addUSD('mfUSD') + addUSD('privateUSD') + addUSD('insuranceUSD') + addUSD('cryptoUSD');
   const cards = [
     { label: 'US Portfolio', val: fmtVal(combUsPort),           sub: safeDiv(combUsPort, combUSD),           dot: '#3b82f6', nav: 'us'   },
     { label: 'Cash',         val: fmtVal(addUSD('cashUSD')),    sub: safeDiv(addUSD('cashUSD'), combUSD),    dot: '#06b6d4', nav: 'cash' },
     { label: 'Gold',         val: fmtVal(addUSD('goldUSD')),    sub: safeDiv(addUSD('goldUSD'), combUSD),    dot: '#fbbf24', nav: ''     },
-    { label: 'Other',        val: fmtVal(otherUSD),             sub: 'Private · Insurance',                  dot: '#94a3b8', nav: ''     },
+    { label: 'Other',        val: fmtVal(otherUSD),             sub: 'MF · Private · Insurance',             dot: '#94a3b8', nav: ''     },
   ];
   document.getElementById('db-metrics').innerHTML = cards.map(c => `
     <div class="card2"${c.nav ? ` style="cursor:pointer" onclick="navigate('${c.nav}')"` : ''}>
@@ -1741,6 +2027,7 @@ function _refreshDonut() {
     { label: 'US Portfolio', value: d.portfolios.reduce((s, p) => s + p.valueUSD, 0), color: '#3b82f6' },
     { label: 'Cash',         value: d.cashUSD,      color: '#06b6d4' },
     { label: 'Gold',         value: d.goldUSD,      color: '#fbbf24' },
+    { label: 'Mutual Fund',  value: d.mfUSD || 0,   color: '#a855f7' },
     { label: 'Bonds',        value: d.bondsUSD || 0, color: '#10b981' },
     { label: 'Crypto',       value: d.cryptoUSD,    color: '#f97316' },
     { label: 'Insurance',    value: d.insuranceUSD, color: '#ec4899' },
@@ -1752,12 +2039,13 @@ function _refreshDonut() {
     _renderHomeDonut('db-donut', 'db-legend', segs, my.totalUSD);
     _renderAssetSummary(segs, my.totalUSD);
   } else {
-    const empty = { portfolios: [], cashUSD: 0, goldUSD: 0, cryptoUSD: 0, insuranceUSD: 0, privateUSD: 0, bondsUSD: 0 };
+    const empty = { portfolios: [], cashUSD: 0, goldUSD: 0, mfUSD: 0, cryptoUSD: 0, insuranceUSD: 0, privateUSD: 0, bondsUSD: 0 };
     const p = prt || empty;
     const combined = {
       portfolios: [...my.portfolios, ...p.portfolios],
       cashUSD:      my.cashUSD      + (p.cashUSD      || 0),
       goldUSD:      my.goldUSD      + (p.goldUSD      || 0),
+      mfUSD:        (my.mfUSD || 0) + (p.mfUSD        || 0),
       bondsUSD:     (my.bondsUSD || 0) + (p.bondsUSD  || 0),
       cryptoUSD:    my.cryptoUSD    + (p.cryptoUSD    || 0),
       insuranceUSD: my.insuranceUSD + (p.insuranceUSD || 0),
@@ -2091,18 +2379,26 @@ async function calcUserData(userId) {
   }
   const usValue = portList.reduce((s, p) => s + p.valueUSD, 0);
 
-  const [gold, cash, priv, insur, bonds] = await Promise.all([
+  const [gold, mf, cash, priv, insur, bonds] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
+    sb.from('mutual_fund_holdings').select('units, avg_cost_thb, current_nav_thb').eq('user_id', userId),
     sb.from('cash_accounts').select('sub_type, balance, cash_on_hand_thb').eq('user_id', userId),
     sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId),
     sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', userId),
     sb.from('thai_bonds').select('face_value_thb').eq('user_id', userId)
   ]);
 
-  let goldUSD = 0, privateUSD = 0, insuranceUSD = 0, bondsUSD = 0;
+  let goldUSD = 0, mfUSD = 0, privateUSD = 0, insuranceUSD = 0, bondsUSD = 0;
   if (gold.data?.length) {
     const gp = await getLatestPrice('XAU');
     gold.data.forEach(g => goldUSD += g.troy_oz * gp);
+  }
+  if (mf.data?.length) {
+    // Value uses manual NAV when set, else falls back to cost basis. No external call.
+    mf.data.forEach(f => {
+      const navThb = (Number(f.current_nav_thb) > 0 ? Number(f.current_nav_thb) : Number(f.avg_cost_thb)) || 0;
+      mfUSD += ((Number(f.units) || 0) * navThb) / state.usdThb;
+    });
   }
   if (priv.data?.length) {
     priv.data.forEach(p => {
@@ -2115,7 +2411,7 @@ async function calcUserData(userId) {
   if (bonds.data?.length) {
     bonds.data.forEach(b => bondsUSD += (b.face_value_thb || 0) / state.usdThb);
   }
-  const otherUSD = goldUSD + privateUSD + insuranceUSD + bondsUSD;
+  const otherUSD = goldUSD + mfUSD + privateUSD + insuranceUSD + bondsUSD;
 
   // Cash tracked separately for dashboard breakdown
   let cashUSD = 0;
@@ -2135,7 +2431,7 @@ async function calcUserData(userId) {
     costBasisUSD: costUS, gainLossUSD: usValue - costUS,
     portfolios: portList,
     cashUSD, cashBreakdown,
-    goldUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD: 0,
+    goldUSD, mfUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD: 0,
     otherUSD
   };
 }
@@ -2888,6 +3184,436 @@ async function deleteGold(id) {
   await loadGold();
 }
 
+// ── Mutual Funds ──────────────────────────────────────────────────────────────
+// Phase 1: insert-only holdings + manual NAV. No external API; saving never blocks.
+
+let _mfListData    = [];
+let _mfEditId      = null;
+let _mfSortKey     = 'value_desc';
+let _mfExpandedId  = null;
+let _mfCategory    = 'Onshore';
+let _mfInputMethod = 'baht';
+let _mfType        = 'buy';   // Buy/Sell toggle — Sell reserved for future transaction history
+let _mfNavId       = null;    // holding being updated via the NAV modal
+
+const _mfFmt2 = v => (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function loadMutualFunds() {
+  const el = document.getElementById('mf-content');
+  try {
+    await _loadMutualFundsInner(el);
+  } catch (e) {
+    console.error('[MF] loadMutualFunds crash:', e);
+    showToast('Error loading funds: ' + (e.message || e));
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">' + (e.message || 'Load error') + '</div></div>';
+  }
+}
+
+async function _loadMutualFundsInner(el) {
+  const { data: holdings, error: hErr } = await sb.from('mutual_fund_holdings')
+    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_updated_at, buy_date, notes')
+    .eq('user_id', state.userId)
+    .order('created_at', { ascending: false });
+
+  if (hErr) throw new Error('DB: ' + hErr.message);
+
+  if (!holdings || holdings.length === 0) {
+    document.getElementById('mf-hero-wrap').style.display = 'none';
+    document.getElementById('mf-sort-wrap').style.display = 'none';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No mutual fund holdings<br><span style="font-size:13px;color:var(--text-muted)">Tap + to add one</span></div></div>';
+    return;
+  }
+
+  _mfListData = holdings.map(h => {
+    const units       = Number(h.units)          || 0;
+    const costPerUnit = Number(h.avg_cost_thb)   || 0;
+    const hasNav      = Number(h.current_nav_thb) > 0;
+    const currentNav  = hasNav ? Number(h.current_nav_thb) : 0;
+    const costValue   = units * costPerUnit;
+    // Value falls back to cost basis when NAV not yet entered (so net worth isn't zeroed)
+    const currentValue = hasNav ? units * currentNav : costValue;
+    const plThb        = hasNav ? currentValue - costValue : 0;
+    const plPct        = (hasNav && costValue > 0) ? (plThb / costValue) * 100 : 0;
+    return { ...h, units, costPerUnit, hasNav, currentNav, costValue, currentValue, plThb, plPct };
+  });
+
+  // Last-updated = most recent nav_updated_at across holdings
+  const latestTs = _mfListData.map(h => h.nav_updated_at).filter(Boolean).sort().pop() || null;
+
+  _renderMFHero(latestTs);
+  _renderMFList();
+}
+
+function _renderMFHero(latestTs) {
+  const totalValue = _mfListData.reduce((s, h) => s + h.currentValue, 0);
+  const totalCost  = _mfListData.reduce((s, h) => s + h.costValue,   0);
+  const totalPL    = totalValue - totalCost;
+  const totalPlPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+  const totalFmt = _mfFmt2(totalValue);
+  const dotIdx   = totalFmt.lastIndexOf('.');
+  document.getElementById('mf-hero-total').innerHTML =
+    `${totalFmt.slice(0, dotIdx)}<span class="mf-hero-dec">${totalFmt.slice(dotIdx)}</span> THB`;
+
+  const plPos    = totalPL >= 0;
+  const plClr    = plPos ? 'var(--success)' : 'var(--danger)';
+  const arrow    = plPos ? '↗' : '↘';
+  const plPctStr = (plPos ? '+' : '') + totalPlPct.toFixed(2) + '%';
+  const plThbStr = (plPos ? '+' : '') + _mfFmt2(totalPL);
+  document.getElementById('mf-hero-pl').innerHTML =
+    `<span style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</span>`;
+
+  const tsEl = document.getElementById('mf-updated-ts');
+  if (latestTs) {
+    const d = new Date(latestTs);
+    tsEl.textContent = 'NAV updated ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } else {
+    tsEl.textContent = 'NAV not set';
+  }
+
+  document.getElementById('mf-hero-wrap').style.display = 'block';
+  document.getElementById('mf-sort-wrap').style.display = 'block';
+}
+
+function _renderMFList() {
+  const el = document.getElementById('mf-content');
+  if (!_mfListData.length) return;
+
+  const sorted = [..._mfListData];
+  if      (_mfSortKey === 'value_desc') sorted.sort((a, b) => b.currentValue - a.currentValue);
+  else if (_mfSortKey === 'value_asc')  sorted.sort((a, b) => a.currentValue - b.currentValue);
+  else if (_mfSortKey === 'pl_desc')    sorted.sort((a, b) => b.plPct - a.plPct);
+  else if (_mfSortKey === 'name_asc')   sorted.sort((a, b) => (a.fund_name || '').localeCompare(b.fund_name || ''));
+
+  el.innerHTML = sorted.map(h => {
+    const isExpanded = h.id === _mfExpandedId;
+    const plPos      = h.plPct >= 0;
+    const arrow      = plPos ? '↗' : '↘';
+    const plClr      = plPos ? 'var(--success)' : 'var(--danger)';
+    const plPctStr   = (plPos ? '+' : '') + Math.abs(h.plPct).toFixed(2) + '%';
+    const plThbStr   = (plPos ? '+' : '') + _mfFmt2(h.plThb);
+    const valStr     = _mfFmt2(h.currentValue);
+    const nameEsc    = (h.fund_name || '').replace(/'/g, "\\'");
+
+    const catBadge = h.category
+      ? `<span class="mf-cat-badge" style="${_mfCatStyle(h.category)}">${h.category}</span>`
+      : '';
+
+    const navBadge = h.hasNav
+      ? `<span class="mf-nav-badge set">🟢 NAV set</span>`
+      : `<span class="mf-nav-badge unset">🟡 NAV not set</span>`;
+
+    const plLine = h.hasNav
+      ? `<div class="mf-card-pl" style="color:${plClr}">${arrow} ${plPctStr} (${plThbStr} THB)</div>`
+      : `<div class="mf-card-pl" style="color:var(--text-muted)">P/L —</div>`;
+
+    const expandDetail = `
+      <div class="mf-card-detail" id="mf-detail-${h.id}" style="display:${isExpanded ? 'block' : 'none'}">
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost value</span><span class="mf-detail-val">${_mfFmt2(h.costValue)} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Units held</span><span class="mf-detail-val">${h.units.toFixed(4)} Unit</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Cost / Unit</span><span class="mf-detail-val">${h.costPerUnit > 0 ? h.costPerUnit.toFixed(4) : '—'} THB</span></div>
+        <div class="mf-detail-row"><span class="mf-detail-lbl">Current NAV</span><span class="mf-detail-val">${h.hasNav ? h.currentNav.toFixed(4) : '—'} THB</span></div>
+        ${h.buy_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Purchase date</span><span class="mf-detail-val">${_fmtShortDate(h.buy_date)}</span></div>` : ''}
+        ${h.notes ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Notes</span><span class="mf-detail-val" style="max-width:60%;text-align:right">${h.notes}</span></div>` : ''}
+        <div class="mf-detail-actions">
+          <button class="mf-nav-btn" onclick="event.stopPropagation();openMFNavModal('${h.id}','${nameEsc}')">Update NAV</button>
+          <button onclick="event.stopPropagation();openEditMF('${h.id}')" class="pt-act-btn">✏️</button>
+        </div>
+      </div>`;
+
+    return `
+    <div class="mf-fund-card">
+      <div class="mf-card-head" onclick="toggleMFExpand('${h.id}')">
+        <div class="mf-card-left">
+          <div class="mf-card-badges">${catBadge}${navBadge}</div>
+          <div class="mf-card-code" style="font-size:15px">${h.fund_name || '(unnamed)'}</div>
+        </div>
+        <div class="mf-card-right">
+          <span class="mf-card-chevron${isExpanded ? ' open' : ''}">∨</span>
+          <div class="mf-card-value">${valStr} THB</div>
+          ${plLine}
+        </div>
+      </div>
+      ${expandDetail}
+    </div>`;
+  }).join('');
+}
+
+function setMFSort(key) {
+  _mfSortKey = key;
+  _renderMFList();
+}
+
+function toggleMFExpand(id) {
+  _mfExpandedId = (_mfExpandedId === id) ? null : id;
+  _renderMFList();
+}
+
+function _mfCatStyle(cat) {
+  const map = {
+    Onshore:  'background:rgba(37,99,235,.12);color:#3b82f6;border:1px solid rgba(37,99,235,.25)',
+    Offshore: 'background:rgba(234,88,12,.12);color:#ea580c;border:1px solid rgba(234,88,12,.25)',
+    RMF:      'background:rgba(124,58,237,.12);color:#7c3aed;border:1px solid rgba(124,58,237,.25)',
+    ESG:      'background:rgba(22,163,74,.12);color:#16a34a;border:1px solid rgba(22,163,74,.25)',
+    SSF:      'background:rgba(217,119,6,.12);color:#d97706;border:1px solid rgba(217,119,6,.25)',
+    Other:    'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)',
+  };
+  return map[cat] || 'background:var(--surface2);color:var(--text-muted)';
+}
+
+// ── MF CRUD ────────────────────────────────────────────────────────────────────
+
+function _mfModalReset() {
+  ['mf-fund-name','mf-cost-per-unit','mf-purchase-date','mf-current-nav',
+   'mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('mf-modal-error').textContent = '';
+  document.getElementById('mf-calc-result').textContent = '—';
+  document.getElementById('mf-calc-result').style.color = 'var(--text-muted)';
+  document.getElementById('mf-delete-btn').style.display = 'none';
+
+  // Notes collapsed
+  document.getElementById('mf-notes-wrap').style.display = 'none';
+  document.getElementById('mf-notes-toggle').textContent = '+ Add note';
+
+  // Type → Buy
+  _mfType = 'buy';
+  document.getElementById('mf-type-buy').classList.add('active');
+  document.getElementById('mf-type-sell').classList.remove('active');
+
+  _mfCategory = 'Onshore';
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach((b, i) => b.classList.toggle('active', i === 0));
+
+  _mfInputMethod = 'baht';
+  document.getElementById('mf-input-baht').style.display   = 'block';
+  document.getElementById('mf-input-units').style.display  = 'none';
+  document.getElementById('mf-input-manual').style.display = 'none';
+  document.querySelectorAll('#mf-modal .modal-type-btn:not(#mf-type-buy):not(#mf-type-sell)')
+    .forEach((b, i) => b.classList.toggle('active', i === 0));
+}
+
+function openAddMF() {
+  _mfEditId = null;
+  _mfModalReset();
+  document.getElementById('mf-modal-title').textContent    = 'Add Holding';
+  document.getElementById('mf-modal-save-btn').textContent = 'Add Holding';
+  document.getElementById('mf-modal-overlay').style.display = 'block';
+  document.getElementById('mf-modal').style.display = 'block';
+}
+
+async function openEditMF(id) {
+  _mfEditId = id;
+  _mfModalReset();
+  const { data: h } = await sb.from('mutual_fund_holdings').select('*').eq('id', id).single();
+  if (!h) return;
+
+  document.getElementById('mf-modal-title').textContent    = 'Edit Holding';
+  document.getElementById('mf-modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('mf-fund-name').value     = h.fund_name  || '';
+  document.getElementById('mf-purchase-date').value = h.buy_date   || '';
+  document.getElementById('mf-cost-per-unit').value =
+    Number(h.avg_cost_thb) > 0 ? Number(h.avg_cost_thb).toLocaleString('en-US') : '';
+  document.getElementById('mf-current-nav').value =
+    Number(h.current_nav_thb) > 0 ? Number(h.current_nav_thb).toLocaleString('en-US') : '';
+
+  if (h.notes) {
+    document.getElementById('mf-notes').value = h.notes;
+    document.getElementById('mf-notes-wrap').style.display = 'block';
+    document.getElementById('mf-notes-toggle').textContent = '− Hide note';
+  }
+
+  _mfCategory = h.category || 'Onshore';
+  const cats  = ['Onshore','Offshore','RMF','ESG','SSF','Other'];
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach((b, i) =>
+    b.classList.toggle('active', cats[i] === _mfCategory));
+
+  // Switch to manual so existing units + total cost are visible
+  _setMFInputMethod('manual', document.querySelectorAll('#mf-modal .modal-type-btn')[4]);
+  const totalCost = (Number(h.units) || 0) * (Number(h.avg_cost_thb) || 0);
+  document.getElementById('mf-manual-units').value = h.units ? Number(h.units).toLocaleString('en-US') : '';
+  document.getElementById('mf-manual-baht').value  = totalCost > 0 ? totalCost.toLocaleString('en-US') : '';
+  _updateMFCalcDisplay(Number(h.units) || 0, totalCost);
+
+  document.getElementById('mf-delete-btn').style.display = 'block';
+  document.getElementById('mf-modal-overlay').style.display = 'block';
+  document.getElementById('mf-modal').style.display = 'block';
+}
+
+function closeMFModal() {
+  document.getElementById('mf-modal-overlay').style.display = 'none';
+  document.getElementById('mf-modal').style.display = 'none';
+}
+
+function _setMFType(type, btn) {
+  _mfType = type;
+  document.getElementById('mf-type-buy').classList.toggle('active', type === 'buy');
+  document.getElementById('mf-type-sell').classList.toggle('active', type === 'sell');
+  // Sell tracking arrives with transaction history (Phase 2); saving still records a holding.
+  if (type === 'sell') showToast('Sell tracking is coming soon — saving records a holding for now');
+}
+
+function _setMFCat(cat, btn) {
+  _mfCategory = cat;
+  document.querySelectorAll('#mf-modal .mf-cat-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function _setMFInputMethod(method, btn) {
+  _mfInputMethod = method;
+  document.getElementById('mf-input-baht').style.display   = method === 'baht'   ? 'block' : 'none';
+  document.getElementById('mf-input-units').style.display  = method === 'units'  ? 'block' : 'none';
+  document.getElementById('mf-input-manual').style.display = method === 'manual' ? 'block' : 'none';
+  // Only the three method buttons (skip the Buy/Sell type buttons)
+  document.querySelectorAll('#mf-modal .modal-type-btn:not(#mf-type-buy):not(#mf-type-sell)')
+    .forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function _toggleMFNotes() {
+  const wrap = document.getElementById('mf-notes-wrap');
+  const open = wrap.style.display === 'none';
+  wrap.style.display = open ? 'block' : 'none';
+  document.getElementById('mf-notes-toggle').textContent = open ? '− Hide note' : '+ Add note';
+}
+
+function _calcMFFromBaht() {
+  if (_mfInputMethod !== 'baht') return;
+  const totalBaht   = _parseNum(document.getElementById('mf-total-baht').value);
+  const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const units = costPerUnit > 0 ? totalBaht / costPerUnit : 0;
+  _updateMFCalcDisplay(units, totalBaht);
+}
+
+function _calcMFFromUnits() {
+  if (_mfInputMethod !== 'units') return;
+  const units       = _parseNum(document.getElementById('mf-total-units-input').value);
+  const costPerUnit = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  _updateMFCalcDisplay(units, units * costPerUnit);
+}
+
+function _updateMFCalcDisplay(units, totalBaht) {
+  const el = document.getElementById('mf-calc-result');
+  if (!el) return;
+  if (units > 0 || totalBaht > 0) {
+    el.textContent = units.toFixed(4) + ' Units · ฿' + _mfFmt2(totalBaht);
+    el.style.color = 'var(--text)';
+  } else {
+    el.textContent = '—';
+    el.style.color = 'var(--text-muted)';
+  }
+}
+
+async function saveMF() {
+  const errEl = document.getElementById('mf-modal-error');
+  errEl.textContent = '';
+  const _err = msg => { errEl.textContent = msg; showToast(msg); };
+
+  const fundName     = document.getElementById('mf-fund-name').value.trim();
+  const costPerUnit  = _parseNum(document.getElementById('mf-cost-per-unit').value);
+  const purchaseDate = document.getElementById('mf-purchase-date').value || null;
+  const currentNav   = _parseNum(document.getElementById('mf-current-nav').value);
+  const notes        = document.getElementById('mf-notes').value.trim() || null;
+
+  if (!fundName)          { _err('Fund name is required.'); return; }
+  if (!_mfCategory)       { _err('Please select a category.'); return; }
+  if (!(costPerUnit > 0)) { _err('Cost/Unit (THB) must be greater than 0.'); return; }
+
+  let units = 0, totalCost = 0;
+  if (_mfInputMethod === 'baht') {
+    totalCost = _parseNum(document.getElementById('mf-total-baht').value);
+    units = costPerUnit > 0 ? totalCost / costPerUnit : 0;
+  } else if (_mfInputMethod === 'units') {
+    units = _parseNum(document.getElementById('mf-total-units-input').value);
+    totalCost = units * costPerUnit;
+  } else {
+    units     = _parseNum(document.getElementById('mf-manual-units').value);
+    totalCost = _parseNum(document.getElementById('mf-manual-baht').value);
+    if (totalCost === 0) totalCost = units * costPerUnit;
+  }
+
+  if (!(units > 0)) { _err('Units must be greater than 0.'); return; }
+
+  // Pure DB write — no external/NAV calls.
+  const payload = {
+    user_id:         state.userId,
+    fund_name:       fundName,
+    category:        _mfCategory,
+    units,
+    avg_cost_thb:    costPerUnit,
+    current_nav_thb: currentNav > 0 ? currentNav : null,
+    nav_updated_at:  currentNav > 0 ? new Date().toISOString() : null,
+    buy_date:        purchaseDate,
+    notes
+  };
+
+  try {
+    if (_mfEditId) {
+      const { error } = await sb.from('mutual_fund_holdings').update(payload).eq('id', _mfEditId);
+      if (error) { _err(error.message); return; }
+    } else {
+      const { error } = await sb.from('mutual_fund_holdings').insert(payload);
+      if (error) { _err(error.message); return; }
+    }
+  } catch (e) {
+    _err(e.message || 'Unexpected error — check console');
+    return;
+  }
+
+  closeMFModal();
+  showToast(_mfEditId ? 'Holding updated' : 'Holding saved');
+  await loadMutualFunds();
+}
+
+async function deleteMF(id) {
+  if (!confirm('Delete this fund holding?')) return;
+  await sb.from('mutual_fund_holdings').delete().eq('id', id);
+  await loadMutualFunds();
+}
+
+async function _deleteMFFromModal() {
+  if (!_mfEditId) return;
+  if (!confirm('Delete this fund holding?')) return;
+  await sb.from('mutual_fund_holdings').delete().eq('id', _mfEditId);
+  closeMFModal();
+  await loadMutualFunds();
+}
+
+// ── MF Update NAV (manual, no API call) ────────────────────────────────────────
+
+function openMFNavModal(id, fundName) {
+  _mfNavId = id;
+  const h = _mfListData.find(x => x.id === id);
+  document.getElementById('mf-nav-fname').textContent = fundName || '—';
+  document.getElementById('mf-nav-error').textContent = '';
+  document.getElementById('mf-nav-input').value =
+    (h && h.hasNav) ? h.currentNav.toLocaleString('en-US') : '';
+  document.getElementById('mf-nav-overlay').style.display = 'block';
+  document.getElementById('mf-nav-modal').style.display  = 'block';
+}
+
+function closeMFNavModal() {
+  document.getElementById('mf-nav-overlay').style.display = 'none';
+  document.getElementById('mf-nav-modal').style.display  = 'none';
+  _mfNavId = null;
+}
+
+async function saveMFNav() {
+  if (!_mfNavId) return;
+  const errEl = document.getElementById('mf-nav-error');
+  errEl.textContent = '';
+  const nav = _parseNum(document.getElementById('mf-nav-input').value);
+  if (!(nav > 0)) { errEl.textContent = 'NAV must be greater than 0.'; return; }
+
+  const { error } = await sb.from('mutual_fund_holdings')
+    .update({ current_nav_thb: nav, nav_updated_at: new Date().toISOString() })
+    .eq('id', _mfNavId);
+  if (error) { errEl.textContent = error.message; return; }
+
+  closeMFNavModal();
+  showToast('NAV updated');
+  await loadMutualFunds();
+}
+
 // ── Cash ──────────────────────────────────────────────────────────────────────
 
 async function loadCash() {
@@ -3389,15 +4115,16 @@ async function deleteCashAccount(id) {
 async function loadMore() {
   const uid = state.userId;
 
-  // Fetch all four asset types in parallel
-  const [goldRes, insurRes, privRes, bondsRes] = await Promise.all([
+  // Fetch all five asset types in parallel
+  const [goldRes, insurRes, privRes, mfRes, bondsRes] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', uid),
     sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', uid),
     sb.from('private_investments').select('current_valuation, currency').eq('user_id', uid),
+    sb.from('mutual_fund_holdings').select('units, avg_cost_thb, current_nav_thb').eq('user_id', uid),
     sb.from('thai_bonds').select('face_value_thb').eq('user_id', uid)
   ]);
 
-  let goldTHB = 0, insurTHB = 0, privTHB = 0, bondsTHB = 0;
+  let goldTHB = 0, insurTHB = 0, privTHB = 0, mfTHB = 0, bondsTHB = 0;
 
   if (goldRes.data?.length) {
     const xau = await getLatestPrice('XAU');
@@ -3412,9 +4139,14 @@ async function loadMore() {
       : (p.current_valuation || 0) * state.usdThb;
   });
 
+  mfRes.data?.forEach(f => {
+    const navThb = (Number(f.current_nav_thb) > 0 ? Number(f.current_nav_thb) : Number(f.avg_cost_thb)) || 0;
+    mfTHB += (Number(f.units) || 0) * navThb;
+  });
+
   bondsRes.data?.forEach(b => bondsTHB += b.face_value_thb || 0);
 
-  const total = goldTHB + insurTHB + privTHB + bondsTHB;
+  const total = goldTHB + insurTHB + privTHB + mfTHB + bondsTHB;
   const pctStr = v => total > 0 ? ((v / total) * 100).toFixed(1) + '%' : '0%';
 
   const _set = (id, val) => {
@@ -3428,6 +4160,7 @@ async function loadMore() {
   _set('more-val-gold',      goldTHB);
   _set('more-val-insurance', insurTHB);
   _set('more-val-private',   privTHB);
+  _set('more-val-mf',        mfTHB);
   _set('more-val-bonds',     bondsTHB);
 }
 
@@ -4426,18 +5159,28 @@ async function loadPartner() {
     }
   }
 
-  // Partner gold total
-  const gold = await sb.from('gold_holdings').select('troy_oz').eq('user_id', state.partnerId);
+  // Partner gold + mutual fund totals
+  const [gold, mf] = await Promise.all([
+    sb.from('gold_holdings').select('troy_oz').eq('user_id', state.partnerId),
+    sb.from('mutual_fund_holdings').select('units, avg_cost_thb, current_nav_thb').eq('user_id', state.partnerId)
+  ]);
 
   const goldPrice = await getLatestPrice('XAU');
   const goldVal = (gold.data || []).reduce((s, g) => s + g.troy_oz * goldPrice, 0);
 
-  if (goldVal > 0) {
+  let mfValTHB = 0;
+  (mf.data || []).forEach(f => {
+    const navThb = (Number(f.current_nav_thb) > 0 ? Number(f.current_nav_thb) : Number(f.avg_cost_thb)) || 0;
+    mfValTHB += (Number(f.units) || 0) * navThb;
+  });
+
+  if (goldVal > 0 || mfValTHB > 0) {
     html += `
       <div class="section-header">Other Assets</div>
       <div class="card">
         <div class="stat-row">
-          <div class="stat-pill">Gold <strong>${fmtTHB(goldVal * state.usdThb)}</strong></div>
+          ${goldVal > 0 ? `<div class="stat-pill">Gold <strong>${fmtTHB(goldVal * state.usdThb)}</strong></div>` : ''}
+          ${mfValTHB > 0 ? `<div class="stat-pill">MF <strong>${fmtTHB(mfValTHB)}</strong></div>` : ''}
         </div>
       </div>
     `;

@@ -4,7 +4,7 @@
 
 A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash (savings/FD/FCD), insurance, private investments, and Thai bonds. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
 
-> **Mutual Funds removed 2026-06-19** — the MF feature (page, GAS SEC/NAV code, and the `mutual_fund_*` tables) was fully removed to be rebuilt from scratch. See **"Mutual Funds — rebuild plan"** at the bottom of this file.
+> **Mutual Funds — Phase 1 rebuilt 2026-06-20** — insert-only holdings with a manual `current_nav_thb` field; no external API, saving never blocks. Phase 2 (optional GAS auto NAV refresh) not yet built. See **"Mutual Funds — rebuild plan"** at the bottom of this file.
 
 ## Live URL
 
@@ -22,7 +22,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v39`) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v44`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -98,6 +98,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
 | `private_investments` | id, user_id, name, current_valuation, currency |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
+| `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable, manual)*, nav_updated_at *(nullable)*, buy_date, notes, created_at — Phase 1: manual NAV only, no external fetch |
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
 | `bond_master` | bond_code PK, bond_name, issuer, credit_rating, coupon_rate, coupon_type, issued_date, maturity_date, scraped_at — ThaiBMA scrape cache |
 
@@ -125,11 +126,11 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
-- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `thai_bonds`
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `thai_bonds`, `mutual_fund_holdings`
 - `bond_master` is read-only for anon; GAS writes it via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
-### Migrations applied (all ✓)
+### Migrations applied (001–013 ✓; **014 pending — run in Supabase SQL editor**)
 ```
 001  app_config table
 002  users.avatar + name
@@ -145,6 +146,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
      create mutual_fund_master + mutual_fund_nav tables  [superseded by 013]
 012  mutual_fund_holdings.fund_code: DROP NOT NULL (fund code now matched in background)  [superseded by 013]
 013  DROP mutual_fund_nav + mutual_fund_holdings + mutual_fund_master (MF feature removed, rebuild fresh)
+014  mutual_fund_holdings recreated (Phase 1): insert-only, manual current_nav_thb, anon RW RLS
 ```
 
 ---
@@ -248,6 +250,7 @@ _bondSortKey        // 'code' | 'maturity' | 'amount' | 'coupon'
 dashboard     Home — net worth, Me/Combined toggle, donut, asset cards
 us            US Portfolio — combined metric cards, tab per portfolio, holdings table
 gold          Gold — metric cards, S/R bar, holdings table, add/edit modal
+mf            Mutual Funds — hero total + P/L, sort bar, expandable fund cards, manual NAV (Update NAV modal)
 cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
 insurance     Insurance policies
 private       Private investments
@@ -262,7 +265,7 @@ partner       Partner view (no nav entry; navigate('partner') directly)
 
 Nav highlight logic:
 - `nav-analysis` → analysis, monthly, weekly, allportfolio, dca
-- `nav-more` → gold, insurance, private, **bonds**
+- `nav-more` → gold, **mf**, insurance, private, **bonds**
 - `nav-cash` → cash
 - others → `nav-${page}`
 
@@ -270,7 +273,7 @@ Nav highlight logic:
 
 ### Home dashboard
 - `loadDashboard()` — parallel fetch both users, renders hero + user cards + donut + asset grid
-- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD, otherUSD }`
+- `calcUserData(userId)` → `{ totalUSD, costBasisUSD, gainLossUSD, portfolios[], cashUSD, cashBreakdown, goldUSD, mfUSD, privateUSD, insuranceUSD, bondsUSD, cryptoUSD, otherUSD }`
 - `switchDonutMode('me'|'combined')` — re-renders donut from `_dbCache` without re-fetching
 - `_renderAssetSummary(segments, totalUSD)` — 2-column card grid below donut
 
@@ -285,6 +288,15 @@ Nav highlight logic:
 - Gold S/R comes from `sr_levels` table (`ticker='XAU'`) — populated when GAS `updateSRLevels` runs
 - `openAddGold()` / `openEditGold(id)` / `saveGold()` / `deleteGold(id)`
 - `calcGoldTotal()` — auto-computes total cost (oz × avg cost) in modal
+
+### Mutual Funds (Phase 1 — manual NAV, no external calls)
+- `loadMutualFunds()` → `_loadMutualFundsInner(el)` — fetches `mutual_fund_holdings`, computes per-holding value/cost/PL, renders hero + sort bar + expandable fund cards. All THB. Wrapped in try/catch (errors only toast, never crash).
+- Per holding: `costValue = units × avg_cost_thb`; value uses `current_nav_thb` when set, **else falls back to cost basis** (so a fund with no NAV still counts toward net worth but shows P/L `—`).
+- `_renderMFHero(latestTs)` / `_renderMFList()` / `setMFSort(key)` / `toggleMFExpand(id)` / `_mfCatStyle(cat)`
+- Modal: Buy/Sell type toggle (Sell reserved for future tx history — saving still records a holding), free-text fund name with local `<datalist>` autocomplete (NOT an API call), category pills (Onshore/Offshore/RMF/ESG/SSF/Other), 3 input methods (Total Baht / Total Units / Manual) reusing `_numInputFmt`/`_parseNum`, optional Current NAV, collapsible notes.
+- `openAddMF()` / `openEditMF(id)` / `saveMF()` / `deleteMF(id)` / `_deleteMFFromModal()` — `saveMF()` is a pure DB insert/update; **never awaits a GAS/external call**.
+- `openMFNavModal(id, name)` / `saveMFNav()` — "Update NAV" button edits `current_nav_thb` + `nav_updated_at` only.
+- Globals: `_mfListData`, `_mfEditId`, `_mfSortKey`, `_mfExpandedId`, `_mfCategory`, `_mfInputMethod`, `_mfType`, `_mfNavId`.
 
 ### Cash
 - `loadCash()` — shows total summary card (grouped by sub_type) above account sections
@@ -348,7 +360,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v40`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v44`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
@@ -383,7 +395,9 @@ The previous MF implementation was removed because two things kept breaking:
 ### Recommended approach: manual-NAV-first, automation optional
 Treat MF like the bond/private pages — the user owns the numbers; automation is a convenience that can fail silently.
 
-**Phase 1 — holdings + manual NAV (no external calls, ships clean)**
+**Phase 1 — holdings + manual NAV (no external calls, ships clean) — ✅ DONE 2026-06-20**
+> Built exactly as specced below: migration 014 recreated `mutual_fund_holdings` (insert-only, manual `current_nav_thb`), MF page + add/edit/delete modal + "Update NAV" modal, and `mfUSD`/`mfTHB` re-wired into `calcUserData`, donut `_seg`, "Other" card, `loadMore`, and partner view. Funds with no NAV fall back to cost basis for value and show P/L `—`. (Also fixed a pre-existing bug: `addUSD`/`combUsPort` were referenced but undefined in `loadDashboard`, silently breaking the home 2×2 category cards.) **Migration 014 must be run in Supabase before the page works.**
+
 1. **Migration 014** — recreate tables, simpler than before:
    - `mutual_fund_holdings`: `id, user_id, fund_name NOT NULL, category, units, avg_cost_thb, current_nav_thb (nullable), nav_updated_at (nullable), buy_date, notes, created_at timestamptz DEFAULT now()`. **No `fund_code` requirement.** Add the `created_at` column this time.
    - Skip `mutual_fund_master` / `mutual_fund_nav` entirely for Phase 1 — store the latest NAV directly on the holding (`current_nav_thb`). Add a history table only if a 1-day-change badge is actually wanted later.
