@@ -1939,14 +1939,14 @@ Chart.register({
     const cx = (left + right) / 2, cy = (top + bottom) / 2;
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '700 13px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.font = '700 25px -apple-system,BlinkMacSystemFont,sans-serif';
     ctx.fillStyle = opts.textColor || '#eef0f4';
-    ctx.fillText(opts.value, cx, cy - 10);
-    ctx.font = '600 10px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.fillText(opts.value, cx, cy - 14);
+    ctx.font = '600 12px -apple-system,BlinkMacSystemFont,sans-serif';
     ctx.fillStyle = opts.pnlColor || '#22c55e';
-    ctx.fillText(opts.pnl || '', cx, cy + 4);
-    ctx.font = '500 9px -apple-system,BlinkMacSystemFont,sans-serif';
-    ctx.fillText(opts.pct || '', cx, cy + 16);
+    ctx.fillText(opts.pnl || '', cx, cy + 7);
+    ctx.font = '500 10px -apple-system,BlinkMacSystemFont,sans-serif';
+    ctx.fillText(opts.pct || '', cx, cy + 21);
     ctx.restore();
   }
 });
@@ -2117,14 +2117,18 @@ function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
   }
 }
 
+const _segPage = { 'US Portfolio':'us', 'Cash':'cash', 'Gold':'gold', 'Mutual Fund':'mf', 'Bonds':'bonds', 'Insurance':'insurance', 'Private':'private' };
+
 function _renderAssetSummary(segments, totalUSD) {
   const el = document.getElementById('db-port-summary');
   if (!el) return;
   if (!segments || !segments.length) { el.style.display = 'none'; return; }
   el.style.display = 'block';
   const cards = segments.map(s => {
-    const pct = totalUSD > 0 ? ((s.value / totalUSD) * 100).toFixed(1) : '0';
-    return `<div class="card2" style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+    const pct  = totalUSD > 0 ? ((s.value / totalUSD) * 100).toFixed(1) : '0';
+    const page = _segPage[s.label];
+    const clickAttr = page ? `onclick="navigate('${page}')" style="cursor:pointer;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px"` : `style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px"`;
+    return `<div class="card2" ${clickAttr}>
       <div style="display:flex;align-items:center;gap:7px;min-width:0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
         <span style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.label}</span>
@@ -2471,9 +2475,7 @@ async function loadUSPortfolio() {
     <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" data-portfolio-name="${p.name.replace(/"/g,'&quot;')}" onclick="loadPortfolioTab('${p.id}', this)">
       ${p.name}
     </button>
-  `).join('') + `
-    <button class="tab-btn" onclick="navigate('more')" style="color:var(--accent2)">More ›</button>
-  `;
+  `).join('');
 
   // Show metrics wrap with placeholders, then compute combined totals in parallel with first tab
   const mWrap = document.getElementById('us-metrics-wrap');
@@ -2481,7 +2483,7 @@ async function loadUSPortfolio() {
     mWrap.style.display = 'block';
     ['us-metric-value','us-metric-pl','us-metric-day'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">—</div><div style="font-size:16px;font-weight:700;color:var(--text-muted)">…</div>';
+      if (el) el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">—</div><div style="font-size:28px;font-weight:800;color:var(--text-muted)">…</div>';
     });
   }
 
@@ -2534,18 +2536,18 @@ function _renderUSMetricCards({ totalValue, totalPL, totalPLPct, dayChangeUSD, d
   const daySign = dayChangeUSD >= 0 ? '+' : '';
   const dayClr  = dayChangeUSD >= 0 ? 'var(--success)' : 'var(--danger)';
   document.getElementById('us-metric-value').innerHTML =
-    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
-     <div style="font-size:16px;font-weight:700">${fmtVal(totalValue)}</div>`;
+    `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
+     <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px">${fmtVal(totalValue)}</div>`;
   document.getElementById('us-metric-pl').innerHTML =
-    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
-     <div style="font-size:16px;font-weight:700;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
-     <div style="font-size:11px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
+    `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
+     <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
+     <div style="font-size:12px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
   document.getElementById('us-metric-day').innerHTML =
-    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
+    `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
     (hasDayData
-      ? `<div style="font-size:16px;font-weight:700;color:${dayClr}">${daySign}${fmtVal(dayChangeUSD)}</div>
-         <div style="font-size:11px;color:${dayClr}">${daySign}${dayChangePct.toFixed(1)}%</div>`
-      : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
+      ? `<div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:${dayClr}">${daySign}${fmtVal(dayChangeUSD)}</div>
+         <div style="font-size:12px;color:${dayClr}">${daySign}${dayChangePct.toFixed(1)}%</div>`
+      : `<div style="font-size:16px;color:var(--text-muted)">—</div>`);
 }
 
 async function _renderUSAllocDonut() {
@@ -2955,20 +2957,20 @@ async function loadGold(_liveRefreshed = false) {
     const dayClr  = totalDayUSD >= 0 ? 'var(--success)' : 'var(--danger)';
 
     document.getElementById('gold-metric-value').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
-       <div style="font-size:16px;font-weight:700">${fmtUSD(totalValue)}</div>
+      `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Total Value</div>
+       <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px">${fmtUSD(totalValue)}</div>
        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">≈ ${fmtTHB(totalValue * state.usdThb)}</div>
        <div style="font-size:10px;color:var(--text-muted);margin-top:1px">1 USD = ${state.usdThb.toFixed(2)} THB</div>`;
     document.getElementById('gold-metric-pl').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
-       <div style="font-size:16px;font-weight:700;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
-       <div style="font-size:11px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
+      `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
+       <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
+       <div style="font-size:12px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
     document.getElementById('gold-metric-day').innerHTML =
-      `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
+      `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">1-Day Change</div>` +
       (hasDayData
-        ? `<div style="font-size:16px;font-weight:700;color:${dayClr}">${daySign}${fmtVal(totalDayUSD)}</div>
-           <div style="font-size:11px;color:${dayClr}">${daySign}${dayPct.toFixed(2)}%</div>`
-        : `<div style="font-size:14px;color:var(--text-muted)">—</div>`);
+        ? `<div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:${dayClr}">${daySign}${fmtVal(totalDayUSD)}</div>
+           <div style="font-size:12px;color:${dayClr}">${daySign}${dayPct.toFixed(2)}%</div>`
+        : `<div style="font-size:16px;color:var(--text-muted)">—</div>`);
   }
 
   // S/R bar
@@ -4407,7 +4409,7 @@ function _ratingColor(rating) {
 
 function _fmtShortDate(dateStr) {
   if (!dateStr) return '—';
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
