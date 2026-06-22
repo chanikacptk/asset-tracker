@@ -891,3 +891,62 @@ function testSearchMFFunds() {
 
   Logger.log('MAPPED: ' + JSON.stringify(DataAgent.lookupMFFunds(QUERY), null, 2));
 }
+
+/**
+ * testSearchEastspring — diagnose why Eastspring funds don't appear in lookupMFFunds().
+ *
+ * Runs four probes in sequence:
+ *   1. fund_class_name=Eastspring        (English, mixed case)
+ *   2. fund_class_name=EASTSPRING        (uppercase — in case SEC normalises differently)
+ *   3. fund_class_name=อีสท์สปริง        (Thai name)
+ *   4. general-info/amcs                 (full AMC list — find Eastspring's comp_id / unique_id)
+ *
+ * For each probe logs: HTTP code + first 1 500 chars of raw body + item count.
+ * Paste the full log output back into the chat for analysis before any code changes.
+ */
+function testSearchEastspring() {
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testSearchEastspring] SEC_API_KEY: ' + (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING'));
+  if (!KEY) return;
+
+  const headers = { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' };
+
+  function rawGet(label, url) {
+    Logger.log('── ' + label + ' ──────────────────────────────');
+    Logger.log('GET ' + url);
+    try {
+      const r = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+      const code = r.getResponseCode();
+      const body = r.getContentText() || '';
+      Logger.log('HTTP ' + code);
+      Logger.log('BODY: ' + (body.length > 1500 ? body.substring(0, 1500) + ' …[truncated]' : body));
+      if (code === 200) {
+        try {
+          const j = JSON.parse(body);
+          const items = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+          Logger.log('item count: ' + items.length);
+          // Log first result's field names so we know what's searchable
+          if (items.length > 0) Logger.log('first item keys: ' + Object.keys(items[0]).join(', '));
+        } catch (pe) { Logger.log('(parse error: ' + pe.message + ')'); }
+      }
+    } catch (e) {
+      Logger.log('EXCEPTION: ' + e.message);
+    }
+  }
+
+  const BASE = 'https://api.sec.or.th/v2/fund/general-info/';
+
+  // Probe 1–3: fund_class_name substring searches
+  rawGet('1. fund_class_name=Eastspring',
+    BASE + 'profiles?fund_class_name=' + encodeURIComponent('Eastspring'));
+
+  rawGet('2. fund_class_name=EASTSPRING',
+    BASE + 'profiles?fund_class_name=' + encodeURIComponent('EASTSPRING'));
+
+  rawGet('3. fund_class_name=อีสท์สปริง',
+    BASE + 'profiles?fund_class_name=' + encodeURIComponent('อีสท์สปริง'));
+
+  // Probe 4: full AMC list — reveals Eastspring's real identifier and any search params
+  rawGet('4. general-info/amcs (full AMC list)',
+    BASE + 'amcs');
+}
