@@ -854,6 +854,59 @@ function testSingleFundNAV() {
 }
 
 /**
+ * testSearchEastspring2 — second-pass probes now that we know Eastspring's unique_id.
+ *
+ * Probes:
+ *   1. profiles?unique_id=C0000033452        — AMC-scoped fund list (does the API support it?)
+ *   2. profiles?fund_class_name=ES-          — common Eastspring Thailand class prefix
+ *   3. profiles?proj_name_en=Eastspring      — search on project name instead of class name
+ *
+ * Paste the full log (HTTP codes + item counts + first item keys) before we code the fix.
+ */
+function testSearchEastspring2() {
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testSearchEastspring2] SEC_API_KEY: ' + (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING'));
+  if (!KEY) return;
+
+  const headers = { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' };
+  const BASE = 'https://api.sec.or.th/v2/fund/general-info/';
+
+  function rawGet(label, url) {
+    Logger.log('── ' + label + ' ──────────────────────────────');
+    Logger.log('GET ' + url);
+    try {
+      const r = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+      const code = r.getResponseCode();
+      const body = r.getContentText() || '';
+      Logger.log('HTTP ' + code);
+      Logger.log('BODY: ' + (body.length > 1500 ? body.substring(0, 1500) + ' …[truncated]' : body));
+      if (code === 200) {
+        try {
+          const j = JSON.parse(body);
+          const items = Array.isArray(j) ? j : Array.isArray(j.items) ? j.items : [];
+          Logger.log('item count: ' + items.length);
+          if (items.length > 0) {
+            Logger.log('first item keys: ' + Object.keys(items[0]).join(', '));
+            Logger.log('first item: ' + JSON.stringify(items[0]));
+          }
+        } catch (pe) { Logger.log('(parse error: ' + pe.message + ')'); }
+      }
+    } catch (e) {
+      Logger.log('EXCEPTION: ' + e.message);
+    }
+  }
+
+  rawGet('1. profiles?unique_id=C0000033452 (Eastspring AMC id)',
+    BASE + 'profiles?unique_id=' + encodeURIComponent('C0000033452'));
+
+  rawGet('2. profiles?fund_class_name=ES- (common Eastspring prefix)',
+    BASE + 'profiles?fund_class_name=' + encodeURIComponent('ES-'));
+
+  rawGet('3. profiles?proj_name_en=Eastspring',
+    BASE + 'profiles?proj_name_en=' + encodeURIComponent('Eastspring'));
+}
+
+/**
  * testRefreshMFNav — run the daily NAV refresh manually so you can see its log output.
  * Select this function in the IDE dropdown → Run → View → Logs.
  */
