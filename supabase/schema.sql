@@ -295,6 +295,7 @@ ALTER TABLE news_items           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications_log    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE thai_bonds           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mutual_fund_holdings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_config           ENABLE ROW LEVEL SECURITY;
 
 -- Allow anon/authenticated roles to read all rows (app enforces user_id filtering)
 -- GAS uses service role (bypasses RLS) for all writes
@@ -319,20 +320,30 @@ CREATE POLICY "anon_read_all" ON notifications_log FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON thai_bonds       FOR SELECT USING (true);
 CREATE POLICY "anon_read_all" ON mutual_fund_holdings FOR SELECT USING (true);
 
--- Frontend writes (anon key): only own DCA plan approvals and valuation updates
--- Everything else written by GAS (service role, bypasses RLS)
+-- Frontend writes (anon key) — scoped to valid user_id / parent record.
+-- auth.uid() is always NULL (PIN auth, not Supabase Auth), so user_id
+-- presence in the users table is the tightest available guard.
+
 CREATE POLICY "anon_update_dca_items" ON dca_plan_items
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE
+  USING (plan_id IN (SELECT id FROM dca_plans))
+  WITH CHECK (plan_id IN (SELECT id FROM dca_plans));
 
 CREATE POLICY "anon_update_private_investments" ON private_investments
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE
+  USING (user_id IN (SELECT id FROM users))
+  WITH CHECK (user_id IN (SELECT id FROM users));
 
 CREATE POLICY "anon_update_cash_accounts" ON cash_accounts
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE
+  USING (user_id IN (SELECT id FROM users))
+  WITH CHECK (user_id IN (SELECT id FROM users));
 
 CREATE POLICY "anon_insert_mutual_fund_holdings" ON mutual_fund_holdings
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (user_id IN (SELECT id FROM users));
 CREATE POLICY "anon_update_mutual_fund_holdings" ON mutual_fund_holdings
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE
+  USING (user_id IN (SELECT id FROM users))
+  WITH CHECK (user_id IN (SELECT id FROM users));
 CREATE POLICY "anon_delete_mutual_fund_holdings" ON mutual_fund_holdings
-  FOR DELETE USING (true);
+  FOR DELETE USING (user_id IN (SELECT id FROM users));
