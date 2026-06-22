@@ -615,31 +615,41 @@ const DataAgent = (() => {
   const SEC_PROFILES_URL = 'https://api.sec.or.th/v2/fund/general-info/profiles';
 
   /**
-   * GET a SEC Open Data v2 endpoint and return its rows.
+   * GET a SEC Open Data v2 endpoint and return ALL rows, following next_cursor pagination.
    * SEC v2 wraps rows in { message, page_size, next_cursor, items: [...] }.
    * Returns [] on any missing key / non-200 / parse error (never throws).
    */
   function _secApiItems(url, tag) {
     const key = Config.SEC_API_KEY();
     if (!key) { Logger.log('[SEC] ' + tag + ': SEC_API_KEY not set — skipping'); return []; }
+    const all = [];
+    let nextUrl = url;
+    let page = 0;
     try {
-      const r = UrlFetchApp.fetch(url, {
-        method: 'get',
-        headers: { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' },
-        muteHttpExceptions: true
-      });
-      const code = r.getResponseCode();
-      const body = r.getContentText() || '';
-      if (code !== 200) { Logger.log('[SEC] ' + tag + ' HTTP ' + code + ': ' + body.substring(0, 200)); return []; }
-      const j = JSON.parse(body);
-      return Array.isArray(j) ? j
-           : Array.isArray(j.items) ? j.items
-           : Array.isArray(j.data)  ? j.data
-           : [j];
+      while (nextUrl && page < 10) {
+        page++;
+        const r = UrlFetchApp.fetch(nextUrl, {
+          method: 'get',
+          headers: { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' },
+          muteHttpExceptions: true
+        });
+        const code = r.getResponseCode();
+        const body = r.getContentText() || '';
+        if (code !== 200) { Logger.log('[SEC] ' + tag + ' p' + page + ' HTTP ' + code + ': ' + body.substring(0, 200)); break; }
+        const j = JSON.parse(body);
+        const items = Array.isArray(j) ? j
+                    : Array.isArray(j.items) ? j.items
+                    : Array.isArray(j.data)  ? j.data
+                    : [j];
+        all.push.apply(all, items);
+        const cursor = j.next_cursor;
+        nextUrl = cursor ? url + '&next_cursor=' + encodeURIComponent(cursor) : null;
+      }
+      if (page > 1) Logger.log('[SEC] ' + tag + ' fetched ' + all.length + ' rows across ' + page + ' pages');
     } catch (e) {
       Logger.log('[SEC] ' + tag + ' fetch/parse error: ' + e.message);
-      return [];
     }
+    return all;
   }
 
   /**
@@ -726,8 +736,8 @@ const DataAgent = (() => {
 
     Logger.log('[MF NAV] refresh start — ' + holdings.length + ' holding(s) with proj_id');
     let updated = 0, skipped = 0;
-    // Query a small window so we still get the latest published NAV across weekends/holidays.
-    const start = _bkkDate(7), end = _bkkDate(0);
+    // 14-day window: covers weekends, Thai holidays, and funds with longer SEC publishing lag.
+    const start = _bkkDate(14), end = _bkkDate(0);
 
     holdings.forEach(h => {
       try {
@@ -841,6 +851,15 @@ function testSingleFundNAV() {
   } catch (e) {
     Logger.log('[testSingleFundNAV] EXCEPTION: ' + e.message);
   }
+}
+
+/**
+ * testRefreshMFNav — run the daily NAV refresh manually so you can see its log output.
+ * Select this function in the IDE dropdown → Run → View → Logs.
+ */
+function testRefreshMFNav() {
+  const result = DataAgent.refreshMFNav();
+  Logger.log('[testRefreshMFNav] result: ' + JSON.stringify(result));
 }
 
 /**
