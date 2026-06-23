@@ -348,6 +348,7 @@ body {
           <button class="currency-btn active" onclick="setCurrency('USD')" id="us-usd-btn">USD</button>
           <button class="currency-btn" onclick="setCurrency('THB')" id="us-thb-btn">THB</button>
         </div>
+        <button id="us-refresh-btn" onclick="refreshUSPrices(this)" title="Refresh live prices" style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
         <button onclick="openAddHolding()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
       </div>
     </div>
@@ -2462,6 +2463,14 @@ async function calcUserData(userId) {
 
 // ── US Portfolio ──────────────────────────────────────────────────────────────
 
+async function refreshUSPrices(btn) {
+  if (btn) { btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none'; }
+  const KEEP_CACHE = new Set(['XAU','SP500','SET','USDTHB']);
+  Object.keys(state.cache).forEach(k => { if (!KEEP_CACHE.has(k)) delete state.cache[k]; });
+  await loadUSPortfolio();
+  if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+}
+
 async function loadUSPortfolio() {
   // Clear stock price cache so every page visit fetches fresh prices from DB
   const KEEP_CACHE = new Set(['XAU','SP500','SET','USDTHB']);
@@ -2608,7 +2617,7 @@ async function _renderUSAllocDonut() {
   }
 }
 
-async function loadPortfolioTab(portfolioId, tabBtn) {
+async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
   document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   tabBtn?.classList.add('active');
   _sortState = { col: null, dir: 1 }; // reset sort on tab switch
@@ -2754,6 +2763,28 @@ async function loadPortfolioTab(portfolioId, tabBtn) {
   // Footer row for unallocated
   _portTableData._allocatedTarget = allocatedTarget;
   _renderPortTbody();
+
+  // Background live price refresh — fires once per tab load (not on the re-render pass)
+  if (!_liveRefreshed && state.gasUrl && holdings.length > 0) {
+    const tickers = [...new Set(holdings.map(h => h.ticker))];
+    const capturedId = portfolioId;
+    Promise.all(tickers.map(async ticker => {
+      try {
+        const r = await callGAS('getPrice', { symbol: ticker });
+        if (r?.ok && r.price > 0) {
+          state.cache[ticker] = r.price;
+          callGAS('savePrice', { symbol: ticker, price: r.price, asset_type: 'stock', currency: 'USD' });
+        }
+      } catch (_) {}
+    })).then(() => {
+      // Only re-render if this tab is still the active one
+      const activeId = document.querySelector('#portfolio-tabs .tab-btn.active')?.dataset.portfolioId;
+      if (activeId === capturedId) {
+        const btn = document.querySelector(`.tab-btn[data-portfolio-id="${capturedId}"]`);
+        loadPortfolioTab(capturedId, btn, true);
+      }
+    }).catch(() => {});
+  }
 }
 
 function _sortPortCol(col) {

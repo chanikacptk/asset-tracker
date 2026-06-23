@@ -2,9 +2,10 @@
  * Code.gs — Orchestrator
  *
  * TRIGGER SETUP (one-time, run setupTriggers() from the GAS IDE):
- *   - Daily 8AM weekdays  → onDailyTrigger
+ *   - Daily 8AM Bangkok   → onDailyTrigger (morning fetch; US prices = prev-day close)
+ *   - Daily 4AM Bangkok   → onDailyTrigger (= ~5PM ET; captures today's US closing prices)
  *   - Every Monday 8AM    → onWeeklyTrigger  (also fires from daily on Mondays)
- *   - 1st of month 7AM    → onMonthlyTrigger (checked inside daily trigger)
+ *   - 1st of month        → onMonthlyTrigger (checked inside daily trigger)
  *   - Every 5 minutes     → onRealtimeTrigger
  *
  * WEB APP (Deploy → New deployment → Web app → Execute as Me → Anyone):
@@ -301,11 +302,18 @@ function setupTriggers() {
   // Delete all existing triggers to avoid duplicates
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
 
-  // Daily 8AM (Mon–Sun; weekday logic is inside onDailyTrigger)
+  // Daily 8AM Bangkok — morning data fetch (US prices = previous day's close)
   ScriptApp.newTrigger('onDailyTrigger')
     .timeBased()
     .everyDays(1)
     .atHour(8)
+    .create();
+
+  // Daily 4AM Bangkok = ~5PM ET = 1h after US market close — captures today's closing prices
+  ScriptApp.newTrigger('onDailyTrigger')
+    .timeBased()
+    .everyDays(1)
+    .atHour(4)
     .create();
 
   // Every 5 minutes for real-time alerts (crypto ±5%, gold ±5%, S/R proximity)
@@ -322,7 +330,7 @@ function setupTriggers() {
     .atHour(20)
     .create();
 
-  Logger.log('[Orchestrator] Triggers set up: daily@8AM + every5min + mfNav@8PM');
+  Logger.log('[Orchestrator] Triggers set up: daily@8AM + daily@4AM + every5min + mfNav@8PM');
 }
 
 // ── Supabase helpers ──────────────────────────────────────────────────────────
