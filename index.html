@@ -5357,12 +5357,18 @@ async function loadSettings() {
     `<div class="emoji-opt${e === state.userAvatar ? ' selected' : ''}" onclick="pickEmoji('${e}')">${e}</div>`
   ).join('');
 
-  // GAS URL
-  const { data: cfg } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
-  const url = cfg?.value || '';
-  state.gasUrl = url || null;
-  document.getElementById('settings-gas-url').value = url;
-  document.getElementById('settings-gas-status').textContent = url ? 'URL loaded from Supabase' : '';
+  // GAS URL — read via GAS if available, else direct Supabase SELECT (bootstrap: no URL yet)
+  let gasUrlValue = '';
+  if (state.gasUrl) {
+    const cfgResult = await callGAS('getConfig', { key: 'gas_web_app_url' });
+    gasUrlValue = cfgResult?.ok ? (cfgResult.value || '') : '';
+  } else {
+    const { data: cfg } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
+    gasUrlValue = cfg?.value || '';
+  }
+  state.gasUrl = gasUrlValue || null;
+  document.getElementById('settings-gas-url').value = gasUrlValue;
+  document.getElementById('settings-gas-status').textContent = gasUrlValue ? 'URL loaded ✓' : '';
 
   // Telegram Chat IDs
   const { data: users } = await sb.from('users').select('id, telegram_chat_id').order('created_at');
@@ -5495,18 +5501,19 @@ async function saveGasUrl() {
   statusEl.textContent = 'Saving…';
   statusEl.style.color = 'var(--text-muted)';
 
-  const { error } = await sb.from('app_config').upsert(
-    { key: 'gas_web_app_url', value: url, updated_at: new Date().toISOString() },
-    { onConflict: 'key' }
-  );
+  // Set gasUrl in state before calling so callGAS can use the new URL (handles first-time setup)
+  const previousUrl = state.gasUrl;
+  state.gasUrl = url;
 
-  if (error) {
-    statusEl.textContent = 'Save failed: ' + error.message;
+  const result = await callGAS('saveConfig', { key: 'gas_web_app_url', value: url });
+
+  if (!result?.ok) {
+    state.gasUrl = previousUrl;
+    statusEl.textContent = 'Save failed: ' + (result?.error || 'GAS error');
     statusEl.style.color = 'var(--danger)';
     return;
   }
 
-  state.gasUrl = url;
   statusEl.textContent = 'Saved ✓';
   statusEl.style.color = 'var(--success)';
   showToast('GAS URL saved');

@@ -88,6 +88,17 @@ function doGet(e) {
       const q = (e?.parameter?.q || '').trim();
       if (!q) throw new Error('q required');
       result.funds = DataAgent.lookupMFFunds(q);
+    } else if (action === 'getConfig') {
+      const key = (e?.parameter?.key || '').trim();
+      if (!key) throw new Error('key required');
+      const rows = supabaseRequest('GET', 'app_config?key=eq.' + encodeURIComponent(key) + '&select=value&limit=1');
+      result.value = (rows && rows.length > 0) ? rows[0].value : null;
+    } else if (action === 'saveConfig') {
+      const key   = (e?.parameter?.key   || '').trim();
+      const value = (e?.parameter?.value || '').trim();
+      if (!key) throw new Error('key required');
+      supabaseUpsert('app_config?on_conflict=key', { key: key, value: value, updated_at: new Date().toISOString() });
+      result.saved = true;
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
