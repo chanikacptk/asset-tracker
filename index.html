@@ -2456,6 +2456,10 @@ async function calcUserData(userId) {
 // ── US Portfolio ──────────────────────────────────────────────────────────────
 
 async function loadUSPortfolio() {
+  // Clear stock price cache so every page visit fetches fresh prices from DB
+  const KEEP_CACHE = new Set(['XAU','SP500','SET','USDTHB']);
+  Object.keys(state.cache).forEach(k => { if (!KEEP_CACHE.has(k)) delete state.cache[k]; });
+
   const { data: portfolios } = await sb.from('portfolios')
     .select('id, name, type, dca_budget_usd')
     .eq('user_id', state.userId)
