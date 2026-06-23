@@ -707,35 +707,42 @@ const DataAgent = (() => {
     return items;
   }
 
-  // Maps partial comp_name_en (lowercase) → fund_class_name prefix used in SEC data.
-  // The profiles endpoint only accepts fund_class_name= as a valid filter (unique_id=,
-  // proj_name_en= both return HTTP 400). For AMCs whose fund class names don't include
-  // the AMC name (e.g. Eastspring → "ES-CASH"), we search by prefix then post-filter
-  // results by comp_name_en to discard other AMCs that share the substring.
-  //
-  // Validated 2026-06-23 via testFindAMCPrefixes():
-  //   KF    → first result = KRUNGSRI ✓
-  //   K-    → first result = KASIKORN ✓
-  //   TISCO → first result = TISCO ✓
-  //   ONE-  → first result = ONE ASSET ✓  (ONE without dash → SCB first — don't use)
-  //   UOB   → first result = UOB ✓
-  //   PRINCIPAL → first result = PRINCIPAL ✓
-  //   KT    → first result = KRUNG THAI ✓
-  //   ES    → mixed results (Kasikorn K-ESGSI, Krung Thai etc.) — post-filter essential
-  //
-  // Not yet found: Bangkok Capital (BCAP=0, BC=SCB), BBLAM (0), MFC (0), TMB (0).
-  // Run testFindAMCPrefixes() + testEastspringViaES() to validate or extend this map.
-  const AMC_PREFIX_MAP = [
-    { pattern: 'eastspring', prefix: 'ES'        }, // ES-CASH, ES-DPLUS…; post-filter removes other AMC hits
-    { pattern: 'krungsri',   prefix: 'KF'        }, // KFNDQ, KFLTF…
-    { pattern: 'kasikorn',   prefix: 'K-'        }, // K-CASH, K-FIXED…
-    { pattern: 'tisco',      prefix: 'TISCO'     }, // TISCOINA, TISCOLTF…
-    { pattern: 'one asset',  prefix: 'ONE-'      }, // ONE-POWER, ONE-ULT… (ONE without dash → SCB)
-    { pattern: 'uob',        prefix: 'UOB'       }, // UOBSD, UOBSMART…
-    { pattern: 'principal',  prefix: 'PRINCIPAL' }, // PRINCIPAL SET50…
-    { pattern: 'krung thai', prefix: 'KT'        }, // KT-EPIC, KT-PREMISE…
-    { pattern: 'phatra',     prefix: 'PHATRA'    }, // legacy (merged → KKP)
-  ];
+  /**
+   * Returns the AMC prefix entry for a given lowercase AMC name or fund class prefix.
+   * Replaces a const array in the IIFE closure — plain function is safer across GAS versions.
+   *
+   * Validated 2026-06-23 via testFindAMCPrefixes() and testEastspringViaES():
+   *   ES        → Eastspring (178/422 raw after post-filter)
+   *   KF        → Krungsri (197/197 raw, all Krungsri)
+   *   K-        → Kasikorn
+   *   TISCO     → TISCO
+   *   ONE-      → One Asset (ONE without dash also matches SCB — use ONE-)
+   *   UOB       → UOB
+   *   PRINCIPAL → Principal
+   *   KT        → Krung Thai
+   * Not yet mapped: Bangkok Capital, BBLAM, MFC, TMB (run testFindAMCPrefixes to discover).
+   */
+  function _amcEntry(nameOrPrefix) {
+    if (nameOrPrefix.includes('eastspring')) return { pattern: 'eastspring', prefix: 'ES' };
+    if (nameOrPrefix.includes('krungsri'))   return { pattern: 'krungsri',   prefix: 'KF' };
+    if (nameOrPrefix.includes('kasikorn'))   return { pattern: 'kasikorn',   prefix: 'K-' };
+    if (nameOrPrefix.includes('tisco'))      return { pattern: 'tisco',      prefix: 'TISCO' };
+    if (nameOrPrefix.includes('one asset'))  return { pattern: 'one asset',  prefix: 'ONE-' };
+    if (nameOrPrefix.includes('uob'))        return { pattern: 'uob',        prefix: 'UOB' };
+    if (nameOrPrefix.includes('principal'))  return { pattern: 'principal',  prefix: 'PRINCIPAL' };
+    if (nameOrPrefix.includes('krung thai')) return { pattern: 'krung thai', prefix: 'KT' };
+    if (nameOrPrefix.includes('phatra'))     return { pattern: 'phatra',     prefix: 'PHATRA' };
+    // Strategy B: query starts with a known fund class prefix (e.g. "ES-FIXEDRMF" → Eastspring)
+    if (nameOrPrefix.startsWith('es-') || nameOrPrefix === 'es')        return { pattern: 'eastspring', prefix: 'ES' };
+    if (nameOrPrefix.startsWith('kf'))                                   return { pattern: 'krungsri',   prefix: 'KF' };
+    if (nameOrPrefix.startsWith('k-'))                                   return { pattern: 'kasikorn',   prefix: 'K-' };
+    if (nameOrPrefix.startsWith('tisco'))                                return { pattern: 'tisco',      prefix: 'TISCO' };
+    if (nameOrPrefix.startsWith('one-'))                                 return { pattern: 'one asset',  prefix: 'ONE-' };
+    if (nameOrPrefix.startsWith('uob'))                                  return { pattern: 'uob',        prefix: 'UOB' };
+    if (nameOrPrefix.startsWith('principal'))                            return { pattern: 'principal',  prefix: 'PRINCIPAL' };
+    if (nameOrPrefix.startsWith('kt-') || nameOrPrefix === 'kt')        return { pattern: 'krung thai', prefix: 'KT' };
+    return null;
+  }
 
   /** De-dup + map raw profile items → [{proj_id, fund_class_name, proj_name_en, amc_name}] */
   function _mapProfiles(items, limit) {
@@ -797,28 +804,23 @@ const DataAgent = (() => {
       const q = query.trim().toLowerCase();
       let mapEntry = null;
 
-      // Strategy A — query is (part of) an AMC name
+      // Strategy A — query is (part of) an AMC name ("Eastspring" → AMC list → _amcEntry)
       try {
         const amcByName = _getAMCList().find(function(amc) {
           return (amc.comp_name_en || '').toLowerCase().includes(q) ||
                  (amc.comp_name_th || '').toLowerCase().includes(q);
         });
         if (amcByName) {
-          mapEntry = AMC_PREFIX_MAP.find(function(e) {
-            return (amcByName.comp_name_en || '').toLowerCase().includes(e.pattern);
-          });
+          mapEntry = _amcEntry((amcByName.comp_name_en || '').toLowerCase());
           if (mapEntry) Logger.log('[SEC] fallback A: AMC name → ' + amcByName.comp_name_en);
         }
       } catch (eA) {
         Logger.log('[SEC] fallback A error (AMC list): ' + eA.message);
       }
 
-      // Strategy B — query starts with a known fund class prefix (e.g. "ES-FIXEDRMF" → "ES")
+      // Strategy B — query starts with known prefix ("ES-FIXEDRMF" → "es-" → Eastspring)
       if (!mapEntry) {
-        mapEntry = AMC_PREFIX_MAP.find(function(e) {
-          const pfx = e.prefix.toLowerCase();
-          return q === pfx || q.startsWith(pfx + '-') || q.startsWith(pfx + '_');
-        });
+        mapEntry = _amcEntry(q);
         if (mapEntry) Logger.log('[SEC] fallback B: prefix-of-query → "' + mapEntry.prefix + '"');
       }
 
@@ -922,6 +924,21 @@ const DataAgent = (() => {
 })();
 
 // ── Standalone test runners only defined here (all others live in Code.gs) ────
+
+/** Quick smoke-test: confirms DataAgent loads and lookupMFFunds runs without throwing. */
+function testMFSearchSmoke() {
+  try {
+    var r1 = DataAgent.lookupMFFunds('KKP CorePath');
+    Logger.log('[smoke] KKP CorePath → ' + r1.length + ' result(s)' + (r1[0] ? ' | first=' + r1[0].fund_class_name : ''));
+    var r2 = DataAgent.lookupMFFunds('Eastspring');
+    Logger.log('[smoke] Eastspring → ' + r2.length + ' result(s)' + (r2[0] ? ' | first=' + r2[0].fund_class_name : ''));
+    var r3 = DataAgent.lookupMFFunds('ES-FIXEDRMF');
+    Logger.log('[smoke] ES-FIXEDRMF → ' + r3.length + ' result(s)' + (r3[0] ? ' | first=' + r3[0].fund_class_name : ''));
+    Logger.log('[smoke] PASS — DataAgent loaded and lookupMFFunds returned without throwing');
+  } catch (e) {
+    Logger.log('[smoke] FAIL: ' + e.message + '\n' + e.stack);
+  }
+}
 
 function testFetchRate()  { Logger.log('[testFetchRate] starting'); DataAgent.fetchAll(); }
 function testGoldPrice()  {
