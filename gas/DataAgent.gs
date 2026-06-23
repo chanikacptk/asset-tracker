@@ -690,16 +690,57 @@ const DataAgent = (() => {
   }
 
   /**
-   * Search SEC fund profiles by (partial) fund name so the user can find a fund's
-   * proj_id without digging through the API docs. Returns de-duplicated results:
-   * [{ proj_id, fund_class_name, proj_name_en, amc_name }]. Never throws.
+   * Fetch the full SEC AMC list and cache it for 10 minutes (CacheService).
+   * Returns [{unique_id, comp_name_en, comp_name_th, ...}]. Never throws.
    */
-  function lookupMFFunds(query) {
-    if (!query) return [];
-    const url = SEC_PROFILES_URL + '?fund_class_name=' + encodeURIComponent(query);
-    const items = _secApiItems(url, 'profiles "' + query + '"');
+  function _getAMCList() {
+    const CACHE_KEY = 'sec_amc_list_v1';
+    const sc = CacheService.getScriptCache();
+    try {
+      const hit = sc.get(CACHE_KEY);
+      if (hit) return JSON.parse(hit);
+    } catch (_) {}
+    const items = _secApiItems('https://api.sec.or.th/v2/fund/general-info/amcs', 'amcs');
+    if (items.length > 0) {
+      try { sc.put(CACHE_KEY, JSON.stringify(items), 600); } catch (_) {}
+    }
+    return items;
+  }
+
+  // Maps partial comp_name_en (lowercase) → fund_class_name prefix used in SEC data.
+  // The profiles endpoint only accepts fund_class_name= as a valid filter (unique_id=,
+  // proj_name_en= both return HTTP 400). For AMCs whose fund class names don't include
+  // the AMC name (e.g. Eastspring → "ES-CASH"), we search by prefix then post-filter
+  // results by comp_name_en to discard other AMCs that share the substring.
+  //
+  // Validated 2026-06-23 via testFindAMCPrefixes():
+  //   KF    → first result = KRUNGSRI ✓
+  //   K-    → first result = KASIKORN ✓
+  //   TISCO → first result = TISCO ✓
+  //   ONE-  → first result = ONE ASSET ✓  (ONE without dash → SCB first — don't use)
+  //   UOB   → first result = UOB ✓
+  //   PRINCIPAL → first result = PRINCIPAL ✓
+  //   KT    → first result = KRUNG THAI ✓
+  //   ES    → mixed results (Kasikorn K-ESGSI, Krung Thai etc.) — post-filter essential
+  //
+  // Not yet found: Bangkok Capital (BCAP=0, BC=SCB), BBLAM (0), MFC (0), TMB (0).
+  // Run testFindAMCPrefixes() + testEastspringViaES() to validate or extend this map.
+  const AMC_PREFIX_MAP = [
+    { pattern: 'eastspring', prefix: 'ES'        }, // ES-CASH, ES-DPLUS…; post-filter removes other AMC hits
+    { pattern: 'krungsri',   prefix: 'KF'        }, // KFNDQ, KFLTF…
+    { pattern: 'kasikorn',   prefix: 'K-'        }, // K-CASH, K-FIXED…
+    { pattern: 'tisco',      prefix: 'TISCO'     }, // TISCOINA, TISCOLTF…
+    { pattern: 'one asset',  prefix: 'ONE-'      }, // ONE-POWER, ONE-ULT… (ONE without dash → SCB)
+    { pattern: 'uob',        prefix: 'UOB'       }, // UOBSD, UOBSMART…
+    { pattern: 'principal',  prefix: 'PRINCIPAL' }, // PRINCIPAL SET50…
+    { pattern: 'krung thai', prefix: 'KT'        }, // KT-EPIC, KT-PREMISE…
+    { pattern: 'phatra',     prefix: 'PHATRA'    }, // legacy (merged → KKP)
+  ];
+
+  /** De-dup + map raw profile items → [{proj_id, fund_class_name, proj_name_en, amc_name}] */
+  function _mapProfiles(items, limit) {
     const seen = {}, out = [];
-    items.forEach(it => {
+    items.forEach(function(it) {
       const projId = it.proj_id;
       if (!projId) return;
       const cls = it.fund_class_name || it.proj_abbr_name || it.proj_name_en || '';
@@ -707,14 +748,87 @@ const DataAgent = (() => {
       if (seen[k]) return;
       seen[k] = true;
       out.push({
-        proj_id: projId,
+        proj_id:         projId,
         fund_class_name: cls,
-        proj_name_en: it.proj_name_en || it.proj_name_th || '',
-        amc_name: it.comp_name_en || it.comp_name_th || ''
+        proj_name_en:    it.proj_name_en || it.proj_name_th || '',
+        amc_name:        it.comp_name_en || it.comp_name_th || ''
       });
     });
-    Logger.log('[SEC] profiles "' + query + '" → ' + out.length + ' result(s)');
-    return out.slice(0, 30);
+    return out.slice(0, limit || 30);
+  }
+
+  /**
+   * Search SEC fund profiles — two-step strategy so searches work across ALL AMCs:
+   *
+   * Step 1 (fast): fund_class_name= search. Works when the query appears in the fund
+   *   class abbreviation (e.g. "KKP CorePath" → 12 hits, "SCB" → 945 hits).
+   *
+   * Step 2 (AMC-prefix fallback): triggered when Step 1 returns 0. The SEC profiles
+   *   endpoint only accepts fund_class_name= as a valid filter (unique_id= and
+   *   proj_name_en= both return HTTP 400). So for AMCs whose class names don't include
+   *   the AMC name (Eastspring → "ES-CASH", Krungsri → "KF-HTECH"), we look up the
+   *   AMC in the list to confirm it exists, then search by its known class prefix from
+   *   AMC_PREFIX_MAP. This makes searches for any known AMC name work generically.
+   *
+   * Returns [{ proj_id, fund_class_name, proj_name_en, amc_name }]. Never throws.
+   */
+  function lookupMFFunds(query) {
+    if (!query) return [];
+
+    // Step 1 — fund_class_name direct search (fast path)
+    const step1Items = _secApiItems(
+      SEC_PROFILES_URL + '?fund_class_name=' + encodeURIComponent(query),
+      'profiles/class "' + query + '"'
+    );
+    if (step1Items.length > 0) {
+      const out = _mapProfiles(step1Items, 30);
+      Logger.log('[SEC] lookupMFFunds "' + query + '" → ' + out.length + ' via fund_class_name');
+      return out;
+    }
+
+    // Step 2 — AMC-prefix fallback with AMC-name post-filter
+    Logger.log('[SEC] fund_class_name="' + query + '" → 0; trying AMC-prefix fallback');
+    const q = query.trim().toLowerCase();
+
+    // Confirm query matches a known AMC (avoids spurious API calls for random strings)
+    const amcMatch = _getAMCList().find(function(amc) {
+      return (amc.comp_name_en || '').toLowerCase().includes(q) ||
+             (amc.comp_name_th || '').toLowerCase().includes(q);
+    });
+    if (!amcMatch) {
+      Logger.log('[SEC] AMC fallback: "' + query + '" does not match any known AMC — no results');
+      return [];
+    }
+    Logger.log('[SEC] AMC fallback: matched "' + (amcMatch.comp_name_en || amcMatch.comp_name_th) + '"');
+
+    // Find the fund class prefix for this AMC
+    const mapEntry = AMC_PREFIX_MAP.find(function(e) {
+      return q.includes(e.pattern) || e.pattern.includes(q);
+    });
+    if (!mapEntry) {
+      Logger.log('[SEC] AMC fallback: no fund class prefix known for "' + query +
+        '" — run testFindAMCPrefixes() to discover it, then add to AMC_PREFIX_MAP');
+      return [];
+    }
+
+    // Fetch all items for the prefix. Post-filter by comp_name_en to discard other AMCs
+    // that happen to share the same prefix substring (e.g. "ES" also matches K-ESGSI).
+    const allItems = _secApiItems(
+      SEC_PROFILES_URL + '?fund_class_name=' + encodeURIComponent(mapEntry.prefix),
+      'profiles/prefix "' + mapEntry.prefix + '"'
+    );
+    const amcItems = allItems.filter(function(it) {
+      // The query string IS the (partial) AMC name, so we can use it directly as the filter.
+      // e.g. "eastspring" matches comp_name_en "EASTSPRING ASSET MANAGEMENT..." ✓
+      return (it.comp_name_en || it.comp_name_th || '').toLowerCase().includes(q);
+    });
+    Logger.log('[SEC] AMC fallback: ' + allItems.length + ' raw → ' + amcItems.length +
+      ' after AMC-name filter (query="' + q + '")');
+
+    const out = _mapProfiles(amcItems, 30);
+    Logger.log('[SEC] lookupMFFunds "' + query + '" → ' + out.length +
+      ' via prefix "' + mapEntry.prefix + '" + AMC-name filter');
+    return out;
   }
 
   /**
@@ -943,6 +1057,221 @@ function testSearchMFFunds() {
   }
 
   Logger.log('MAPPED: ' + JSON.stringify(DataAgent.lookupMFFunds(QUERY), null, 2));
+}
+
+/**
+ * testFindAMCPrefixes — discovers the correct fund_class_name prefix for each Thai AMC.
+ *
+ * The SEC profiles endpoint ONLY accepts fund_class_name= as a filter (unique_id= and
+ * proj_name_en= both return HTTP 400). This test probes candidate prefixes for every
+ * AMC in AMC_PREFIX_MAP and a few extras so we can validate and extend the map.
+ *
+ * How to read the output:
+ *   "prefix=KF → 47 items | first=KF-HTECH | amc=KRUNGSRI ASSET MANAGEMENT…"
+ *   → prefix "KF" is correct for Krungsri. Copy confirmed prefixes into AMC_PREFIX_MAP.
+ *
+ *   "prefix=ES → 0 (HTTP 204)" then "prefix=ES- → 15 items | first=ES-CASH…"
+ *   → "ES-" is correct, not "ES". Update the map entry.
+ *
+ * Run: GAS IDE → select testFindAMCPrefixes → Run → View → Logs.
+ */
+function testFindAMCPrefixes() {
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testFindAMCPrefixes] SEC_API_KEY: ' + (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING'));
+  if (!KEY) return;
+  const headers = { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' };
+
+  // [AMC display name, ...candidate prefixes to probe]
+  const probes = [
+    ['Eastspring',      'ES', 'ES-', 'EAST'],
+    ['Krungsri',        'KF', 'KG', 'BAY', 'KRUNG'],
+    ['Bangkok Capital', 'BCAP', 'BC', 'BGC'],
+    ['Kasikorn',        'K-', 'KA-', 'KFUND'],
+    ['TMB/TMBAM',       'TMB', 'TMBAM', 'TMBCOF'],
+    ['TISCO',           'TISCO', 'TISC'],
+    ['One Asset',       'ONE', 'ONE-', 'ONEAM'],
+    ['UOB',             'UOB', 'UOBSM', 'UOBSMART'],
+    ['PRINCIPAL',       'PRINCIPAL', 'PRIN'],
+    ['Krung Thai/KTAM', 'KT', 'KTAM', 'KTA'],
+    ['BBLAM',           'BBLAM', 'BBL'],
+    ['MFC',             'MFC', 'MFC-'],
+  ];
+
+  probes.forEach(function(probe) {
+    const name = probe[0];
+    const prefixes = probe.slice(1);
+    Logger.log('\n── ' + name + ' ──');
+    prefixes.forEach(function(pfx) {
+      try {
+        const url = 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=' +
+                    encodeURIComponent(pfx);
+        const r = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+        const code = r.getResponseCode();
+        if (code === 204) {
+          Logger.log('  "' + pfx + '" → 0 (HTTP 204 — no match)');
+          return;
+        }
+        const body = r.getContentText() || '';
+        if (code !== 200) {
+          Logger.log('  "' + pfx + '" → HTTP ' + code + ': ' + body.substring(0, 80));
+          return;
+        }
+        const j = JSON.parse(body);
+        const items = Array.isArray(j) ? j : (Array.isArray(j.items) ? j.items : []);
+        const first = items[0];
+        Logger.log('  "' + pfx + '" → ' + items.length + ' item(s)' +
+          (first ? ' | first_class=' + first.fund_class_name + ' | amc=' + (first.comp_name_en || '').substring(0, 30) : ''));
+      } catch (e) {
+        Logger.log('  "' + pfx + '" EXCEPTION: ' + e.message);
+      }
+    });
+  });
+}
+
+/**
+ * testEastspringViaES — confirms whether Eastspring funds appear in fund_class_name=ES results.
+ *
+ * The SEC API does a case-insensitive substring match on fund_class_name. "ES" matches
+ * K-ESGSI (Kasikorn), KT-Ashares ("ares" contains "es"), and — if Eastspring names
+ * their classes "ES-CASH", "ES-DPLUS" etc. — Eastspring funds too.
+ *
+ * This test fetches ALL pages of fund_class_name=ES, counts Eastspring funds,
+ * and shows the breakdown by AMC so we can decide whether the prefix + post-filter
+ * approach works or if we need a different prefix.
+ *
+ * Expected outcomes:
+ *   Eastspring count > 0 → AMC_PREFIX_MAP entry 'ES' is correct; two-step search works.
+ *   Eastspring count = 0 → Eastspring's fund classes don't contain "ES"; need a new prefix.
+ *
+ * Run: GAS IDE → select testEastspringViaES → Run → View → Logs.
+ */
+function testEastspringViaES() {
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testEastspringViaES] SEC_API_KEY: ' + (KEY ? 'set' : 'MISSING'));
+  if (!KEY) return;
+
+  const headers = { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' };
+  const all = [];
+  let nextUrl = 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=ES';
+  let page = 0;
+  while (nextUrl && page < 10) {
+    page++;
+    const r = UrlFetchApp.fetch(nextUrl, { method: 'get', headers: headers, muteHttpExceptions: true });
+    const code = r.getResponseCode();
+    const body = r.getContentText() || '';
+    if (code !== 200 && code !== 204) {
+      Logger.log('p' + page + ' HTTP ' + code + ': ' + body.substring(0, 200));
+      break;
+    }
+    if (code === 204) break;
+    const j = JSON.parse(body);
+    const items = Array.isArray(j) ? j : (Array.isArray(j.items) ? j.items : []);
+    all.push.apply(all, items);
+    Logger.log('p' + page + ': ' + items.length + ' items (total so far: ' + all.length + ')');
+    const cursor = j.next_cursor;
+    nextUrl = cursor
+      ? 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=ES&next_cursor=' +
+        encodeURIComponent(cursor)
+      : null;
+  }
+
+  Logger.log('Total fund_class_name=ES results: ' + all.length + ' across ' + page + ' page(s)');
+
+  // Filter for Eastspring specifically
+  const es = all.filter(function(it) {
+    return (it.comp_name_en || '').toLowerCase().includes('eastspring');
+  });
+  Logger.log('Eastspring funds in results: ' + es.length);
+  es.slice(0, 10).forEach(function(it) {
+    Logger.log('  → fund_class_name=' + it.fund_class_name + ' | proj_name_en=' + it.proj_name_en);
+  });
+
+  // AMC breakdown (how many items from each AMC)
+  const amcCounts = {};
+  all.forEach(function(it) {
+    const n = (it.comp_name_en || 'unknown').substring(0, 35);
+    amcCounts[n] = (amcCounts[n] || 0) + 1;
+  });
+  Logger.log('AMC breakdown: ' + JSON.stringify(amcCounts));
+}
+
+/**
+ * testMFSearchMultiAMC — validates the two-step search strategy across multiple AMC families.
+ *
+ * For each query it logs:
+ *   - lookupMFFunds() result count + first result (tests the full two-step path)
+ *   - Raw probe of profiles?proj_name_en= (extra data point)
+ *   - AMC list sample: unique_id + both name fields for matched AMCs
+ *
+ * Expected results:
+ *   "KKP CorePath"    → results via Step 1 (fund_class_name)
+ *   "Eastspring"      → 0 via Step 1 → results via Step 2 (AMC fallback)
+ *   "Krungsri"        → Step 1 or Step 2 depending on class naming convention
+ *   "SCB"             → Step 1 or Step 2
+ *   "Bangkok Capital" → Step 1 or Step 2
+ *
+ * Run from GAS IDE → select testMFSearchMultiAMC → Run → View → Logs.
+ */
+function testMFSearchMultiAMC() {
+  const KEY = Config.SEC_API_KEY();
+  Logger.log('[testMFSearchMultiAMC] SEC_API_KEY: ' + (KEY ? 'set (' + KEY.length + ' chars)' : 'MISSING'));
+  if (!KEY) return;
+
+  const queries = ['KKP CorePath', 'Eastspring', 'Krungsri', 'SCB', 'Bangkok Capital'];
+  const headers = { 'Ocp-Apim-Subscription-Key': KEY, 'Accept': 'application/json' };
+
+  queries.forEach(function(q) {
+    Logger.log('\n══════ Query: "' + q + '" ══════');
+
+    // Full two-step path (this is what the UI calls)
+    const results = DataAgent.lookupMFFunds(q);
+    Logger.log('  lookupMFFunds → ' + results.length + ' result(s)');
+    if (results.length > 0) Logger.log('  first: ' + JSON.stringify(results[0]));
+
+    // Bonus probe: proj_name_en (not currently in the lookup, but useful to know)
+    try {
+      const url = 'https://api.sec.or.th/v2/fund/general-info/profiles?proj_name_en=' +
+                  encodeURIComponent(q);
+      const r = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+      const code = r.getResponseCode();
+      const body = r.getContentText() || '';
+      if (code === 200) {
+        const j = JSON.parse(body);
+        const items = Array.isArray(j) ? j : (Array.isArray(j.items) ? j.items : []);
+        Logger.log('  proj_name_en probe → HTTP ' + code + ', ' + items.length + ' item(s)');
+        if (items.length > 0) Logger.log('  proj_name_en first: ' + JSON.stringify(items[0]));
+      } else {
+        Logger.log('  proj_name_en probe → HTTP ' + code + ': ' + body.substring(0, 200));
+      }
+    } catch (e) {
+      Logger.log('  proj_name_en probe EXCEPTION: ' + e.message);
+    }
+  });
+
+  // Log the AMC list structure + matches for our test queries
+  Logger.log('\n══════ AMC list structure + matches ══════');
+  try {
+    const url = 'https://api.sec.or.th/v2/fund/general-info/amcs';
+    const r = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+    const code = r.getResponseCode();
+    const body = r.getContentText() || '';
+    Logger.log('AMC list HTTP ' + code);
+    if (code === 200) {
+      const j = JSON.parse(body);
+      const items = Array.isArray(j) ? j : (Array.isArray(j.items) ? j.items : []);
+      Logger.log('Total AMCs: ' + items.length);
+      if (items.length > 0) Logger.log('Field names: ' + Object.keys(items[0]).join(', '));
+      ['eastspring', 'krungsri', 'scb', 'bangkok capital', 'kkp'].forEach(function(name) {
+        const match = items.find(function(a) {
+          return (a.comp_name_en || '').toLowerCase().includes(name) ||
+                 (a.comp_name_th || '').toLowerCase().includes(name);
+        });
+        Logger.log('  "' + name + '" → ' + (match ? JSON.stringify(match) : 'no match'));
+      });
+    }
+  } catch (e) {
+    Logger.log('AMC list EXCEPTION: ' + e.message);
+  }
 }
 
 /**
