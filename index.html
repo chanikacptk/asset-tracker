@@ -3710,7 +3710,7 @@ async function searchMFFunds() {
   const r = await callGAS('mfSearchFunds', { q });
   btn.disabled = false;
 
-  if (!r || !r.ok) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Search failed — you can still paste proj_id manually below.'; return; }
+  if (!r || !r.ok) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Search failed' + (r?.error ? ': ' + r.error : '') + ' — you can still paste proj_id manually below.'; return; }
   _mfSearchResults = r.funds || [];
   if (!_mfSearchResults.length) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'No matches. Try a shorter or exact name, or paste proj_id manually.'; return; }
 
