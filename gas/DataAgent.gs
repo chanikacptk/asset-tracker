@@ -787,43 +787,52 @@ const DataAgent = (() => {
     }
 
     // Step 2 — AMC-prefix fallback with AMC-name post-filter
+    // Two strategies to identify which AMC the query refers to:
+    //   A. Query matches an AMC name:      "Eastspring" → AMC list lookup
+    //   B. Query starts with a known prefix: "ES-FIXEDRMF" → starts with "ES" → Eastspring
+    // Strategy B catches the case where the user typed a partial fund class name but SEC
+    // spells it differently (e.g. user types "ES-FIXEDRMF", SEC has "ES-FIXED-RMF-A").
     Logger.log('[SEC] fund_class_name="' + query + '" → 0; trying AMC-prefix fallback');
     const q = query.trim().toLowerCase();
+    let mapEntry = null;
 
-    // Confirm query matches a known AMC (avoids spurious API calls for random strings)
-    const amcMatch = _getAMCList().find(function(amc) {
+    // Strategy A — query is (part of) an AMC name
+    const amcByName = _getAMCList().find(function(amc) {
       return (amc.comp_name_en || '').toLowerCase().includes(q) ||
              (amc.comp_name_th || '').toLowerCase().includes(q);
     });
-    if (!amcMatch) {
-      Logger.log('[SEC] AMC fallback: "' + query + '" does not match any known AMC — no results');
-      return [];
+    if (amcByName) {
+      mapEntry = AMC_PREFIX_MAP.find(function(e) {
+        return (amcByName.comp_name_en || '').toLowerCase().includes(e.pattern);
+      });
+      if (mapEntry) Logger.log('[SEC] fallback strategy A: AMC name → ' + amcByName.comp_name_en);
     }
-    Logger.log('[SEC] AMC fallback: matched "' + (amcMatch.comp_name_en || amcMatch.comp_name_th) + '"');
 
-    // Find the fund class prefix for this AMC
-    const mapEntry = AMC_PREFIX_MAP.find(function(e) {
-      return q.includes(e.pattern) || e.pattern.includes(q);
-    });
+    // Strategy B — query starts with a known fund class prefix (e.g. "ES-FIXEDRMF" → "ES")
     if (!mapEntry) {
-      Logger.log('[SEC] AMC fallback: no fund class prefix known for "' + query +
-        '" — run testFindAMCPrefixes() to discover it, then add to AMC_PREFIX_MAP');
+      mapEntry = AMC_PREFIX_MAP.find(function(e) {
+        const pfx = e.prefix.toLowerCase();
+        return q === pfx || q.startsWith(pfx + '-') || q.startsWith(pfx + '_');
+      });
+      if (mapEntry) Logger.log('[SEC] fallback strategy B: prefix-of-query → prefix="' + mapEntry.prefix + '"');
+    }
+
+    if (!mapEntry) {
+      Logger.log('[SEC] fallback: "' + query + '" matches no AMC name or known prefix — no results');
       return [];
     }
 
-    // Fetch all items for the prefix. Post-filter by comp_name_en to discard other AMCs
-    // that happen to share the same prefix substring (e.g. "ES" also matches K-ESGSI).
+    // Fetch all items for the prefix. Post-filter by mapEntry.pattern (the AMC name fragment)
+    // to discard other AMCs that share the prefix substring (e.g. "ES" also matches K-ESGSI).
     const allItems = _secApiItems(
       SEC_PROFILES_URL + '?fund_class_name=' + encodeURIComponent(mapEntry.prefix),
       'profiles/prefix "' + mapEntry.prefix + '"'
     );
     const amcItems = allItems.filter(function(it) {
-      // The query string IS the (partial) AMC name, so we can use it directly as the filter.
-      // e.g. "eastspring" matches comp_name_en "EASTSPRING ASSET MANAGEMENT..." ✓
-      return (it.comp_name_en || it.comp_name_th || '').toLowerCase().includes(q);
+      return (it.comp_name_en || it.comp_name_th || '').toLowerCase().includes(mapEntry.pattern);
     });
-    Logger.log('[SEC] AMC fallback: ' + allItems.length + ' raw → ' + amcItems.length +
-      ' after AMC-name filter (query="' + q + '")');
+    Logger.log('[SEC] fallback: ' + allItems.length + ' raw → ' + amcItems.length +
+      ' after filter (pattern="' + mapEntry.pattern + '")');
 
     const out = _mapProfiles(amcItems, 30);
     Logger.log('[SEC] lookupMFFunds "' + query + '" → ' + out.length +
