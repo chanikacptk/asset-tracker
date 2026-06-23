@@ -1832,8 +1832,15 @@ async function enterApp() {
 }
 
 async function _loadGasUrl() {
+  // localStorage is the primary source — survives RLS lockdown on app_config
+  const local = localStorage.getItem('gasUrl');
+  if (local) { state.gasUrl = local; return; }
+  // First-ever load fallback: try direct DB read (works if anon SELECT is allowed)
   const { data } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
-  state.gasUrl = data?.value || null;
+  if (data?.value) {
+    state.gasUrl = data.value;
+    localStorage.setItem('gasUrl', data.value);
+  }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -5371,6 +5378,7 @@ async function loadSettings() {
     gasUrlValue = cfg?.value || '';
   }
   state.gasUrl = gasUrlValue || null;
+  if (gasUrlValue) localStorage.setItem('gasUrl', gasUrlValue);
   document.getElementById('settings-gas-url').value = gasUrlValue;
   document.getElementById('settings-gas-status').textContent = gasUrlValue ? 'URL loaded ✓' : '';
 
@@ -5518,6 +5526,7 @@ async function saveGasUrl() {
     return;
   }
 
+  localStorage.setItem('gasUrl', url);
   statusEl.textContent = 'Saved ✓';
   statusEl.style.color = 'var(--success)';
   showToast('GAS URL saved');
