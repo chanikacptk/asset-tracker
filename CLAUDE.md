@@ -4,7 +4,8 @@
 
 A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash (savings/FD/FCD), insurance, private investments, and Thai bonds. AI-powered portfolio analysis, DCA planning, and Telegram notifications via Google Apps Script + Claude API.
 
-> **Mutual Funds — fully rebuilt 2026-06-20** — Phase 1 (manual NAV, insert-only) + Phase 2 (SEC daily auto-refresh) + fund-name search complete. See **"Mutual Funds — rebuild plan"** at the bottom.
+> **Mutual Funds — fully rebuilt 2026-06-20** — Phase 1 (manual NAV, insert-only) + Phase 2 (daily auto-refresh) + fund-name search complete. See **"Mutual Funds — rebuild plan"** at the bottom.
+> **NAV source order flipped 2026-06-25**: NAV refresh is now **Tier 1 Finnomena by `fund_code`** (freshest, no key, widest coverage) → **Tier 2 SEC by `sec_proj_id`** (official fallback) → Tier 3 manual. Also: adding a fund with an auto source now kicks a **fire-and-forget** NAV refresh so its card flips 🟡→🟢 within seconds instead of waiting for the 8PM trigger.
 
 ## Live URL
 
@@ -22,7 +23,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v54`) |
+| PWA | `manifest.json` + `sw.js` (cache `smart-me-v63`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -58,7 +59,7 @@ gas/
 supabase/
   schema.sql            Full schema (bootstrap once)
   seed.sql              Sample data
-  migrations/           016 migrations — 001–015 applied ✓; 016 pending
+  migrations/           017 migrations — 001–017 all applied ✓
 
 skills/
   add-asset-page.md     Pattern for adding new asset pages
@@ -130,7 +131,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 - `bond_master` is read-only for anon; GAS writes it via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
-### Migrations applied (001–015 ✓; **016 pending — run in Supabase SQL editor**)
+### Migrations applied (001–017 ✓)
 ```
 001  app_config table
 002  users.avatar + name
@@ -148,8 +149,8 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 013  DROP mutual_fund_nav + mutual_fund_holdings + mutual_fund_master (MF feature removed, rebuild fresh)
 014  mutual_fund_holdings recreated (Phase 1): insert-only, manual current_nav_thb, anon RW RLS  ✓
 015  mutual_fund_holdings.sec_proj_id + sec_fund_class_name (Phase 2): optional SEC link for daily NAV refresh  ✓
-016  mutual_fund_holdings.nav_date: stores SEC valuation date separately from nav_updated_at (last-polled ts)
-017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) — primary Finnomena NAV key (tried before SEC)  [pending — run in Supabase]
+016  mutual_fund_holdings.nav_date: stores SEC valuation date separately from nav_updated_at (last-polled ts)  ✓
+017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) — primary Finnomena NAV key (tried before SEC)  ✓
 ```
 
 ---
@@ -207,7 +208,7 @@ Called from frontend via `callGAS(action, params)`:
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
-| Mutual fund NAV (Tier 1) | **Finnomena public API** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{fund_code}/nav/q?range=1M` — **no API key**, keyed by plain fund code (e.g. `ES-FIXEDRMF`), returns `{ data: { fund_id, short_code, navs:[{date,value,amount}] } }` (`value`=NAV/unit, chronological). Freshest source, widest coverage (incl. funds **absent from SEC profiles** like ES-FIXEDRMF). Source is Morningstar (`fund_id` = Morningstar SecId). Confirmed reachable from GAS 2026-06-24. Tried first whenever a `fund_code` is set. `_fetchFinnomenaNav` never throws | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
+| Mutual fund NAV (Tier 1) | **Finnomena public API** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{fund_code}/nav/q?range=1M` — **no API key**, keyed by plain fund code (e.g. `ES-FIXEDRMF`), returns `{ data: { fund_id, short_code, navs:[{date,value,amount}] } }` (`value`=NAV/unit, chronological). Freshest source, widest coverage (incl. funds **absent from SEC profiles** like ES-FIXEDRMF). Source is Morningstar (`fund_id` = Morningstar SecId). Confirmed reachable from GAS 2026-06-24. Tried first whenever a `fund_code` is set. **Code matching is case-insensitive and trims whitespace** (verified 2026-06-25 with `ES-GQGRMF`: lowercase + trailing-space both 200); an unknown code returns HTTP 404 with a `{status:false}` JSON body. `_fetchFinnomenaNav` never throws | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
 | Mutual fund NAV (Tier 2 fallback) | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...], next_cursor, page_size }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date; `_secApiItems` follows `next_cursor` pagination (≤10 pages) so all rows are fetched. Official fallback, used only when Finnomena returns nothing | same columns on `mutual_fund_holdings` |
 | Mutual fund search | SEC Open Data v2 `GET /v2/fund/general-info/profiles?fund_class_name=` — partial name matching works (e.g. "KKP CorePath" → 12 results); fields: `proj_id`, `fund_class_name`, `proj_name_en`, `comp_name_en` (AMC) | frontend display only |
 
@@ -219,7 +220,7 @@ Called from frontend via `callGAS(action, params)`:
 - `testGoldPrice()`, `testBondScrape()` — existing
 - `testSingleFundNAV()` — confirmed SEC v2 `/fund/daily-info/nav` call for `M0209_2554`; logs all classes + `last_val` per class. Response is `{ items: [...] }`.
 - `testSearchMFFunds()` — confirmed SEC v2 `/fund/general-info/profiles` by name; logs raw body + mapped `[{proj_id, fund_class_name, proj_name_en, amc_name}]`. Partial name matching works.
-- `testFinnomenaNav()` — confirmed Finnomena public NAV API reachable from GAS (no key); tests `ES-FIXEDRMF` + 2 controls, logs latest NAV per fund. PASS = every code shows a NAV; FAIL = HTTP 403 / HTML challenge (IP-blocked).
+- `testFinnomenaNav()` — confirmed Finnomena public NAV API reachable from GAS (no key); tests `ES-GQGRMF`, `ES-FIXEDRMF` + 1 control, logs latest NAV per fund. PASS = every code shows a NAV; FAIL = HTTP 403 / HTML challenge (IP-blocked). Edit the `CODES` array to check a specific held fund's reachability from GAS.
 
 ---
 
@@ -387,7 +388,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v54`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v63`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
