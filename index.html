@@ -3651,9 +3651,20 @@ async function saveMF() {
     return;
   }
 
+  const hadAutoSource = !!(fundCode || secProjId);
   closeMFModal();
   showToast(_mfEditId ? 'Holding updated' : 'Holding saved');
   await loadMutualFunds();
+
+  // Fire-and-forget NAV refresh: a fund with a fund_code / proj_id flips from
+  // 🟡 Manual to 🟢 Auto within a few seconds, without ever blocking or awaiting
+  // the save itself. Swallows all errors — the user can still press ↻ manually.
+  if (hadAutoSource) {
+    showToast('Fetching latest NAV…');
+    callGAS('refreshMFNav')
+      .then(res => { if (res && res.ok) return loadMutualFunds(); })
+      .catch(() => {});
+  }
 }
 
 async function deleteMF(id) {

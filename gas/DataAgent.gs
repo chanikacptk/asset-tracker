@@ -1618,7 +1618,7 @@ function testSearchEastspring() {
  * Run from the GAS IDE → select testFinnomenaNav → Run → View → Logs.
  */
 function testFinnomenaNav() {
-  const CODES = ['ES-FIXEDRMF', 'KKP CorePath Balanced', 'SCBSET'];
+  const CODES = ['ES-GQGRMF', 'ES-FIXEDRMF', 'SCBSET'];
   CODES.forEach(function (code) {
     const url = 'https://www.finnomena.com/fn3/api/fund/v2/public/funds/' +
       encodeURIComponent(code) + '/nav/q?range=1M';
