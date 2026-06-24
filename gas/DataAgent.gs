@@ -744,6 +744,26 @@ const DataAgent = (() => {
     return null;
   }
 
+  /** Normalize a fund code for fuzzy matching: uppercase, strip everything but A-Z0-9.
+   *  Makes "ES-FIXEDRMF", "ES-FIXED-RMF", "ES FIXED RMF" all compare equal. */
+  function _normCode(s) {
+    return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  /** Split a fund-code query into search tokens. Inserts a boundary before known
+   *  fund-type keywords so a glued code like "FIXEDRMF" → ["FIXED","RMF"]; this lets a
+   *  token-AND search match an English fund name with words in between
+   *  (e.g. "Eastspring Fixed Income RMF"). Returns uppercased tokens, dups removed. */
+  function _codeTokens(query) {
+    // Peel known fund-type suffixes off the END of each dash/space segment only, so
+    // "FIXEDRMF" → "FIXED RMF" but we never split a token mid-word (which "DR" did).
+    let s = String(query || '').toUpperCase().replace(/(SSFX|RMF|SSF|LTF|ESG)(?=$|[^A-Z0-9])/g, ' $1 ');
+    const toks = s.split(/[^A-Z0-9]+/).filter(function(t){ return t.length > 1; });
+    const seen = {}, out = [];
+    toks.forEach(function(t){ if (!seen[t]) { seen[t] = true; out.push(t); } });
+    return out;
+  }
+
   /** De-dup + map raw profile items → [{proj_id, fund_class_name, proj_name_en, amc_name}] */
   function _mapProfiles(items, limit) {
     const seen = {}, out = [];
@@ -788,7 +808,7 @@ const DataAgent = (() => {
       'profiles/class "' + query + '"'
     );
     if (step1Items.length > 0) {
-      const out = _mapProfiles(step1Items, 30);
+      const out = _mapProfiles(step1Items, 60);
       Logger.log('[SEC] lookupMFFunds "' + query + '" → ' + out.length + ' via fund_class_name');
       return out;
     }
@@ -803,6 +823,7 @@ const DataAgent = (() => {
     try {
       const q = query.trim().toLowerCase();
       let mapEntry = null;
+      let viaPrefix = false;  // true = query is a specific fund code (Strategy B), not just an AMC name
 
       // Strategy A — query is (part of) an AMC name ("Eastspring" → AMC list → _amcEntry)
       try {
@@ -821,7 +842,7 @@ const DataAgent = (() => {
       // Strategy B — query starts with known prefix ("ES-FIXEDRMF" → "es-" → Eastspring)
       if (!mapEntry) {
         mapEntry = _amcEntry(q);
-        if (mapEntry) Logger.log('[SEC] fallback B: prefix-of-query → "' + mapEntry.prefix + '"');
+        if (mapEntry) { viaPrefix = true; Logger.log('[SEC] fallback B: prefix-of-query → "' + mapEntry.prefix + '"'); }
       }
 
       if (!mapEntry) {
@@ -841,7 +862,48 @@ const DataAgent = (() => {
       Logger.log('[SEC] fallback: ' + allItems.length + ' raw → ' + amcItems.length +
         ' after filter (pattern="' + mapEntry.pattern + '")');
 
-      const out = _mapProfiles(amcItems, 30);
+      // When the query is a specific fund code (Strategy B), narrow the AMC list down to
+      // the fund(s) the user means. Two passes, best-match first:
+      //   1. Exact normalized code substring — pins "ES-FIXEDRMF" even when SEC spells it
+      //      "ES-FIXED-RMF" (dashes/spaces ignored).
+      //   2. Token-AND across class code + English name — bridges words SEC puts between
+      //      tokens, e.g. query [FIXED,RMF] matches proj_name_en "Eastspring Fixed Income RMF".
+      // Falls back to the full AMC list if nothing matches (so the user still sees options).
+      let candidates = amcItems;
+      if (viaPrefix) {
+        const nq = _normCode(query);
+        const haystack = function(it) {
+          return _normCode((it.fund_class_name || '') + ' ' + (it.proj_name_en || '') +
+                           ' ' + (it.proj_name_th || '') + ' ' + (it.proj_abbr_name || ''));
+        };
+        let narrowed = amcItems.filter(function(it) {
+          return _normCode(it.fund_class_name || it.proj_abbr_name || '').includes(nq);
+        });
+        if (narrowed.length > 0) {
+          Logger.log('[SEC] fallback: narrowed to ' + narrowed.length + ' by code "' + nq + '"');
+        } else {
+          const tokens = _codeTokens(query);
+          if (tokens.length > 0) {
+            narrowed = amcItems.filter(function(it) {
+              const h = haystack(it);
+              return tokens.every(function(t) { return h.includes(t); });
+            });
+            if (narrowed.length > 0)
+              Logger.log('[SEC] fallback: narrowed to ' + narrowed.length + ' by tokens [' + tokens.join(',') + ']');
+          }
+        }
+        if (narrowed.length > 0) {
+          candidates = narrowed;
+        } else {
+          // The user typed a specific fund code that doesn't exist anywhere in this AMC's
+          // SEC classes. Returning the full AMC list here would be misleading (60 unrelated
+          // funds). Return [] so the UI shows a clean "not found — add with manual NAV".
+          Logger.log('[SEC] fallback: specific code "' + query + '" not in AMC list — returning [] (manual NAV)');
+          return [];
+        }
+      }
+
+      const out = _mapProfiles(candidates, 60);
       Logger.log('[SEC] lookupMFFunds "' + query + '" → ' + out.length +
         ' via prefix "' + mapEntry.prefix + '" + AMC-name filter');
       return out;
@@ -852,59 +914,128 @@ const DataAgent = (() => {
   }
 
   /**
-   * Daily refresh: for every holding with a sec_proj_id, fetch the latest NAV and
-   * update current_nav_thb + nav_updated_at. Errors per-holding are logged & skipped;
-   * a holding's existing (manual) NAV is left untouched on any failure/no-match.
-   * Returns { checked, updated, skipped }.
+   * Tier 1 — SEC NAV for one holding (official source, by proj_id).
+   * Returns { nav, nav_date } for the newest matching class, or null. Never throws.
+   */
+  function _secNavForHolding(h, start, end) {
+    const items = _fetchSecNav(h.sec_proj_id, start, end);
+    if (!items.length) { Logger.log('[MF NAV] ' + h.fund_name + ': SEC no rows'); return null; }
+
+    // Match the exact class the user holds. If none stored and only one class exists, use it.
+    let candidates = items;
+    if (h.sec_fund_class_name) {
+      candidates = items.filter(it => (it.fund_class_name || '') === h.sec_fund_class_name);
+    } else {
+      const classes = {}; items.forEach(it => classes[it.fund_class_name || ''] = true);
+      if (Object.keys(classes).length > 1) {
+        Logger.log('[MF NAV] ' + h.fund_name + ': SEC multiple classes, none stored — skipping SEC');
+        return null;
+      }
+    }
+    if (!candidates.length) {
+      Logger.log('[MF NAV] ' + h.fund_name + ': SEC class "' + h.sec_fund_class_name + '" not in response');
+      return null;
+    }
+
+    // Pick the most recent nav_date among matches.
+    candidates.sort((a, b) => (b.nav_date || '').localeCompare(a.nav_date || ''));
+    const nav = Number(candidates[0].last_val);
+    if (!(nav > 0)) { Logger.log('[MF NAV] ' + h.fund_name + ': SEC invalid last_val'); return null; }
+    return { nav: nav, nav_date: candidates[0].nav_date || null };
+  }
+
+  /**
+   * Tier 2 — Finnomena public NAV (fallback), keyed by the plain fund code.
+   * Covers funds absent from SEC's profiles dataset (e.g. ES-FIXEDRMF — confirmed
+   * reachable from GAS 2026-06-24). No API key required.
+   *   GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{code}/nav/q?range=1M
+   *   → { data: { fund_id, short_code, navs: [{ date:"YYYY-MM-DDT…Z", value, amount }, …] } }
+   *   `value` = NAV/unit. Returns { nav, nav_date(YYYY-MM-DD) } for the newest row, or null.
+   * Never throws — logs and returns null on any failure (block, non-JSON, empty).
+   */
+  function _fetchFinnomenaNav(code) {
+    if (!code) return null;
+    const url = 'https://www.finnomena.com/fn3/api/fund/v2/public/funds/' +
+      encodeURIComponent(code) + '/nav/q?range=1M';
+    try {
+      const r = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Accept': 'application/json' },
+        muteHttpExceptions: true,
+        followRedirects: true
+      });
+      const httpCode = r.getResponseCode();
+      const body = r.getContentText() || '';
+      if (httpCode !== 200 || body.charAt(0) !== '{') {
+        Logger.log('[Finnomena] ' + code + ' HTTP ' + httpCode + ': ' + body.substring(0, 120));
+        return null;
+      }
+      const navs = (JSON.parse(body).data || {}).navs || [];
+      let best = null;  // newest dated row with a positive value
+      navs.forEach(n => {
+        const v = Number(n && n.value);
+        if (!(v > 0) || !n.date) return;
+        if (!best || n.date > best.date) best = { date: n.date, value: v };
+      });
+      if (!best) { Logger.log('[Finnomena] ' + code + ': no usable navs'); return null; }
+      return { nav: best.value, nav_date: String(best.date).substring(0, 10) };
+    } catch (e) {
+      Logger.log('[Finnomena] ' + code + ' error: ' + e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Daily refresh — for every holding with an automated NAV source, fetch the latest
+   * NAV and update current_nav_thb + nav_date + nav_updated_at. Tiered source:
+   *   Tier 1  SEC by sec_proj_id     (official; preferred when present)
+   *   Tier 2  Finnomena by fund_code (covers funds absent from SEC, e.g. ES-FIXEDRMF)
+   *   Tier 3  Manual (no source set) — left untouched.
+   * Errors per-holding are logged & skipped; an existing (manual) NAV is never cleared
+   * or overwritten on any failure/no-match. Returns { checked, updated, skipped }.
    */
   function refreshMFNav() {
     let holdings = [];
     try {
       holdings = supabaseRequest('GET',
-        'mutual_fund_holdings?sec_proj_id=not.is.null' +
-        '&select=id,fund_name,sec_proj_id,sec_fund_class_name') || [];
+        'mutual_fund_holdings?or=(sec_proj_id.not.is.null,fund_code.not.is.null)' +
+        '&select=id,fund_name,fund_code,sec_proj_id,sec_fund_class_name') || [];
     } catch (e) {
       Logger.log('[MF NAV] could not load holdings: ' + e.message);
       return { checked: 0, updated: 0, skipped: 0 };
     }
 
-    Logger.log('[MF NAV] refresh start — ' + holdings.length + ' holding(s) with proj_id');
+    Logger.log('[MF NAV] refresh start — ' + holdings.length + ' holding(s) with an auto-NAV source');
     let updated = 0, skipped = 0;
     // 14-day window: covers weekends, Thai holidays, and funds with longer SEC publishing lag.
     const start = _bkkDate(14), end = _bkkDate(0);
 
     holdings.forEach(h => {
       try {
-        const items = _fetchSecNav(h.sec_proj_id, start, end);
-        if (!items.length) { Logger.log('[MF NAV] ' + h.fund_name + ': no rows'); skipped++; return; }
+        let res = null, source = null;
 
-        // Match the exact class the user holds. If none stored and only one class exists, use it.
-        let candidates = items;
-        if (h.sec_fund_class_name) {
-          candidates = items.filter(it => (it.fund_class_name || '') === h.sec_fund_class_name);
-        } else {
-          const classes = {}; items.forEach(it => classes[it.fund_class_name || ''] = true);
-          if (Object.keys(classes).length > 1) {
-            Logger.log('[MF NAV] ' + h.fund_name + ': multiple classes, no class stored — skipping (ambiguous)');
-            skipped++; return;
-          }
+        // Tier 1 — SEC (official) when a proj_id is linked.
+        if (h.sec_proj_id) {
+          res = _secNavForHolding(h, start, end);
+          if (res) source = 'SEC';
         }
-        if (!candidates.length) {
-          Logger.log('[MF NAV] ' + h.fund_name + ': class "' + h.sec_fund_class_name + '" not in response — skipping');
+        // Tier 2 — Finnomena fallback when SEC yielded nothing and a fund_code is set.
+        if (!res && h.fund_code) {
+          res = _fetchFinnomenaNav(h.fund_code);
+          if (res) source = 'Finnomena';
+        }
+
+        if (!res || !(res.nav > 0)) {
+          Logger.log('[MF NAV] ' + h.fund_name + ': no NAV from any source — skipping (manual untouched)');
           skipped++; return;
         }
 
-        // Pick the most recent nav_date among matches.
-        candidates.sort((a, b) => (b.nav_date || '').localeCompare(a.nav_date || ''));
-        const nav = Number(candidates[0].last_val);
-        if (!(nav > 0)) { Logger.log('[MF NAV] ' + h.fund_name + ': invalid last_val — skipping'); skipped++; return; }
-
         supabaseRequest('PATCH', 'mutual_fund_holdings?id=eq.' + h.id, {
-          current_nav_thb: nav,
-          nav_date:        candidates[0].nav_date || null,  // SEC valuation date
-          nav_updated_at:  new Date().toISOString()         // when we last fetched
+          current_nav_thb: res.nav,
+          nav_date:        res.nav_date || null,    // valuation date from the source
+          nav_updated_at:  new Date().toISOString() // when we last fetched
         });
-        Logger.log('[MF NAV] ' + h.fund_name + ' → ' + nav + ' THB (' + candidates[0].nav_date + ')');
+        Logger.log('[MF NAV] ' + h.fund_name + ' → ' + res.nav + ' THB (' + res.nav_date + ') via ' + source);
         updated++;
       } catch (e) {
         // Never throw — a bad row must not abort the rest or touch the manual value.
@@ -938,6 +1069,103 @@ function testMFSearchSmoke() {
   } catch (e) {
     Logger.log('[smoke] FAIL: ' + e.message + '\n' + e.stack);
   }
+}
+
+/**
+ * testFindFund(query) — end-to-end diagnostic for "I can't find fund X".
+ *
+ * Run from GAS IDE (default query = 'ES-FIXEDRMF'), or call testFindFund('KF-...') etc.
+ * Logs, in order:
+ *   1. Raw fund_class_name=<prefix> pagination — total rows + page count (proves we get
+ *      past page 1, since SEC's page size is 30).
+ *   2. Every SEC class whose NORMALIZED name matches the query — reveals SEC's exact
+ *      spelling (e.g. you typed "ES-FIXEDRMF", SEC stores "ES-FIXED-RMF").
+ *   3. What lookupMFFunds(query) actually returns to the UI.
+ */
+function testFindFund(query) {
+  const q = query || 'ES-FIXEDRMF';
+  Logger.log('══════ testFindFund("' + q + '") ══════');
+
+  // Derive the AMC prefix the same way lookupMFFunds does (e.g. "ES-FIXEDRMF" → "ES").
+  const entry = (function(s){ return s.split('-')[0].toUpperCase(); })(q);
+  const url = 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=' +
+              encodeURIComponent(entry);
+
+  const key = Config.SEC_API_KEY();
+  if (!key) { Logger.log('SEC_API_KEY MISSING'); return; }
+
+  // 1. Raw paginate the prefix
+  const all = [];
+  let nextUrl = url, page = 0;
+  while (nextUrl && page < 10) {
+    page++;
+    const r = UrlFetchApp.fetch(nextUrl, {
+      method: 'get',
+      headers: { 'Ocp-Apim-Subscription-Key': key, 'Accept': 'application/json' },
+      muteHttpExceptions: true
+    });
+    const code = r.getResponseCode();
+    const body = r.getContentText() || '';
+    if (code === 204) { Logger.log('p' + page + ' HTTP 204 (empty)'); break; }
+    if (code !== 200) { Logger.log('p' + page + ' HTTP ' + code + ': ' + body.substring(0, 200)); break; }
+    const j = JSON.parse(body);
+    const items = Array.isArray(j) ? j : (Array.isArray(j.items) ? j.items : []);
+    all.push.apply(all, items);
+    Logger.log('p' + page + ': +' + items.length + ' (total ' + all.length + '), next_cursor=' + (j.next_cursor ? 'yes' : 'no'));
+    nextUrl = j.next_cursor ? url + '&next_cursor=' + encodeURIComponent(j.next_cursor) : null;
+  }
+  Logger.log('Prefix "' + entry + '": ' + all.length + ' rows across ' + page + ' page(s)');
+
+  // 2a. Exact normalized-code matches — shows SEC's actual spelling of the fund
+  const norm = function(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); };
+  const nq = norm(q);
+  const hits = all.filter(function(it){ return norm(it.fund_class_name).includes(nq); });
+  Logger.log('Exact code matches for "' + nq + '": ' + hits.length);
+  hits.slice(0, 20).forEach(function(it){
+    Logger.log('  → class="' + it.fund_class_name + '" proj_id=' + it.proj_id + ' name=' + (it.proj_name_en || ''));
+  });
+
+  // 2b. Token-AND matches across class code + English name (what the new fallback uses)
+  const tokens = q.toUpperCase().replace(/(SSFX|RMF|SSF|LTF|ESG)(?=$|[^A-Z0-9])/g,' $1 ')
+                  .split(/[^A-Z0-9]+/).filter(function(t){return t.length>1;});
+  const hay = function(it){ return norm((it.fund_class_name||'')+' '+(it.proj_name_en||'')+' '+(it.proj_name_th||'')); };
+  const tokHits = all.filter(function(it){ return tokens.every(function(t){ return hay(it).includes(t); }); });
+  Logger.log('Token-AND matches (within prefix list) for [' + tokens.join(',') + ']: ' + tokHits.length);
+  tokHits.slice(0, 20).forEach(function(it){
+    Logger.log('  ⇒ class="' + it.fund_class_name + '" proj_id=' + it.proj_id + ' name=' + (it.proj_name_en || ''));
+  });
+
+  // 2d. DECISIVE PROBE — query SEC directly by each non-prefix token (fund_class_name= is a
+  //     substring filter), then keep only Eastspring rows. This finds the fund even when its
+  //     SEC class code does NOT contain the AMC prefix "ES" (the case 2c proved).
+  const getAll = function(val) {
+    const out = [], u = 'https://api.sec.or.th/v2/fund/general-info/profiles?fund_class_name=' + encodeURIComponent(val);
+    let nu = u, p = 0;
+    while (nu && p < 10) {
+      p++;
+      const rr = UrlFetchApp.fetch(nu, { method:'get', headers:{ 'Ocp-Apim-Subscription-Key':key, 'Accept':'application/json' }, muteHttpExceptions:true });
+      const c = rr.getResponseCode(), b = rr.getContentText() || '';
+      if (c !== 200) break;
+      const jj = JSON.parse(b);
+      const it = Array.isArray(jj) ? jj : (Array.isArray(jj.items) ? jj.items : []);
+      out.push.apply(out, it);
+      nu = jj.next_cursor ? u + '&next_cursor=' + encodeURIComponent(jj.next_cursor) : null;
+    }
+    return out;
+  };
+  tokens.filter(function(t){ return t !== entry; }).forEach(function(t){
+    const rows = getAll(t);
+    const es = rows.filter(function(it){ return /eastspring/i.test(it.comp_name_en || ''); });
+    Logger.log('SEC fund_class_name="' + t + '" → ' + rows.length + ' rows, ' + es.length + ' Eastspring:');
+    es.slice(0, 25).forEach(function(it){
+      Logger.log('  ◆ class="' + it.fund_class_name + '" proj_id=' + it.proj_id + ' name=' + (it.proj_name_en || ''));
+    });
+  });
+
+  // 3. What the UI gets
+  const out = DataAgent.lookupMFFunds(q);
+  Logger.log('lookupMFFunds("' + q + '") → ' + out.length + ' result(s)');
+  out.slice(0, 10).forEach(function(o){ Logger.log('  UI → ' + o.fund_class_name + ' (' + o.proj_id + ')'); });
 }
 
 function testFetchRate()  { Logger.log('[testFetchRate] starting'); DataAgent.fetchAll(); }
@@ -1366,4 +1594,65 @@ function testSearchEastspring() {
   // Probe 4: full AMC list — reveals Eastspring's real identifier and any search params
   rawGet('4. general-info/amcs (full AMC list)',
     BASE + 'amcs');
+}
+
+/**
+ * testFinnomenaNav — VALIDATION ONLY (run before building the Finnomena fallback).
+ *
+ * Confirms whether Finnomena's public NAV endpoint is reachable from Google's
+ * servers (it could Cloudflare-block GAS IPs even though it works from a browser).
+ *
+ *   GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{CODE}/nav/q?range=1M
+ *   No API key. Keyed by the plain fund code. Response:
+ *   { status, data: { fund_id, short_code, navs: [{ date, value, amount }, …] } }
+ *   `value` = NAV/unit; take the last entry for the latest NAV.
+ *
+ * PASS  = HTTP 200 + JSON whose body starts with {"status":true ...} and logs a
+ *         "latest" line with a real NAV (~17.8 for ES-FIXEDRMF).
+ * FAIL  = HTTP 403 / an HTML <body> (Cloudflare challenge) → Finnomena is IP-blocked
+ *         from GAS; do NOT build the fallback on it, tell me and we pick another source.
+ *
+ * Tests ES-FIXEDRMF (absent from SEC profiles — the whole reason for this) plus two
+ * controls that also exist in SEC, to prove the endpoint generalises.
+ *
+ * Run from the GAS IDE → select testFinnomenaNav → Run → View → Logs.
+ */
+function testFinnomenaNav() {
+  const CODES = ['ES-FIXEDRMF', 'KKP CorePath Balanced', 'SCBSET'];
+  CODES.forEach(function (code) {
+    const url = 'https://www.finnomena.com/fn3/api/fund/v2/public/funds/' +
+      encodeURIComponent(code) + '/nav/q?range=1M';
+    Logger.log('──────────────────────────────────────────');
+    Logger.log('GET ' + url);
+    try {
+      const r = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Accept': 'application/json' },
+        muteHttpExceptions: true,
+        followRedirects: true
+      });
+      const httpCode = r.getResponseCode();
+      const body = r.getContentText() || '';
+      Logger.log('HTTP ' + httpCode + '  (' + body.length + ' bytes)');
+      Logger.log('BODY head: ' + body.substring(0, 180));
+
+      if (httpCode === 200 && body.charAt(0) === '{') {
+        const j = JSON.parse(body);
+        const navs = (j && j.data && j.data.navs) || [];
+        const last = navs[navs.length - 1];
+        Logger.log('  short_code=' + (j.data && j.data.short_code) +
+                   '  fund_id=' + (j.data && j.data.fund_id) +
+                   '  rows=' + navs.length);
+        Logger.log(last
+          ? '  ✅ latest NAV ' + last.value + ' on ' + last.date
+          : '  ⚠️ 200 but navs[] empty — code not recognised by Finnomena');
+      } else {
+        Logger.log('  ❌ not JSON-200 — likely IP-blocked / challenge page. Do NOT build on this.');
+      }
+    } catch (e) {
+      Logger.log('  ❌ EXCEPTION: ' + e.message);
+    }
+  });
+  Logger.log('──────────────────────────────────────────');
+  Logger.log('Done. PASS = every code shows "✅ latest NAV ...". Paste the log back to me.');
 }

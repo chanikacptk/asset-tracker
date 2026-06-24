@@ -605,6 +605,12 @@ body {
     <input id="mf-sec-class-name" type="text" placeholder="Exact fund class name (for auto-refresh)"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;margin-bottom:16px">
 
+    <!-- Fund code (optional — Finnomena fallback for funds not in SEC, e.g. ES-FIXEDRMF) -->
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund code <span style="font-weight:400;text-transform:none">(optional — auto NAV via Finnomena if not in SEC)</span></div>
+    <input id="mf-fund-code" type="text" placeholder="e.g. ES-FIXEDRMF" autocapitalize="characters"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'JetBrains Mono',monospace;margin-bottom:4px">
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Used only when there's no SEC proj_id. The exact code on finnomena.com/fund/&lt;code&gt;.</div>
+
     <!-- Notes (collapsible) -->
     <div style="margin-bottom:16px">
       <a id="mf-notes-toggle" onclick="_toggleMFNotes()" style="font-size:13px;color:var(--accent);cursor:pointer;font-weight:600">+ Add note</a>
@@ -3268,7 +3274,7 @@ async function loadMutualFunds() {
 
 async function _loadMutualFundsInner(el) {
   const { data: holdings, error: hErr } = await sb.from('mutual_fund_holdings')
-    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_date, nav_updated_at, sec_proj_id, sec_fund_class_name, buy_date, notes')
+    .select('id, fund_name, category, units, avg_cost_thb, current_nav_thb, nav_date, nav_updated_at, sec_proj_id, sec_fund_class_name, fund_code, buy_date, notes')
     .eq('user_id', state.userId)
     .order('created_at', { ascending: false });
 
@@ -3291,9 +3297,9 @@ async function _loadMutualFundsInner(el) {
     const currentValue = hasNav ? units * currentNav : costValue;
     const plThb        = hasNav ? currentValue - costValue : 0;
     const plPct        = (hasNav && costValue > 0) ? (plThb / costValue) * 100 : 0;
-    // Auto-NAV = linked to SEC (has proj_id) AND refreshed within 48h
+    // Auto-NAV = linked to an automated source (SEC proj_id OR Finnomena fund_code) AND refreshed within 48h
     const freshNav     = h.nav_updated_at && (Date.now() - new Date(h.nav_updated_at).getTime()) < 48 * 3600 * 1000;
-    const isAuto       = !!h.sec_proj_id && freshNav;
+    const isAuto       = (!!h.sec_proj_id || !!h.fund_code) && freshNav;
     return { ...h, units, costPerUnit, hasNav, currentNav, costValue, currentValue, plThb, plPct, isAuto };
   });
 
@@ -3327,7 +3333,7 @@ function _renderMFHero(latestTs) {
   const tsEl = document.getElementById('mf-updated-ts');
   if (latestTs) {
     const checked = new Date(latestTs).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
-    const linkedWithDate  = _mfListData.filter(h => h.sec_proj_id && h.nav_date);
+    const linkedWithDate  = _mfListData.filter(h => (h.sec_proj_id || h.fund_code) && h.nav_date);
     const latestNavDate   = linkedWithDate.map(h => h.nav_date).sort().pop() || null;
     tsEl.textContent = latestNavDate
       ? 'checked ' + checked + ' · latest NAV ' + _fmtShortDate(latestNavDate)
@@ -3379,7 +3385,7 @@ function _renderMFList() {
         <div class="mf-detail-row"><span class="mf-detail-lbl">Units held</span><span class="mf-detail-val">${h.units.toFixed(4)} Unit</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Cost / Unit</span><span class="mf-detail-val">${h.costPerUnit > 0 ? h.costPerUnit.toFixed(4) : '—'} THB</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Current NAV</span><span class="mf-detail-val">${h.hasNav ? h.currentNav.toFixed(4) : '—'} THB</span></div>
-        ${h.nav_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">NAV date (SEC)</span><span class="mf-detail-val">${_fmtShortDate(h.nav_date)}</span></div>` : ''}
+        ${h.nav_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">NAV date${h.sec_proj_id ? ' (SEC)' : (h.fund_code ? ' (Finnomena)' : '')}</span><span class="mf-detail-val">${_fmtShortDate(h.nav_date)}</span></div>` : ''}
         ${h.nav_updated_at ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Last checked</span><span class="mf-detail-val">${_fmtShortDate(h.nav_updated_at)}</span></div>` : ''}
         ${h.buy_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Purchase date</span><span class="mf-detail-val">${_fmtShortDate(h.buy_date)}</span></div>` : ''}
         ${h.notes ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Notes</span><span class="mf-detail-val" style="max-width:60%;text-align:right">${h.notes}</span></div>` : ''}
@@ -3433,7 +3439,7 @@ function _mfCatStyle(cat) {
 
 function _mfModalReset() {
   ['mf-fund-name','mf-cost-per-unit','mf-purchase-date','mf-current-nav','mf-sec-proj-id','mf-sec-class-name',
-   'mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
+   'mf-fund-code','mf-notes','mf-total-baht','mf-total-units-input','mf-manual-units','mf-manual-baht']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const classSel = document.getElementById('mf-class-select');
   classSel.style.display = 'none'; classSel.innerHTML = '';
@@ -3494,6 +3500,7 @@ async function openEditMF(id) {
     Number(h.current_nav_thb) > 0 ? Number(h.current_nav_thb).toLocaleString('en-US') : '';
   document.getElementById('mf-sec-proj-id').value = h.sec_proj_id || '';
   document.getElementById('mf-sec-class-name').value = h.sec_fund_class_name || '';
+  document.getElementById('mf-fund-code').value = h.fund_code || '';
 
   if (h.notes) {
     document.getElementById('mf-notes').value = h.notes;
@@ -3593,6 +3600,7 @@ async function saveMF() {
   const currentNav   = _parseNum(document.getElementById('mf-current-nav').value);
   const secProjId    = document.getElementById('mf-sec-proj-id').value.trim() || null;
   const secClassName = document.getElementById('mf-sec-class-name').value.trim() || null;
+  const fundCode     = document.getElementById('mf-fund-code').value.trim() || null;
   const notes        = document.getElementById('mf-notes').value.trim() || null;
 
   if (!fundName)          { _err('Fund name is required.'); return; }
@@ -3625,6 +3633,7 @@ async function saveMF() {
     nav_updated_at:  currentNav > 0 ? new Date().toISOString() : null,
     sec_proj_id:         secProjId,
     sec_fund_class_name: secClassName,
+    fund_code:           fundCode,
     buy_date:            purchaseDate,
     notes
   };
