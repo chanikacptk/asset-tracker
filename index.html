@@ -3754,7 +3754,7 @@ async function searchMFFunds() {
 
   if (!r || !r.ok) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Search failed' + (r?.error ? ': ' + r.error : '') + ' — you can still paste proj_id manually below.'; return; }
   _mfSearchResults = r.funds || [];
-  if (!_mfSearchResults.length) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'No matches. Try a shorter or exact name, or paste proj_id manually.'; return; }
+  if (!_mfSearchResults.length) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'No SEC match. Try the AMC name (e.g. “Eastspring”) to browse, or just save with a Current NAV you enter yourself — auto-refresh is optional.'; return; }
 
   statusEl.style.color = 'var(--text)';
   statusEl.textContent = _mfSearchResults.length + ' match(es) — tap the one you hold:';
