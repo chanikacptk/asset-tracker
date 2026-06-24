@@ -3385,7 +3385,7 @@ function _renderMFList() {
         <div class="mf-detail-row"><span class="mf-detail-lbl">Units held</span><span class="mf-detail-val">${h.units.toFixed(4)} Unit</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Cost / Unit</span><span class="mf-detail-val">${h.costPerUnit > 0 ? h.costPerUnit.toFixed(4) : '—'} THB</span></div>
         <div class="mf-detail-row"><span class="mf-detail-lbl">Current NAV</span><span class="mf-detail-val">${h.hasNav ? h.currentNav.toFixed(4) : '—'} THB</span></div>
-        ${h.nav_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">NAV date${h.sec_proj_id ? ' (SEC)' : (h.fund_code ? ' (Finnomena)' : '')}</span><span class="mf-detail-val">${_fmtShortDate(h.nav_date)}</span></div>` : ''}
+        ${h.nav_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">NAV date${h.fund_code ? ' (Finnomena)' : (h.sec_proj_id ? ' (SEC)' : '')}</span><span class="mf-detail-val">${_fmtShortDate(h.nav_date)}</span></div>` : ''}
         ${h.nav_updated_at ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Last checked</span><span class="mf-detail-val">${_fmtShortDate(h.nav_updated_at)}</span></div>` : ''}
         ${h.buy_date ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Purchase date</span><span class="mf-detail-val">${_fmtShortDate(h.buy_date)}</span></div>` : ''}
         ${h.notes ? `<div class="mf-detail-row"><span class="mf-detail-lbl">Notes</span><span class="mf-detail-val" style="max-width:60%;text-align:right">${h.notes}</span></div>` : ''}

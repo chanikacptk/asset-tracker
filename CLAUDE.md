@@ -98,7 +98,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
 | `private_investments` | id, user_id, name, current_valuation, currency |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
-| `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable)*, nav_date *(nullable — source valuation date)*, nav_updated_at *(nullable — when we last polled)*, sec_proj_id *(nullable)*, sec_fund_class_name *(nullable — exact SEC class; one proj_id has many classes)*, fund_code *(nullable — plain code, e.g. ES-FIXEDRMF; Finnomena NAV fallback for funds absent from SEC)*, buy_date, notes, created_at |
+| `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable)*, nav_date *(nullable — source valuation date)*, nav_updated_at *(nullable — when we last polled)*, sec_proj_id *(nullable)*, sec_fund_class_name *(nullable — exact SEC class; one proj_id has many classes)*, fund_code *(nullable — plain code, e.g. ES-FIXEDRMF; primary Finnomena NAV key, tried before SEC)*, buy_date, notes, created_at |
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
 | `bond_master` | bond_code PK, bond_name, issuer, credit_rating, coupon_rate, coupon_type, issued_date, maturity_date, scraped_at — ThaiBMA scrape cache |
 
@@ -149,7 +149,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 014  mutual_fund_holdings recreated (Phase 1): insert-only, manual current_nav_thb, anon RW RLS  ✓
 015  mutual_fund_holdings.sec_proj_id + sec_fund_class_name (Phase 2): optional SEC link for daily NAV refresh  ✓
 016  mutual_fund_holdings.nav_date: stores SEC valuation date separately from nav_updated_at (last-polled ts)
-017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) for Finnomena NAV fallback (funds absent from SEC)  [pending — run in Supabase]
+017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) — primary Finnomena NAV key (tried before SEC)  [pending — run in Supabase]
 ```
 
 ---
@@ -193,7 +193,7 @@ Called from frontend via `callGAS(action, params)`:
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
 | `scrapeBondInfo` | DataAgent.scrapeBondInfo(bondCode) — scrapes ThaiBMA, caches in bond_master |
-| `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with an auto source. **Tiered**: Tier 1 SEC by `sec_proj_id` (`_secNavForHolding`) → Tier 2 Finnomena by `fund_code` (`_fetchFinnomenaNav`) → Tier 3 manual (untouched). Stores `current_nav_thb`, `nav_date` (source valuation date), `nav_updated_at`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV. Holdings query: `or=(sec_proj_id.not.is.null,fund_code.not.is.null)` |
+| `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with an auto source. **Tiered**: Tier 1 Finnomena by `fund_code` (`_fetchFinnomenaNav`) → Tier 2 SEC by `sec_proj_id` (`_secNavForHolding`) → Tier 3 manual (untouched). Stores `current_nav_thb`, `nav_date` (source valuation date), `nav_updated_at`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV. Holdings query: `or=(sec_proj_id.not.is.null,fund_code.not.is.null)` |
 | `mfLookupClasses` | DataAgent.lookupMFClasses(projId) — returns `[{fund_class_name, last_val, nav_date}]` for the "Find classes" picker |
 | `mfSearchFunds` | DataAgent.lookupMFFunds(q) — searches SEC `/v2/fund/general-info/profiles?fund_class_name=` by (partial) name; returns `[{proj_id, fund_class_name, proj_name_en, amc_name}]`; partial matching works; user taps result to auto-fill `sec_proj_id` + class |
 
@@ -207,8 +207,8 @@ Called from frontend via `callGAS(action, params)`:
 | USD/THB | Yahoo Finance `THB=X` | `USDTHB` in `exchange_rates` |
 | Crypto | CoinGecko API | coin symbol in `market_data` |
 | Thai bond info | ThaiBMA EN website scrape (cached in `bond_master`) | — |
-| Mutual fund NAV (Tier 1) | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...], next_cursor, page_size }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date; `_secApiItems` follows `next_cursor` pagination (≤10 pages) so all rows are fetched | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
-| Mutual fund NAV (Tier 2 fallback) | **Finnomena public API** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{fund_code}/nav/q?range=1M` — **no API key**, keyed by plain fund code (e.g. `ES-FIXEDRMF`), returns `{ data: { fund_id, short_code, navs:[{date,value,amount}] } }` (`value`=NAV/unit, chronological). Covers funds **absent from SEC profiles** (ES-FIXEDRMF). Source is Morningstar (`fund_id` = Morningstar SecId). Confirmed reachable from GAS 2026-06-24. Used by `refreshMFNav` only when no `sec_proj_id` resolves. `_fetchFinnomenaNav` never throws | same columns on `mutual_fund_holdings` |
+| Mutual fund NAV (Tier 1) | **Finnomena public API** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{fund_code}/nav/q?range=1M` — **no API key**, keyed by plain fund code (e.g. `ES-FIXEDRMF`), returns `{ data: { fund_id, short_code, navs:[{date,value,amount}] } }` (`value`=NAV/unit, chronological). Freshest source, widest coverage (incl. funds **absent from SEC profiles** like ES-FIXEDRMF). Source is Morningstar (`fund_id` = Morningstar SecId). Confirmed reachable from GAS 2026-06-24. Tried first whenever a `fund_code` is set. `_fetchFinnomenaNav` never throws | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
+| Mutual fund NAV (Tier 2 fallback) | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...], next_cursor, page_size }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date; `_secApiItems` follows `next_cursor` pagination (≤10 pages) so all rows are fetched. Official fallback, used only when Finnomena returns nothing | same columns on `mutual_fund_holdings` |
 | Mutual fund search | SEC Open Data v2 `GET /v2/fund/general-info/profiles?fund_class_name=` — partial name matching works (e.g. "KKP CorePath" → 12 results); fields: `proj_id`, `fund_class_name`, `proj_name_en`, `comp_name_en` (AMC) | frontend display only |
 
 > Thai Mutual Fund NAV fetching (SEC Open Data API + scrapers) was removed 2026-06-19. See **"Mutual Funds — rebuild plan"** at the bottom for prior findings and the fresh-start design.

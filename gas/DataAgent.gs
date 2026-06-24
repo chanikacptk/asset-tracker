@@ -914,7 +914,7 @@ const DataAgent = (() => {
   }
 
   /**
-   * Tier 1 — SEC NAV for one holding (official source, by proj_id).
+   * Tier 2 — SEC NAV for one holding (official fallback, by proj_id).
    * Returns { nav, nav_date } for the newest matching class, or null. Never throws.
    */
   function _secNavForHolding(h, start, end) {
@@ -945,7 +945,7 @@ const DataAgent = (() => {
   }
 
   /**
-   * Tier 2 — Finnomena public NAV (fallback), keyed by the plain fund code.
+   * Tier 1 — Finnomena public NAV (primary), keyed by the plain fund code.
    * Covers funds absent from SEC's profiles dataset (e.g. ES-FIXEDRMF — confirmed
    * reachable from GAS 2026-06-24). No API key required.
    *   GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{code}/nav/q?range=1M
@@ -988,8 +988,8 @@ const DataAgent = (() => {
   /**
    * Daily refresh — for every holding with an automated NAV source, fetch the latest
    * NAV and update current_nav_thb + nav_date + nav_updated_at. Tiered source:
-   *   Tier 1  SEC by sec_proj_id     (official; preferred when present)
-   *   Tier 2  Finnomena by fund_code (covers funds absent from SEC, e.g. ES-FIXEDRMF)
+   *   Tier 1  Finnomena by fund_code (freshest, no key, widest coverage incl. ES-FIXEDRMF)
+   *   Tier 2  SEC by sec_proj_id     (official fallback when Finnomena has no data)
    *   Tier 3  Manual (no source set) — left untouched.
    * Errors per-holding are logged & skipped; an existing (manual) NAV is never cleared
    * or overwritten on any failure/no-match. Returns { checked, updated, skipped }.
@@ -1014,15 +1014,15 @@ const DataAgent = (() => {
       try {
         let res = null, source = null;
 
-        // Tier 1 — SEC (official) when a proj_id is linked.
-        if (h.sec_proj_id) {
-          res = _secNavForHolding(h, start, end);
-          if (res) source = 'SEC';
-        }
-        // Tier 2 — Finnomena fallback when SEC yielded nothing and a fund_code is set.
-        if (!res && h.fund_code) {
+        // Tier 1 — Finnomena (freshest, no key, widest coverage) when a fund_code is set.
+        if (h.fund_code) {
           res = _fetchFinnomenaNav(h.fund_code);
           if (res) source = 'Finnomena';
+        }
+        // Tier 2 — SEC (official) fallback when Finnomena yielded nothing and a proj_id is linked.
+        if (!res && h.sec_proj_id) {
+          res = _secNavForHolding(h, start, end);
+          if (res) source = 'SEC';
         }
 
         if (!res || !(res.nav > 0)) {
