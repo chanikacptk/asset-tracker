@@ -663,7 +663,10 @@ body {
 
   <!-- PRIVATE INVESTMENTS -->
   <div id="page-private" class="page">
-    <div class="top-bar"><div class="page-title">Private</div></div>
+    <div class="top-bar">
+      <div class="page-title">Private Investment</div>
+      <button onclick="openAddPriv()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+    </div>
     <div style="height:12px"></div>
     <div id="private-content"></div>
   </div>
@@ -1134,6 +1137,77 @@ body {
 
   <div id="gold-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
   <button class="btn btn-primary" id="gold-modal-save-btn" onclick="saveGold()">Add Gold</button>
+</div>
+
+<!-- ── Private Investment modal ──────────────────────────────────────────────── -->
+<div id="priv-modal-overlay" onclick="closePrivModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+<div id="priv-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-size:18px;font-weight:700" id="priv-modal-title">Add Investment</div>
+    <button onclick="closePrivModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+  </div>
+
+  <!-- Type toggle -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Type</div>
+  <div style="display:flex;gap:8px;margin-bottom:20px">
+    <button class="modal-type-btn active" id="ptype-company" onclick="setPrivType('company')">Private Company</button>
+    <button class="modal-type-btn"        id="ptype-govbond" onclick="setPrivType('govbond')">Government Bond</button>
+  </div>
+
+  <!-- Name -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="priv-name-label">Company Name</div>
+  <input id="priv-name" type="text" autocapitalize="words" placeholder="e.g. ABC Holdings Co., Ltd."
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <!-- Principal (THB) -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Principal Amount (THB)</div>
+  <input id="priv-principal" type="text" inputmode="decimal" placeholder="0.00" oninput="_numInputFmt(this)"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
+
+  <!-- Rate (%) -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="priv-rate-label">Annual Interest Rate (%)</div>
+  <input id="priv-rate" type="number" inputmode="decimal" placeholder="e.g. 8" min="0" step="0.01"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
+
+  <!-- Start date -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="priv-start-label">Investment Date</div>
+  <input id="priv-start" type="date" oninput="calcPrivMaturity()"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <!-- Term (company only) -->
+  <div id="priv-term-wrap">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Term</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:14px">
+      <input id="priv-term-value" type="number" inputmode="decimal" placeholder="e.g. 12" min="0" step="any" oninput="calcPrivMaturity()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px">
+      <select id="priv-term-unit" onchange="calcPrivMaturity()"
+        style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;appearance:auto">
+        <option value="months">Months</option>
+        <option value="years">Years</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Maturity date (auto, overridable) -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Maturity Date <span style="font-weight:400;text-transform:none" id="priv-maturity-hint">(auto from term — editable)</span></div>
+  <input id="priv-maturity" type="date"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <!-- Status -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Status</div>
+  <div style="display:flex;gap:8px;margin-bottom:20px">
+    <button class="modal-type-btn active" id="pstatus-active"    onclick="setPrivStatus('active')">Active</button>
+    <button class="modal-type-btn"        id="pstatus-matured"   onclick="setPrivStatus('matured')">Matured</button>
+    <button class="modal-type-btn"        id="pstatus-withdrawn" onclick="setPrivStatus('withdrawn')">Withdrawn</button>
+  </div>
+
+  <!-- Notes -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Notes <span style="font-weight:400;text-transform:none">(optional)</span></div>
+  <textarea id="priv-notes" placeholder="e.g. Quarterly interest payout" rows="2"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;resize:none;margin-bottom:14px"></textarea>
+
+  <div id="priv-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
+  <button class="btn btn-primary" id="priv-modal-save-btn" onclick="savePriv()">Add Investment</button>
 </div>
 
 <!-- ── Bond modal ─────────────────────────────────────────────────────────── -->
@@ -2414,7 +2488,7 @@ async function calcUserData(userId) {
     sb.from('gold_holdings').select('troy_oz').eq('user_id', userId),
     sb.from('mutual_fund_holdings').select('units, avg_cost_thb, current_nav_thb').eq('user_id', userId),
     sb.from('cash_accounts').select('sub_type, balance, cash_on_hand_thb').eq('user_id', userId),
-    sb.from('private_investments').select('current_valuation, currency').eq('user_id', userId),
+    sb.from('private_holdings').select('principal_thb').eq('user_id', userId),
     sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', userId),
     sb.from('thai_bonds').select('face_value_thb').eq('user_id', userId)
   ]);
@@ -2433,7 +2507,7 @@ async function calcUserData(userId) {
   }
   if (priv.data?.length) {
     priv.data.forEach(p => {
-      privateUSD += p.currency === 'THB' ? p.current_valuation / state.usdThb : p.current_valuation;
+      privateUSD += (Number(p.principal_thb) || 0) / state.usdThb;
     });
   }
   if (insur.data?.length) {
@@ -4326,7 +4400,7 @@ async function loadMore() {
   const [goldRes, insurRes, privRes, mfRes, bondsRes] = await Promise.all([
     sb.from('gold_holdings').select('troy_oz').eq('user_id', uid),
     sb.from('insurance_policies').select('surrender_value_thb').eq('user_id', uid),
-    sb.from('private_investments').select('current_valuation, currency').eq('user_id', uid),
+    sb.from('private_holdings').select('principal_thb').eq('user_id', uid),
     sb.from('mutual_fund_holdings').select('units, avg_cost_thb, current_nav_thb').eq('user_id', uid),
     sb.from('thai_bonds').select('face_value_thb').eq('user_id', uid)
   ]);
@@ -4340,11 +4414,7 @@ async function loadMore() {
 
   insurRes.data?.forEach(p => insurTHB += p.surrender_value_thb || 0);
 
-  privRes.data?.forEach(p => {
-    privTHB += p.currency === 'THB'
-      ? (p.current_valuation || 0)
-      : (p.current_valuation || 0) * state.usdThb;
-  });
+  privRes.data?.forEach(p => privTHB += Number(p.principal_thb) || 0);
 
   mfRes.data?.forEach(f => {
     const navThb = (Number(f.current_nav_thb) > 0 ? Number(f.current_nav_thb) : Number(f.avg_cost_thb)) || 0;
@@ -4399,37 +4469,240 @@ async function loadInsurance() {
 
 // ── Private Investments ───────────────────────────────────────────────────────
 
+let _privEditId = null;
+let _privType   = 'company';   // 'company' | 'govbond'
+let _privStatus = 'active';    // 'active' | 'matured' | 'withdrawn'
+
+const _PRIV_STATUS = {
+  active:    { label: 'Active',    color: 'var(--success)' },
+  matured:   { label: 'Matured',   color: 'var(--text-muted)' },
+  withdrawn: { label: 'Withdrawn', color: 'var(--warning)' }
+};
+
+// Countdown text from today → maturity
+function _privCountdown(maturity, status) {
+  if (status !== 'active') return '';
+  const days = _daysTo(maturity);
+  if (days === null) return '';
+  if (days < 0)   return 'Matured';
+  if (days === 0) return 'Matures today';
+  if (days < 60)  return `${days} day${days === 1 ? '' : 's'} left`;
+  const months = Math.round(days / 30);
+  if (months < 24) return `${months} month${months === 1 ? '' : 's'} left`;
+  return `${(days / 365).toFixed(1)} years left`;
+}
+
 async function loadPrivate() {
-  const { data: investments } = await sb.from('private_investments')
-    .select('*').eq('user_id', state.userId);
+  const { data: items } = await sb.from('private_holdings')
+    .select('*').eq('user_id', state.userId)
+    .order('created_at', { ascending: false });
 
   const el = document.getElementById('private-content');
-  if (!investments || investments.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🏢</div><div class="empty-text">No private investments</div></div>';
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🏢</div><div class="empty-text">No private investments yet</div><div class="empty-text" style="font-size:13px;color:var(--text-muted)">Tap + to add a company investment or government bond</div></div>';
     return;
   }
 
-  el.innerHTML = investments.map(inv => {
-    const isThb = inv.currency === 'THB';
-    const fmt = isThb ? fmtTHB : fmtUSD;
-    const gainLoss = inv.current_valuation - inv.invested_amount;
-    const gainLossPct = inv.invested_amount > 0 ? (gainLoss / inv.invested_amount) * 100 : 0;
-    return `
-      <div class="card">
-        <div class="holding-top">
-          <div class="holding-ticker">${inv.name}</div>
-          <span class="holding-price">${fmt(inv.current_valuation)}</span>
+  // ── Summary ────────────────────────────────────────────────
+  let totalPrincipal = 0, annualIncome = 0, companyTotal = 0, govbondTotal = 0;
+  items.forEach(it => {
+    const p = Number(it.principal_thb) || 0;
+    totalPrincipal += p;
+    if (it.inv_type === 'govbond') govbondTotal += p; else companyTotal += p;
+    if (it.status === 'active') annualIncome += p * ((Number(it.rate_pct) || 0) / 100);
+  });
+
+  const summary = `
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Principal</div>
+      <div style="font-size:28px;font-weight:800;margin:2px 0 12px" class="mono">${fmtTHB(totalPrincipal)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card2" style="padding:10px 12px">
+          <div style="font-size:11px;color:var(--text-muted)">Expected Annual Income</div>
+          <div style="font-size:16px;font-weight:700;color:var(--success)" class="mono">${fmtTHB(annualIncome)}</div>
         </div>
-        <div class="holding-meta" style="margin-top:6px">
-          <span>Invested: ${fmt(inv.invested_amount)}</span>
-          <span class="pct-change ${gainLossPct >= 0 ? 'positive' : 'negative'}">${fmtPct(gainLossPct)}</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
-          Last updated: ${new Date(inv.last_updated_at).toLocaleDateString()}
+        <div class="card2" style="padding:10px 12px">
+          <div style="font-size:11px;color:var(--text-muted)">Positions</div>
+          <div style="font-size:16px;font-weight:700" class="mono">${items.length}</div>
         </div>
       </div>
-    `;
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="card2" style="padding:10px 12px">
+          <div style="font-size:11px;color:var(--text-muted)">🏢 Private Company</div>
+          <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(companyTotal)}</div>
+        </div>
+        <div class="card2" style="padding:10px 12px">
+          <div style="font-size:11px;color:var(--text-muted)">🏛️ Government Bond</div>
+          <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(govbondTotal)}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── Cards ──────────────────────────────────────────────────
+  const cards = items.map(it => {
+    const st       = _PRIV_STATUS[it.status] || _PRIV_STATUS.active;
+    const isGov    = it.inv_type === 'govbond';
+    const rateLbl  = isGov ? 'Coupon' : 'Interest';
+    const typeChip = isGov ? '🏛️ Govt Bond' : '🏢 Company';
+    const countdown = _privCountdown(it.maturity_date, it.status);
+    return `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div style="min-width:0">
+            <div style="font-weight:700;font-size:15px">${it.name}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${typeChip}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:${st.color}22;color:${st.color}">${st.label}</span>
+            <button class="pt-act-btn" onclick="openEditPriv('${it.id}')">✎</button>
+            <button class="pt-act-btn" onclick="deletePriv('${it.id}')">🗑</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+          <div>
+            <div style="font-size:11px;color:var(--text-muted)">Principal</div>
+            <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(Number(it.principal_thb) || 0)}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-muted)">${rateLbl}</div>
+            <div style="font-size:15px;font-weight:700" class="mono">${it.rate_pct != null ? Number(it.rate_pct) + '%' : '—'}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <span style="font-size:12px;color:var(--text-muted)">Matures ${_fmtShortDate(it.maturity_date)}</span>
+          ${countdown ? `<span style="font-size:12px;font-weight:600;color:${st.color}">${countdown}</span>` : ''}
+        </div>
+      </div>`;
   }).join('');
+
+  el.innerHTML = summary + cards;
+}
+
+// ── Private Investment modal ──────────────────────────────────
+function setPrivType(type) {
+  _privType = type;
+  document.getElementById('ptype-company').classList.toggle('active', type === 'company');
+  document.getElementById('ptype-govbond').classList.toggle('active', type === 'govbond');
+  const isGov = type === 'govbond';
+  document.getElementById('priv-name-label').textContent  = isGov ? 'Bond Name / Series' : 'Company Name';
+  document.getElementById('priv-name').placeholder         = isGov ? 'e.g. ESB245A — Savings Bond 2024' : 'e.g. ABC Holdings Co., Ltd.';
+  document.getElementById('priv-rate-label').textContent  = isGov ? 'Coupon Rate (%)' : 'Annual Interest Rate (%)';
+  document.getElementById('priv-start-label').textContent = isGov ? 'Purchase Date' : 'Investment Date';
+  // Term + auto-maturity is company-only
+  document.getElementById('priv-term-wrap').style.display    = isGov ? 'none' : 'block';
+  document.getElementById('priv-maturity-hint').style.display = isGov ? 'none' : '';
+  // Govbond has no 'withdrawn' status
+  document.getElementById('pstatus-withdrawn').style.display = isGov ? 'none' : '';
+  if (isGov && _privStatus === 'withdrawn') setPrivStatus('active');
+  if (!isGov) calcPrivMaturity();
+}
+
+function setPrivStatus(status) {
+  _privStatus = status;
+  ['active','matured','withdrawn'].forEach(s =>
+    document.getElementById('pstatus-' + s).classList.toggle('active', s === status));
+}
+
+// Auto-fill maturity = start + term (company only). Editable afterward.
+function calcPrivMaturity() {
+  if (_privType !== 'company') return;
+  const start = document.getElementById('priv-start').value;
+  const val   = parseFloat(document.getElementById('priv-term-value').value);
+  const unit  = document.getElementById('priv-term-unit').value;
+  if (!start || !val || val <= 0) return;
+  const d = new Date(start + 'T00:00:00');
+  if (unit === 'years') d.setMonth(d.getMonth() + Math.round(val * 12));
+  else                  d.setMonth(d.getMonth() + Math.round(val));
+  document.getElementById('priv-maturity').value = d.toISOString().split('T')[0];
+}
+
+function openAddPriv() {
+  _privEditId = null;
+  document.getElementById('priv-modal-title').textContent = 'Add Investment';
+  document.getElementById('priv-modal-save-btn').textContent = 'Add Investment';
+  document.getElementById('priv-name').value = '';
+  document.getElementById('priv-principal').value = '';
+  document.getElementById('priv-rate').value = '';
+  document.getElementById('priv-start').value = new Date().toISOString().split('T')[0];
+  document.getElementById('priv-term-value').value = '';
+  document.getElementById('priv-term-unit').value = 'months';
+  document.getElementById('priv-maturity').value = '';
+  document.getElementById('priv-notes').value = '';
+  document.getElementById('priv-modal-error').textContent = '';
+  setPrivStatus('active');
+  setPrivType('company');
+  document.getElementById('priv-modal-overlay').style.display = 'block';
+  document.getElementById('priv-modal').style.display = 'block';
+}
+
+async function openEditPriv(id) {
+  _privEditId = id;
+  const { data: it } = await sb.from('private_holdings').select('*').eq('id', id).single();
+  if (!it) return;
+  document.getElementById('priv-modal-title').textContent = 'Edit Investment';
+  document.getElementById('priv-modal-save-btn').textContent = 'Save Changes';
+  document.getElementById('priv-name').value = it.name || '';
+  document.getElementById('priv-principal').value = it.principal_thb != null
+    ? Number(it.principal_thb).toLocaleString('en-US') : '';
+  document.getElementById('priv-rate').value = it.rate_pct != null ? it.rate_pct : '';
+  document.getElementById('priv-start').value = it.start_date || '';
+  document.getElementById('priv-term-value').value = it.term_value != null ? it.term_value : '';
+  document.getElementById('priv-term-unit').value = it.term_unit || 'months';
+  document.getElementById('priv-maturity').value = it.maturity_date || '';
+  document.getElementById('priv-notes').value = it.notes || '';
+  document.getElementById('priv-modal-error').textContent = '';
+  setPrivStatus(it.status || 'active');
+  setPrivType(it.inv_type || 'company');   // setPrivType may recompute maturity for company — restore it
+  document.getElementById('priv-maturity').value = it.maturity_date || '';
+  document.getElementById('priv-modal-overlay').style.display = 'block';
+  document.getElementById('priv-modal').style.display = 'block';
+}
+
+function closePrivModal() {
+  document.getElementById('priv-modal-overlay').style.display = 'none';
+  document.getElementById('priv-modal').style.display = 'none';
+}
+
+async function savePriv() {
+  const errEl     = document.getElementById('priv-modal-error');
+  const name      = document.getElementById('priv-name').value.trim();
+  const principal = _parseNum(document.getElementById('priv-principal').value);
+  const rate      = parseFloat(document.getElementById('priv-rate').value);
+  const start     = document.getElementById('priv-start').value || null;
+  const maturity  = document.getElementById('priv-maturity').value || null;
+  const notes     = document.getElementById('priv-notes').value.trim() || null;
+  const isGov     = _privType === 'govbond';
+
+  if (!name)                  { errEl.textContent = 'Name is required.'; return; }
+  if (!principal || principal <= 0) { errEl.textContent = 'Principal must be greater than 0.'; return; }
+
+  const payload = {
+    user_id:       state.userId,
+    inv_type:      _privType,
+    name,
+    principal_thb: principal,
+    rate_pct:      isNaN(rate) ? null : rate,
+    start_date:    start,
+    term_value:    isGov ? null : (parseFloat(document.getElementById('priv-term-value').value) || null),
+    term_unit:     isGov ? null : document.getElementById('priv-term-unit').value,
+    maturity_date: maturity,
+    status:        _privStatus,
+    notes
+  };
+
+  const { error } = _privEditId
+    ? await sb.from('private_holdings').update(payload).eq('id', _privEditId)
+    : await sb.from('private_holdings').insert(payload);
+
+  if (error) { errEl.textContent = error.message; return; }
+  closePrivModal();
+  await loadPrivate();
+}
+
+async function deletePriv(id) {
+  if (!confirm('Delete this investment?')) return;
+  await sb.from('private_holdings').delete().eq('id', id);
+  await loadPrivate();
 }
 
 // ── Thai Bonds ────────────────────────────────────────────────────────────────

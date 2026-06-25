@@ -97,7 +97,8 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `gold_holdings` | id, user_id, name, purchase_date, troy_oz, avg_cost_usd, notes |
 | `cash_accounts` | id, user_id, name, sub_type (`saving`/`fixed_deposit`/`fcd`), bank, balance (always THB), currency, interest_rate, start/maturity_date, fcd_amount, fcd_purchase_rate |
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
-| `private_investments` | id, user_id, name, current_valuation, currency |
+| `private_investments` | id, user_id, name, current_valuation, currency *(legacy — superseded by `private_holdings`, no longer read by the app)* |
+| `private_holdings` | id, user_id, inv_type (`company`/`govbond`), name NOT NULL, principal_thb (always THB), rate_pct *(annual interest / coupon %)*, start_date *(investment/purchase date)*, term_value + term_unit (`months`/`years`, company only), maturity_date *(auto from start+term, editable)*, status (`active`/`matured`/`withdrawn`; govbond only uses active/matured), notes, created_at — backs the Private Investment page |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
 | `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable)*, nav_date *(nullable — source valuation date)*, nav_updated_at *(nullable — when we last polled)*, sec_proj_id *(nullable)*, sec_fund_class_name *(nullable — exact SEC class; one proj_id has many classes)*, fund_code *(nullable — plain code, e.g. ES-FIXEDRMF; primary Finnomena NAV key, tried before SEC)*, buy_date, notes, created_at |
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
@@ -127,7 +128,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
-- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `thai_bonds`, `mutual_fund_holdings`
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`
 - `bond_master` is read-only for anon; GAS writes it via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
@@ -151,6 +152,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 015  mutual_fund_holdings.sec_proj_id + sec_fund_class_name (Phase 2): optional SEC link for daily NAV refresh  ✓
 016  mutual_fund_holdings.nav_date: stores SEC valuation date separately from nav_updated_at (last-polled ts)  ✓
 017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) — primary Finnomena NAV key (tried before SEC)  ✓
+018  private_holdings: new table (company / govbond investments) — backs the rebuilt Private Investment page; supersedes private_investments  ✓
 ```
 
 ---
@@ -267,7 +269,7 @@ gold          Gold — metric cards, S/R bar, holdings table, add/edit modal
 mf            Mutual Funds — hero (total + P/L + "checked / NAV as of" dates), sort bar, expandable fund cards with NAV date badge, SEC name search, auto-refresh via SEC API
 cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
 insurance     Insurance policies
-private       Private investments
+private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
 dca           DCA plan approval
 monthly       Monthly Review — trigger generateDCA
@@ -321,6 +323,13 @@ Nav highlight logic:
 - `loadCash()` — shows total summary card (grouped by sub_type) above account sections
 - `balance` column is always THB principal for all account types
 - FCD: `balance = fcd_amount × fcd_purchase_rate`
+
+### Private Investment
+- `loadPrivate()` — fetches `private_holdings`, renders a summary card (Total Principal, Expected Annual Income = Σ principal×rate for **active** only, Positions count, Private Company vs Government Bond split) + one card per investment. All THB.
+- Cards show: name, type chip, status pill (active=green / matured=gray / withdrawn=amber), principal, interest/coupon %, maturity date + countdown (`_privCountdown`, active only). Edit ✎ / delete 🗑 icons.
+- Modal: type toggle (**Private Company** / **Government Bond**) re-labels fields & hides term/withdrawn for govbond. `calcPrivMaturity()` auto-fills maturity = start + term (months/years), still editable. `savePriv()` is a pure DB insert/update (no external calls).
+- Net-worth contribution = `principal_thb` (THB), wired into `calcUserData` + `loadMore` as `privateUSD`/`privTHB`.
+- Globals: `_privEditId`, `_privType`, `_privStatus`. Reuses `_daysTo` / `_fmtShortDate` / `_numInputFmt` / `_parseNum` from the bonds section.
 
 ### Asset hub (More page)
 - `loadMore()` — fetches live THB values for all 5 asset types in parallel (gold, insurance, private, **MF**, bonds), renders each row as: icon + name | ฿value + % of subtotal | ›
@@ -388,7 +397,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v63`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v64`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
