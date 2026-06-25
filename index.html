@@ -4522,25 +4522,25 @@ async function loadPrivate() {
   const summary = `
     <div class="card" style="margin-bottom:14px">
       <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Principal</div>
-      <div style="font-size:28px;font-weight:800;margin:2px 0 12px" class="mono">${fmtTHB(totalPrincipal)}</div>
+      <div style="font-size:28px;font-weight:800;margin:2px 0 12px">${fmtTHB(totalPrincipal)}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="card2" style="padding:10px 12px">
           <div style="font-size:11px;color:var(--text-muted)">Expected Annual Income</div>
-          <div style="font-size:16px;font-weight:700;color:var(--success)" class="mono">${fmtTHB(annualIncome)}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--success)">${fmtTHB(annualIncome)}</div>
         </div>
         <div class="card2" style="padding:10px 12px">
           <div style="font-size:11px;color:var(--text-muted)">Positions</div>
-          <div style="font-size:16px;font-weight:700" class="mono">${items.length}</div>
+          <div style="font-size:16px;font-weight:700">${items.length}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
         <div class="card2" style="padding:10px 12px">
           <div style="font-size:11px;color:var(--text-muted)">🏢 Private Company</div>
-          <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(companyTotal)}</div>
+          <div style="font-size:15px;font-weight:700">${fmtTHB(companyTotal)}</div>
         </div>
         <div class="card2" style="padding:10px 12px">
           <div style="font-size:11px;color:var(--text-muted)">🏛️ Government Bond</div>
-          <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(govbondTotal)}</div>
+          <div style="font-size:15px;font-weight:700">${fmtTHB(govbondTotal)}</div>
         </div>
       </div>
     </div>`;
@@ -4569,11 +4569,11 @@ async function loadPrivate() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
           <div>
             <div style="font-size:11px;color:var(--text-muted)">Principal</div>
-            <div style="font-size:15px;font-weight:700" class="mono">${fmtTHB(Number(it.principal_thb) || 0)}</div>
+            <div style="font-size:15px;font-weight:700">${fmtTHB(Number(it.principal_thb) || 0)}</div>
           </div>
           <div>
             <div style="font-size:11px;color:var(--text-muted)">${rateLbl}</div>
-            <div style="font-size:15px;font-weight:700" class="mono">${it.rate_pct != null ? Number(it.rate_pct) + '%' : '—'}</div>
+            <div style="font-size:15px;font-weight:700">${it.rate_pct != null ? Number(it.rate_pct) + '%' : '—'}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
