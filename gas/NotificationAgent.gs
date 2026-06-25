@@ -203,7 +203,12 @@ const NotificationAgent = (() => {
     users.forEach(user => {
       try {
         const ctx = _getUserHoldingsForBrief(user.id);
-        const data = _callClaudeWebSearch(_NEWS_SYSTEM, _buildNewsBriefPrompt(ctx));
+        const prompt = _buildNewsBriefPrompt(ctx);
+        let data = _callClaudeWebSearch(_NEWS_SYSTEM, prompt);
+        if (!data) {
+          Logger.log(`[NewsBrief] first attempt failed for ${user.name} — retrying once`);
+          data = _callClaudeWebSearch(_NEWS_SYSTEM, prompt);
+        }
         if (!data) { Logger.log(`[NewsBrief] no brief generated for ${user.name}`); return; }
 
         const msg = _renderNewsBrief(data);
@@ -290,7 +295,7 @@ Rules:
   function _callClaudeWebSearch(systemPrompt, userPrompt) {
     const payload = {
       model: 'claude-sonnet-4-6',
-      max_tokens: 3500,
+      max_tokens: 5000, // raised from 3500 — the full-set prompt (~8-12 stories) was truncating
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }]
@@ -313,6 +318,9 @@ Rules:
     }
 
     const body = JSON.parse(resp.getContentText());
+    if (body.stop_reason === 'max_tokens') {
+      Logger.log('[NewsBrief] response hit max_tokens — JSON likely truncated; raise max_tokens');
+    }
     // With web search the response interleaves text / server_tool_use / web_search_tool_result
     // blocks — concatenate every text block, then extract the JSON object.
     const text = (body.content || [])
