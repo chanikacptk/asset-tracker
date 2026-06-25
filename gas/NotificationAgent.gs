@@ -211,6 +211,9 @@ const NotificationAgent = (() => {
 
         _sendHtml(user.telegram_chat_id, msg.slice(0, 4090));
         _logNotification(user.id, 'news_brief', msg);
+        Logger.log(`[NewsBrief] sent to ${user.name}: ` +
+          `${(data.holdings_stories || []).length} holdings + ` +
+          `${(data.market_stories || []).length} market stories`);
       } catch (e) {
         Logger.log(`[NotificationAgent] sendDailyNewsBrief error (${user.id}): ${e.message}`);
       }
