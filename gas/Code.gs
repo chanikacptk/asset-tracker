@@ -2,6 +2,7 @@
  * Code.gs — Orchestrator
  *
  * TRIGGER SETUP (one-time, run setupTriggers() from the GAS IDE):
+ *   - Daily 7AM Bangkok   → onNewsBriefTrigger (holdings-aware Tech-News brief)
  *   - Daily 8AM Bangkok   → onDailyTrigger (morning fetch; US prices = prev-day close)
  *   - Daily 4AM Bangkok   → onDailyTrigger (= ~5PM ET; captures today's US closing prices)
  *   - Every Monday 8AM    → onWeeklyTrigger  (also fires from daily on Mondays)
@@ -100,6 +101,9 @@ function doGet(e) {
       if (!key) throw new Error('key required');
       supabaseUpsert('app_config?on_conflict=key', { key: key, value: value, updated_at: new Date().toISOString() });
       result.saved = true;
+    } else if (action === 'sendNewsBrief') {
+      NotificationAgent.sendDailyNewsBrief();
+      result.sent = true;
     } else if (action === 'ping') {
       result.message = 'Smart Me GAS is alive';
     } else {
@@ -277,6 +281,18 @@ function onRealtimeTrigger() {
   }
 }
 
+// Daily Tech-News brief (7AM Bangkok). Standalone — separate from portfolio reviews.
+// Holdings-aware: web-search powered brief, flags news about tickers the user owns.
+// Non-fatal: errors are logged per user inside sendDailyNewsBrief and never thrown.
+function onNewsBriefTrigger() {
+  try {
+    NotificationAgent.sendDailyNewsBrief();
+  } catch (e) {
+    Logger.log('[Orchestrator] News brief trigger error: ' + e.message);
+    _logError('onNewsBriefTrigger', e);
+  }
+}
+
 // Daily mutual-fund NAV refresh (8PM Bangkok). Additive + non-fatal: refreshMFNav
 // logs & skips per-holding failures and never touches a manually-entered NAV.
 function onMFNavTrigger() {
@@ -322,6 +338,14 @@ function setupTriggers() {
     .everyMinutes(5)
     .create();
 
+  // Daily 7AM Bangkok — Tech-News brief (atHour uses the project timezone; set it to
+  // Asia/Bangkok in Project Settings so this fires at 07:00 Bangkok, before the 8AM review).
+  ScriptApp.newTrigger('onNewsBriefTrigger')
+    .timeBased()
+    .everyDays(1)
+    .atHour(7)
+    .create();
+
   // Daily 8PM mutual-fund NAV refresh (atHour uses the project timezone — set it to
   // Asia/Bangkok in Project Settings so this fires at 20:00 Bangkok).
   ScriptApp.newTrigger('onMFNavTrigger')
@@ -330,7 +354,7 @@ function setupTriggers() {
     .atHour(20)
     .create();
 
-  Logger.log('[Orchestrator] Triggers set up: daily@8AM + daily@4AM + every5min + mfNav@8PM');
+  Logger.log('[Orchestrator] Triggers set up: newsBrief@7AM + daily@8AM + daily@4AM + every5min + mfNav@8PM');
 }
 
 // ── Supabase helpers ──────────────────────────────────────────────────────────
@@ -423,5 +447,10 @@ function testMonthlyTrigger() {
 function testRealtimeAlerts() {
   const alerts = DataAgent.checkRealtimeAlerts();
   Logger.log('[testRealtimeAlerts] ' + alerts.length + ' alert(s): ' + JSON.stringify(alerts));
+}
+
+// Sends the daily Tech-News brief to all users right now (verify web_search + Telegram).
+function testNewsBrief() {
+  NotificationAgent.sendDailyNewsBrief();
 }
 

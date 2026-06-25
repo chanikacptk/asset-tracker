@@ -181,6 +181,208 @@ const NotificationAgent = (() => {
     _logNotification(user.id, 'dca_notification', message);
   }
 
+  // ── Daily Tech-News brief (holdings-aware, web-search powered) ────────────────
+  // Separate from the portfolio reviews. Run by onNewsBriefTrigger every morning.
+  // For each user: gather their holdings → ask Claude (with the web_search tool) for
+  // today's top tech/market stories → flag holdings-related ones at the top → send.
+  // Holdings-aware: stories about a ticker the user owns lead the brief with a 🎯.
+
+  const _NEWS_SYSTEM =
+    'You are the editor of a daily Thai-language tech & markets news brief for a retail ' +
+    'investor whose portfolio is concentrated in US tech / AI / semiconductors. You write ' +
+    'punchy one-line summaries that mix Thai with English financial terms, ALWAYS include ' +
+    'concrete numbers (revenue, EPS, %, guidance) and the market reaction (e.g. "+15% AH", ' +
+    '"-3% premarket"). Tone: a sharp trading-desk bot. You MUST use the web_search tool to ' +
+    'find TODAY\'S real news before writing — never fabricate a headline, number, or move. ' +
+    'Respond with ONLY a JSON object — no markdown code fences, no prose before or after.';
+
+  function sendDailyNewsBrief() {
+    const users = _getUsersWithTelegram();
+    if (users.length === 0) { Logger.log('[NewsBrief] no users with telegram'); return; }
+
+    users.forEach(user => {
+      try {
+        const ctx = _getUserHoldingsForBrief(user.id);
+        const data = _callClaudeWebSearch(_NEWS_SYSTEM, _buildNewsBriefPrompt(ctx));
+        if (!data) { Logger.log(`[NewsBrief] no brief generated for ${user.name}`); return; }
+
+        const msg = _renderNewsBrief(data);
+        if (!msg) { Logger.log(`[NewsBrief] empty brief for ${user.name}`); return; }
+
+        _sendHtml(user.telegram_chat_id, msg.slice(0, 4090));
+        _logNotification(user.id, 'news_brief', msg);
+      } catch (e) {
+        Logger.log(`[NotificationAgent] sendDailyNewsBrief error (${user.id}): ${e.message}`);
+      }
+    });
+  }
+
+  // Gather what the user holds: US tickers (growth/dividend/etf) drive 🎯 matching;
+  // Thai mutual-fund names are passed as secondary awareness only.
+  function _getUserHoldingsForBrief(userId) {
+    let tickers = [];
+    try {
+      const ports = supabaseRequest('GET', `portfolios?user_id=eq.${userId}&select=id`) || [];
+      if (ports.length) {
+        const filter = ports.map(p => `portfolio_id.eq.${p.id}`).join(',');
+        const holdings = supabaseRequest('GET',
+          `holdings?or=(${filter})&select=ticker`) || [];
+        tickers = [...new Set(holdings.map(h => h.ticker).filter(Boolean))];
+      }
+    } catch (e) {
+      Logger.log('[NewsBrief] ticker fetch failed: ' + e.message);
+    }
+
+    let fundsLine = '';
+    try {
+      const funds = supabaseRequest('GET',
+        `mutual_fund_holdings?user_id=eq.${userId}&select=fund_name`) || [];
+      const names = [...new Set(funds.map(f => f.fund_name).filter(Boolean))];
+      if (names.length) {
+        fundsLine = 'They also hold Thai mutual funds: ' + names.slice(0, 12).join(', ') +
+          '. Only mention these if there is directly relevant global news (e.g. their ' +
+          'underlying index/sector moves materially).';
+      }
+    } catch (e) { /* non-fatal */ }
+
+    return { tickers, fundsLine };
+  }
+
+  function _buildNewsBriefPrompt(ctx) {
+    const tickers = ctx.tickers || [];
+    const holdingsLine = tickers.length ? tickers.join(', ') : '(none on record)';
+
+    return `Today is ${_thaiDateLabel()} (${_bkkIsoDate()}, Bangkok time).
+
+The investor's current US holdings (tickers to match against): ${holdingsLine}.
+${ctx.fundsLine || ''}
+
+TASK:
+1. Use the web_search tool to find today's most market-moving tech / US-equity / semiconductor / AI news. Run several searches, e.g. "stock market news today", "US stock futures premarket movers", "<each held ticker> news today", "semiconductor AI chip news today", "earnings results today".
+2. Pick the 5-6 most important stories from roughly the last 24 hours.
+3. If a story is about one of the holdings tickers above, put it in "holdings_stories" (these LEAD the brief). Everything else goes in "market_stories".
+4. Each "summary": ONE line, Thai mixed with English financial terms, with concrete numbers AND the price reaction. Match this style exactly:
+   "Micron Q3 FY2026 beat ครั้งประวัติศาสตร์: Revenue $41.5B (+346% YoY, est $35.8B), gross margin 84.9% แซง NVIDIA แล้ว (+15% AH)"
+5. For holdings_stories ONLY, add a short Thai "impact" line on what it means for that position, e.g. "ผลต่อ position ของคุณ: เป็นบวก, peer comparison ดีขึ้น".
+6. Choose a fitting emoji per story: 🚀 huge beat/surge, 📈 up, 📉 down, 🔴 bad news, ⚠️ risk, 💰 deal/M&A, 🤖 AI, 🏦 macro/Fed, 🛢️ energy, 📊 index/broad.
+
+Return ONLY this JSON (no code fences):
+{
+  "holdings_stories": [{"emoji":"🚀","ticker":"NVDA","summary":"...","impact":"..."}],
+  "market_stories":  [{"emoji":"📊","ticker":"SPX","summary":"..."}],
+  "sources": ["Reuters","Bloomberg"]
+}
+
+Rules:
+- Total stories across both arrays ≤ 6.
+- holdings_stories ONLY for tickers in the holdings list above; if there is no holdings news today, return holdings_stories: [].
+- "ticker" with NO leading "$".
+- Never invent numbers — every figure must come from a search result.`;
+  }
+
+  // Claude API call WITH the server-side web_search tool. Single request: the model
+  // runs its searches internally and returns the final answer. Returns parsed JSON or null.
+  function _callClaudeWebSearch(systemPrompt, userPrompt) {
+    const payload = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }]
+    };
+
+    const resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': Config.CLAUDE_API_KEY(),
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    if (resp.getResponseCode() !== 200) {
+      Logger.log('[NewsBrief] Claude API error: ' + resp.getContentText().slice(0, 400));
+      return null;
+    }
+
+    const body = JSON.parse(resp.getContentText());
+    // With web search the response interleaves text / server_tool_use / web_search_tool_result
+    // blocks — concatenate every text block, then extract the JSON object.
+    const text = (body.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('\n')
+      .trim();
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      const m = text.match(/\{[\s\S]*\}/);
+      if (m) {
+        try { return JSON.parse(m[0]); } catch (_) {}
+      }
+      Logger.log('[NewsBrief] JSON parse failed: ' + text.slice(0, 300));
+      return null;
+    }
+  }
+
+  // Build the Telegram message (HTML parse mode — robust against the $, %, +, -, ()
+  // and Thai text that would constantly break Markdown/MarkdownV2 escaping).
+  function _renderNewsBrief(data) {
+    const hs = (data.holdings_stories || []).filter(s => s && s.summary);
+    const ms = (data.market_stories  || []).filter(s => s && s.summary);
+    if (hs.length === 0 && ms.length === 0) return null;
+
+    let msg = `📰 <b>Tech News Daily — ${_escapeHtml(_thaiDateLabel())}</b>\n`;
+    msg += '━━━━━━━━━━━━━━━━━━\n';
+
+    if (hs.length) {
+      msg += '\n🎯 <b>Related to your holdings:</b>\n';
+      hs.forEach(s => {
+        const tick = s.ticker ? `<b>$${_escapeHtml(s.ticker)}</b> — ` : '';
+        msg += `\n${s.emoji || '•'} ${tick}${_escapeHtml(s.summary)}\n`;
+        if (s.impact) msg += `   ↳ <i>${_escapeHtml(s.impact)}</i>\n`;
+      });
+    }
+
+    if (ms.length) {
+      msg += '\n📊 <b>Other market news:</b>\n';
+      ms.forEach(s => {
+        const tick = s.ticker ? `<b>$${_escapeHtml(s.ticker)}</b> — ` : '';
+        msg += `\n${s.emoji || '•'} ${tick}${_escapeHtml(s.summary)}\n`;
+      });
+    }
+
+    const sources = (data.sources || []).filter(Boolean);
+    if (sources.length) {
+      msg += '\n━━━━━━━━━━━━━━━━━━\n';
+      msg += 'ที่มา: ' + sources.map(_escapeHtml).join(' · ');
+    }
+    return msg;
+  }
+
+  function _escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // Thai Buddhist-era date label, e.g. "25 มิ.ย. 2569" (deterministic, no locale dependency)
+  function _thaiDateLabel() {
+    const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+                       'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const d = new Date(Date.now() + 7 * 60 * 60 * 1000); // shift to Bangkok, read as UTC
+    return `${d.getUTCDate()} ${TH_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`;
+  }
+
+  function _bkkIsoDate() {
+    return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
   // ── Noise-reduction helpers ──────────────────────────────────────────────────
 
   // Returns true between 10PM and 7AM Bangkok time (UTC+7)
@@ -303,6 +505,24 @@ const NotificationAgent = (() => {
     }
   }
 
+  // Same as _send but parse_mode=HTML (used by the news brief — content is pre-escaped).
+  function _sendHtml(chatId, text) {
+    if (!chatId) return;
+    const token = Config.TELEGRAM_BOT_TOKEN();
+    if (!token) { Logger.log('[NotificationAgent] TELEGRAM_BOT_TOKEN not set'); return; }
+    const resp = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        chat_id: chatId, text: text, parse_mode: 'HTML', disable_web_page_preview: true
+      }),
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) {
+      Logger.log(`[NotificationAgent] Telegram HTML error for ${chatId}: ${resp.getContentText()}`);
+    }
+  }
+
   function _signalEmoji(signal) {
     return { BUY: '🟢', SELL: '🔴', HOLD: '🟡', TRIM: '🟠' }[signal] || '⚪';
   }
@@ -316,5 +536,5 @@ const NotificationAgent = (() => {
     return d.toISOString().slice(11, 16) + ' BKK';
   }
 
-  return { sendDailyGrowthReview, sendWeeklyReview, sendHighImpactNewsAlerts, sendRealtimeAlerts, sendToUser };
+  return { sendDailyGrowthReview, sendWeeklyReview, sendHighImpactNewsAlerts, sendRealtimeAlerts, sendToUser, sendDailyNewsBrief };
 })();

@@ -53,7 +53,7 @@ gas/
   AnalystAgent.gs       Claude API → BUY/SELL/HOLD/TRIM signals
   DCAAgent.gs           Monthly DCA plan generation
   NewsAgent.gs          NewsAPI.org fetching
-  NotificationAgent.gs  Telegram: daily/weekly/breaking/realtime alerts
+  NotificationAgent.gs  Telegram: daily/weekly/breaking/realtime alerts + daily Tech-News brief
   ScriptProperties.md   GAS secrets setup guide
 
 supabase/
@@ -176,6 +176,7 @@ Files are copy-pasted into Apps Script IDE — not auto-deployed from this repo.
 **Deploy as Web App**: Execute as Me → Anyone. Save URL in app Settings page (`app_config` table).
 
 **Run `setupTriggers()` once** from GAS IDE:
+- Daily @ 7AM → `onNewsBriefTrigger` (holdings-aware Tech-News brief via Claude `web_search` → Telegram; `atHour(7)` uses project TZ — set it to **Asia/Bangkok**)
 - Daily @ 8AM → `onDailyTrigger` (weekdays: fetch → analyze → news → notify; monthly on day 1; weekly on Monday)
 - Every 5 min → `onRealtimeTrigger` (crypto/gold ±5%, S/R proximity ±1%)
 - Daily @ 8PM → `onMFNavTrigger` (mutual-fund NAV refresh; `atHour(20)` uses project TZ — set it to **Asia/Bangkok**)
@@ -197,10 +198,35 @@ Called from frontend via `callGAS(action, params)`:
 | `savePrice` | DataAgent.savePrice() |
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
+| `sendNewsBrief` | NotificationAgent.sendDailyNewsBrief() — generates + sends the daily holdings-aware Tech-News brief now (manual trigger for testing) |
 | `scrapeBondInfo` | DataAgent.scrapeBondInfo(bondCode) — scrapes ThaiBMA, caches in bond_master |
 | `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with an auto source. **Tiered**: Tier 1 Finnomena by `fund_code` (`_fetchFinnomenaNav`) → Tier 2 SEC by `sec_proj_id` (`_secNavForHolding`) → Tier 3 manual (untouched). Stores `current_nav_thb`, `nav_date` (source valuation date), `nav_updated_at`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV. Holdings query: `or=(sec_proj_id.not.is.null,fund_code.not.is.null)` |
 | `mfLookupClasses` | DataAgent.lookupMFClasses(projId) — returns `[{fund_class_name, last_val, nav_date}]` for the "Find classes" picker |
 | `mfSearchFunds` | DataAgent.lookupMFFunds(q) — searches SEC `/v2/fund/general-info/profiles?fund_class_name=` by (partial) name; returns `[{proj_id, fund_class_name, proj_name_en, amc_name}]`; partial matching works; user taps result to auto-fill `sec_proj_id` + class |
+
+## Daily Tech-News brief (NotificationAgent)
+
+Standalone morning notification, **separate from the portfolio reviews**. `sendDailyNewsBrief()` runs per user:
+1. **Gather holdings** — `_getUserHoldingsForBrief(userId)`: US tickers (growth/dividend/etf via `portfolios`→`holdings`) drive 🎯 matching; Thai mutual-fund names passed as secondary awareness.
+2. **Generate** — `_callClaudeWebSearch()` calls Claude (`claude-sonnet-4-6`) with the **server-side `web_search` tool** (`{type:'web_search_20250305', max_uses:6}`). One API call: the model runs its own searches for today's tech/market news and returns a JSON object `{holdings_stories[], market_stories[], sources[]}`. Stories about a held ticker go in `holdings_stories` (lead the brief); the rest in `market_stories`. Each summary is one line of Thai+English with concrete numbers + price reaction; holdings stories also get a one-line `impact` note. **Never fabricates** — every figure must come from a search result.
+3. **Render + send** — `_renderNewsBrief()` builds the message and `_sendHtml()` sends it via Telegram with **`parse_mode: HTML`** (not Markdown/MarkdownV2 — the brief is full of `$ % + - ( )` and Thai text that constantly break Markdown escaping; HTML only needs `& < >` escaped, done by `_escapeHtml`). Logged as `notification_type='news_brief'`.
+
+Visual format (matches the requested MarkdownV2 layout, rendered via HTML bold):
+```
+📰 Tech News Daily — 25 มิ.ย. 2569
+━━━━━━━━━━━━━━━━━━
+🎯 Related to your holdings:
+🚀 $NVDA — <headline + numbers> (+X% AH)
+   ↳ ผลต่อ position ของคุณ: ...
+📊 Other market news:
+📈 $SPX — <headline + numbers>
+━━━━━━━━━━━━━━━━━━
+ที่มา: Reuters · Bloomberg
+```
+- Trigger: `onNewsBriefTrigger` daily @ 7AM (project TZ Asia/Bangkok). Manual: web action `sendNewsBrief` or `testNewsBrief()` in the GAS IDE.
+- Requires `CLAUDE_API_KEY` (web_search must be enabled for the org) + `TELEGRAM_BOT_TOKEN` — both already configured. No new Script Property.
+- Fully non-fatal: per-user errors log & skip; a failed/empty brief sends nothing rather than a broken message.
+- `_thaiDateLabel()` builds the Buddhist-era date deterministically (no locale dependency).
 
 ## Market data sources (DataAgent)
 
