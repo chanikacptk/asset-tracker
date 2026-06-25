@@ -263,7 +263,7 @@ ${ctx.fundsLine || ''}
 
 TASK:
 1. Use the web_search tool to find today's most market-moving tech / US-equity / semiconductor / AI news. Run several searches, e.g. "stock market news today", "US stock futures premarket movers", "<each held ticker> news today", "semiconductor AI chip news today", "earnings results today".
-2. Pick the 5-6 most important stories from roughly the last 24 hours.
+2. Find the most market-moving stories from roughly the last 24 hours. Be generous on holdings coverage: include a story for EVERY holdings ticker that has genuinely notable news today (up to ~8), most important first — these power a browsable web page, not just a chat. Add 3-4 of the biggest general-market stories on top.
 3. If a story is about one of the holdings tickers above, put it in "holdings_stories" (these LEAD the brief). Everything else goes in "market_stories".
 4. Each "summary": ONE line, Thai mixed with English financial terms, with concrete numbers AND the price reaction. Match this style exactly:
    "Micron Q3 FY2026 beat ครั้งประวัติศาสตร์: Revenue $41.5B (+346% YoY, est $35.8B), gross margin 84.9% แซง NVIDIA แล้ว (+15% AH)"
@@ -278,7 +278,8 @@ Return ONLY this JSON (no code fences):
 }
 
 Rules:
-- Total stories across both arrays ≤ 6.
+- Aim for 8-12 stories total across both arrays (more is fine if genuinely newsworthy) — but never pad with low-importance filler.
+- Order each array most-important first (the chat brief shows only the top few; the web page shows them all).
 - holdings_stories ONLY for tickers in the holdings list above; if there is no holdings news today, return holdings_stories: [].
 - "ticker" with NO leading "$".
 - Never invent numbers — every figure must come from a search result.`;
@@ -335,10 +336,19 @@ Rules:
 
   // Build the Telegram message (HTML parse mode — robust against the $, %, +, -, ()
   // and Thai text that would constantly break Markdown/MarkdownV2 escaping).
+  // Telegram-only caps — keep the chat scannable. The Analysis page persists the FULL
+  // set (see _persistNewsBrief), so trimming here doesn't lose anything from the history.
+  const _TG_MAX_TOTAL = 6, _TG_MAX_HOLDINGS = 4;
+
   function _renderNewsBrief(data) {
-    const hs = (data.holdings_stories || []).filter(s => s && s.summary);
-    const ms = (data.market_stories  || []).filter(s => s && s.summary);
-    if (hs.length === 0 && ms.length === 0) return null;
+    const hsAll = (data.holdings_stories || []).filter(s => s && s.summary);
+    const msAll = (data.market_stories  || []).filter(s => s && s.summary);
+    if (hsAll.length === 0 && msAll.length === 0) return null;
+
+    // Holdings lead (cap 4), then fill remaining slots with top market stories.
+    const hs = hsAll.slice(0, _TG_MAX_HOLDINGS);
+    const ms = msAll.slice(0, Math.max(0, _TG_MAX_TOTAL - hs.length));
+    const moreCount = (hsAll.length + msAll.length) - (hs.length + ms.length);
 
     let msg = `📰 <b>Tech News Daily — ${_escapeHtml(_thaiDateLabel())}</b>\n`;
     msg += '━━━━━━━━━━━━━━━━━━\n';
@@ -360,11 +370,10 @@ Rules:
       });
     }
 
+    msg += '\n━━━━━━━━━━━━━━━━━━\n';
+    if (moreCount > 0) msg += `📲 <i>+${moreCount} more in the app → Analysis</i>\n`;
     const sources = (data.sources || []).filter(Boolean);
-    if (sources.length) {
-      msg += '\n━━━━━━━━━━━━━━━━━━\n';
-      msg += 'ที่มา: ' + sources.map(_escapeHtml).join(' · ');
-    }
+    if (sources.length) msg += 'ที่มา: ' + sources.map(_escapeHtml).join(' · ');
     return msg;
   }
 
