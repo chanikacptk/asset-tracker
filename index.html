@@ -1176,6 +1176,17 @@ body {
   <input id="priv-rate" type="number" inputmode="decimal" placeholder="e.g. 8" min="0" step="0.01"
     style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
 
+  <!-- Payout frequency -->
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Payout Frequency</div>
+  <select id="priv-payout-freq"
+    style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px;appearance:auto">
+    <option value="">Lump sum at maturity</option>
+    <option value="monthly">Monthly</option>
+    <option value="quarterly">Quarterly</option>
+    <option value="semi-annually">Semi-annually</option>
+    <option value="annually">Annually</option>
+  </select>
+
   <!-- Start date -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="priv-start-label">Investment Date</div>
   <input id="priv-start" type="date" oninput="calcPrivMaturity()"
@@ -4499,6 +4510,17 @@ function _privCountdown(maturity, status) {
   return `${(days / 365).toFixed(1)} years left`;
 }
 
+// Next periodic payout for an active investment → { date, amt } or null.
+// Reuses the Thai-bond coupon helpers: start_date is the schedule anchor,
+// principal_thb the base. NULL payout_freq = lump sum at maturity (no schedule).
+function _privNextPayout(it) {
+  if (it.status !== 'active' || !it.payout_freq) return null;
+  const date = _nextCouponDate(it.start_date, it.maturity_date, it.payout_freq);
+  if (!date) return null;
+  const amt = _couponPerPayment(Number(it.principal_thb) || 0, Number(it.rate_pct) || 0, it.payout_freq);
+  return { date, amt };
+}
+
 async function loadPrivate() {
   const { data: items } = await sb.from('private_holdings')
     .select('*').eq('user_id', state.userId)
@@ -4512,25 +4534,37 @@ async function loadPrivate() {
 
   // ── Summary ────────────────────────────────────────────────
   let totalPrincipal = 0, annualIncome = 0, companyTotal = 0, govbondTotal = 0;
+  let nextDate = null, nextAmt = 0, nextName = null;
   items.forEach(it => {
     const p = Number(it.principal_thb) || 0;
     totalPrincipal += p;
     if (it.inv_type === 'govbond') govbondTotal += p; else companyTotal += p;
     if (it.status === 'active') annualIncome += p * ((Number(it.rate_pct) || 0) / 100);
+    const np = _privNextPayout(it);
+    if (np && (!nextDate || np.date < nextDate)) {
+      nextDate = np.date; nextAmt = np.amt; nextName = it.plan_name || it.name;
+    }
   });
+  const nextPayoutVal  = nextDate ? fmtTHB(nextAmt) : '—';
+  const nextPayoutClr  = nextDate ? 'var(--success)' : 'var(--text-muted)';
+  const nextPayoutSub  = nextDate
+    ? `${_fmtShortDate(nextDate.toISOString().split('T')[0])}${nextName ? ' · ' + nextName : ''}`
+    : 'No scheduled payout';
 
   const summary = `
     <div class="card" style="margin-bottom:14px">
       <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">Total Principal</div>
-      <div style="font-size:28px;font-weight:800;margin:2px 0 12px">${fmtTHB(totalPrincipal)}</div>
+      <div style="font-size:28px;font-weight:800;margin:2px 0 0">${fmtTHB(totalPrincipal)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">${items.length} position${items.length !== 1 ? 's' : ''}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="card2" style="padding:10px 12px">
           <div style="font-size:11px;color:var(--text-muted)">Expected Annual Income</div>
           <div style="font-size:16px;font-weight:700;color:var(--success)">${fmtTHB(annualIncome)}</div>
         </div>
         <div class="card2" style="padding:10px 12px">
-          <div style="font-size:11px;color:var(--text-muted)">Positions</div>
-          <div style="font-size:16px;font-weight:700">${items.length}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Next Payout</div>
+          <div style="font-size:16px;font-weight:700;color:${nextPayoutClr}">${nextPayoutVal}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:1px">${nextPayoutSub}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
@@ -4552,6 +4586,8 @@ async function loadPrivate() {
     const rateLbl  = isGov ? 'Coupon' : 'Interest';
     const typeChip = isGov ? '🏛️ Govt Bond' : '🏢 Company';
     const countdown = _privCountdown(it.maturity_date, it.status);
+    const freqLbl  = it.payout_freq ? _couponTypeLabel(it.payout_freq) : 'Lump sum';
+    const np       = _privNextPayout(it);
     return `
       <div class="card" style="margin-bottom:10px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -4573,9 +4609,14 @@ async function loadPrivate() {
           </div>
           <div>
             <div style="font-size:11px;color:var(--text-muted)">${rateLbl}</div>
-            <div style="font-size:15px;font-weight:700">${it.rate_pct != null ? Number(it.rate_pct) + '%' : '—'}</div>
+            <div style="font-size:15px;font-weight:700">${it.rate_pct != null ? Number(it.rate_pct) + '%' : '—'}<span style="font-size:11px;font-weight:500;color:var(--text-muted)"> · ${freqLbl}</span></div>
           </div>
         </div>
+        ${np ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+          <span style="font-size:12px;color:var(--text-muted)">Next payout</span>
+          <span style="font-size:12px;font-weight:600;color:var(--success)">${fmtTHB(np.amt)} · ${_fmtShortDate(np.date.toISOString().split('T')[0])}</span>
+        </div>` : ''}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
           <span style="font-size:12px;color:var(--text-muted)">Matures ${_fmtShortDate(it.maturity_date)}</span>
           ${countdown ? `<span style="font-size:12px;font-weight:600;color:${st.color}">${countdown}</span>` : ''}
@@ -4633,6 +4674,7 @@ function openAddPriv() {
   document.getElementById('priv-plan').value = '';
   document.getElementById('priv-principal').value = '';
   document.getElementById('priv-rate').value = '';
+  document.getElementById('priv-payout-freq').value = '';
   document.getElementById('priv-start').value = new Date().toISOString().split('T')[0];
   document.getElementById('priv-term-value').value = '';
   document.getElementById('priv-term-unit').value = 'months';
@@ -4656,6 +4698,7 @@ async function openEditPriv(id) {
   document.getElementById('priv-principal').value = it.principal_thb != null
     ? Number(it.principal_thb).toLocaleString('en-US') : '';
   document.getElementById('priv-rate').value = it.rate_pct != null ? it.rate_pct : '';
+  document.getElementById('priv-payout-freq').value = it.payout_freq || '';
   document.getElementById('priv-start').value = it.start_date || '';
   document.getElementById('priv-term-value').value = it.term_value != null ? it.term_value : '';
   document.getElementById('priv-term-unit').value = it.term_unit || 'months';
@@ -4695,6 +4738,7 @@ async function savePriv() {
     plan_name:     isGov ? null : plan,
     principal_thb: principal,
     rate_pct:      isNaN(rate) ? null : rate,
+    payout_freq:   document.getElementById('priv-payout-freq').value || null,
     start_date:    start,
     term_value:    isGov ? null : (parseFloat(document.getElementById('priv-term-value').value) || null),
     term_unit:     isGov ? null : document.getElementById('priv-term-unit').value,
