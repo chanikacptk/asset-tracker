@@ -397,7 +397,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v64`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v65`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

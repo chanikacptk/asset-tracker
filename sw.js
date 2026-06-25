@@ -1,4 +1,4 @@
-const CACHE = 'smart-me-v64';
+const CACHE = 'smart-me-v65';
 const PRECACHE = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
@@ -29,10 +29,12 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network-first for the app shell so updates show immediately
+  // Network-first for the app shell so updates show immediately.
+  // `cache: 'no-store'` bypasses the browser HTTP cache (GitHub Pages serves
+  // index.html with max-age=600) so a refresh always pulls the latest deploy.
   if (url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/asset-tracker/')) {
     e.respondWith(
-      fetch(e.request).then(resp => {
+      fetch(e.request, { cache: 'no-store' }).then(resp => {
         if (resp.ok) {
           const clone = resp.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
