@@ -6,6 +6,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **Mutual Funds — fully rebuilt 2026-06-20** — Phase 1 (manual NAV, insert-only) + Phase 2 (daily auto-refresh) + fund-name search complete. See **"Mutual Funds — rebuild plan"** at the bottom.
 > **NAV source order flipped 2026-06-25**: NAV refresh is now **Tier 1 Finnomena by `fund_code`** (freshest, no key, widest coverage) → **Tier 2 SEC by `sec_proj_id`** (official fallback) → Tier 3 manual. Also: adding a fund with an auto source now kicks a **fire-and-forget** NAV refresh so its card flips 🟡→🟢 within seconds instead of waiting for the 8PM trigger.
+> **Daily Tech-News brief + Analysis page (2026-06-26)**: New holdings-aware morning brief — `NotificationAgent.sendDailyNewsBrief()` (7AM trigger `onNewsBriefTrigger`) uses Claude's **server-side `web_search` tool** to find today's tech/market news, flags stories about tickers the user holds with 🎯, sends via Telegram, and **persists** to `daily_news` + `daily_news_impact` (migration 021). The **Analysis tab** now reads those tables to show a browsable, sentiment-colored news history (date selector + 🎯 holdings / 📊 market sections), with the DCA/review hub kept below as "Tools". **Depth is decoupled**: Claude returns the full ~8-12 stories (all persisted to the page); Telegram is capped to a scannable top 6 with a "+N more" footer. See **"Daily Tech-News brief"** + **"Analysis"** sections.
 
 ## Live URL
 
@@ -231,6 +232,7 @@ Visual format (matches the requested MarkdownV2 layout, rendered via HTML bold):
 - Requires `CLAUDE_API_KEY` (web_search must be enabled for the org) + `TELEGRAM_BOT_TOKEN` — both already configured. No new Script Property.
 - Fully non-fatal: per-user errors log & skip; a failed/empty brief sends nothing rather than a broken message.
 - `_thaiDateLabel()` builds the Buddhist-era date deterministically (no locale dependency).
+- **Robustness** (after a 2026-06-26 dropped-brief incident — one user truncated): `max_tokens` is **5000** (the full-set prompt was overflowing 3500 → truncated JSON → null), `_callClaudeWebSearch` logs when `stop_reason === 'max_tokens'`, and `sendDailyNewsBrief` **retries the call once** on null before giving up. The brief is generated **per user** (separate web_search call each), so one user failing never affects the other.
 
 ## Market data sources (DataAgent)
 
@@ -286,6 +288,9 @@ _bondInputMethod    // 'baht' | 'units' | 'manual'
 _bondListData       // cached bond array for list/sort/search
 _selectedBondId     // currently selected bond in master-detail view
 _bondSortKey        // 'code' | 'maturity' | 'amount' | 'coupon'
+_anDate             // Analysis page: selected news_date (YYYY-MM-DD)
+_anRows             // Analysis page: daily_news rows for the selected date
+_anTickerFilter     // Analysis page: active $TICKER filter (null = show all)
 ```
 
 ## Pages / navigation
@@ -370,6 +375,14 @@ Nav highlight logic:
 - % is share of the five-asset subtotal (gold + insurance + private + MF + bonds), not total portfolio
 - MF value = `units × current_nav_thb` (falls back to cost basis when NAV not set)
 
+### Analysis (News brief history)
+- `loadAnalysis()` — entry for the Analysis tab. Queries distinct `news_date` for `state.userId`, populates the date dropdown, defaults `_anDate` to **the most recent day that has news** (today if present, else latest; today is always kept selectable so an empty day shows "No news yet"), then `_anRenderDate()`.
+- `_anRenderDate()` — fetches `daily_news` for the user+date with embedded `daily_news_impact(impact)` (PostgREST FK embed), ordered by `sort_order`; sets the ‹ older / newer › button disabled states; calls `_anPaint()`.
+- `_anPaint()` — splits rows into 🎯 holdings (`is_holding_related`) + 📊 market sections, renders `_anCard()` for each. Honours the active `_anTickerFilter`.
+- `_anCard(r)` — sentiment-colored card (`_anSentClass`: positive=green / negative=red / neutral=blue left border): emoji + clickable `$ticker` badge + headline + impact box (holdings only) + `ที่มา:` sources.
+- Date nav: `anSelectDate(d)` (dropdown), `anStepDate(±1)` (‹/›). Ticker filter (nice-to-have): `anFilterTicker(t)` / `anClearFilter()` filter the loaded date's rows to one ticker.
+- Helpers: `_anEsc` (HTML escape), `_bkkToday`, `_anDateLabel` (Today / Yesterday / date). Reads Supabase directly (anon read); no GAS call. The page is data-only — all writes come from `sendDailyNewsBrief()`.
+
 ### Thai Bonds
 - `loadBonds()` — fetches holdings, renders KPI cards → donut dashboard → 90d alert → bond list
 - KPI cards: Total Invested (full-width), Next Coupon (with bond code), Avg. Coupon %
@@ -424,6 +437,10 @@ Key classes:
 - `.mf-cat-pill` / `.mf-cat-pill.active` — category selector pills in modal
 - `.mf-sort-select` — sort dropdown
 - `.mf-search-row` / `.mf-search-row-name` / `.mf-search-row-sub` / `.mf-search-row-pid` — SEC fund search result rows
+- `.an-datebar` / `.an-date-select` / `.an-date-nav` — Analysis page date selector + ‹/› nav
+- `.an-section-title` / `.an-tools-head` — Analysis section headers (🎯 / 📊) + "Tools" hub label
+- `.an-card` (`.pos` / `.neg` / `.neu`) / `.an-card-head` / `.an-emoji` / `.an-ticker` / `.an-headline` / `.an-impact` / `.an-impact-lbl` / `.an-sources` — News brief cards (sentiment-colored left border)
+- `.an-filter-pill` — active ticker-filter chip (tap to clear)
 
 ## Thai bank config
 
