@@ -1156,8 +1156,15 @@ body {
 
   <!-- Name -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" id="priv-name-label">Company Name</div>
-  <input id="priv-name" type="text" autocapitalize="words" placeholder="e.g. ABC Holdings Co., Ltd."
+  <input id="priv-name" type="text" autocapitalize="words" placeholder="e.g. GET Venture Co., Ltd."
     style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+
+  <!-- Plan name (company only) -->
+  <div id="priv-plan-wrap">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Plan Name</div>
+    <input id="priv-plan" type="text" autocapitalize="words" placeholder="e.g. GET 1"
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
+  </div>
 
   <!-- Principal (THB) -->
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Principal Amount (THB)</div>
@@ -4550,6 +4557,7 @@ async function loadPrivate() {
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div style="min-width:0">
             <div style="font-weight:700;font-size:15px">${it.name}</div>
+            ${it.plan_name ? `<div style="font-size:12px;color:var(--text);margin-top:1px">${it.plan_name}</div>` : ''}
             <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${typeChip}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -4588,7 +4596,8 @@ function setPrivType(type) {
   document.getElementById('priv-name').placeholder         = isGov ? 'e.g. ESB245A — Savings Bond 2024' : 'e.g. ABC Holdings Co., Ltd.';
   document.getElementById('priv-rate-label').textContent  = isGov ? 'Coupon Rate (%)' : 'Annual Interest Rate (%)';
   document.getElementById('priv-start-label').textContent = isGov ? 'Purchase Date' : 'Investment Date';
-  // Term + auto-maturity is company-only
+  // Plan name + term + auto-maturity are company-only
+  document.getElementById('priv-plan-wrap').style.display    = isGov ? 'none' : 'block';
   document.getElementById('priv-term-wrap').style.display    = isGov ? 'none' : 'block';
   document.getElementById('priv-maturity-hint').style.display = isGov ? 'none' : '';
   // Govbond has no 'withdrawn' status
@@ -4621,6 +4630,7 @@ function openAddPriv() {
   document.getElementById('priv-modal-title').textContent = 'Add Investment';
   document.getElementById('priv-modal-save-btn').textContent = 'Add Investment';
   document.getElementById('priv-name').value = '';
+  document.getElementById('priv-plan').value = '';
   document.getElementById('priv-principal').value = '';
   document.getElementById('priv-rate').value = '';
   document.getElementById('priv-start').value = new Date().toISOString().split('T')[0];
@@ -4642,6 +4652,7 @@ async function openEditPriv(id) {
   document.getElementById('priv-modal-title').textContent = 'Edit Investment';
   document.getElementById('priv-modal-save-btn').textContent = 'Save Changes';
   document.getElementById('priv-name').value = it.name || '';
+  document.getElementById('priv-plan').value = it.plan_name || '';
   document.getElementById('priv-principal').value = it.principal_thb != null
     ? Number(it.principal_thb).toLocaleString('en-US') : '';
   document.getElementById('priv-rate').value = it.rate_pct != null ? it.rate_pct : '';
@@ -4666,6 +4677,7 @@ function closePrivModal() {
 async function savePriv() {
   const errEl     = document.getElementById('priv-modal-error');
   const name      = document.getElementById('priv-name').value.trim();
+  const plan      = document.getElementById('priv-plan').value.trim() || null;
   const principal = _parseNum(document.getElementById('priv-principal').value);
   const rate      = parseFloat(document.getElementById('priv-rate').value);
   const start     = document.getElementById('priv-start').value || null;
@@ -4680,6 +4692,7 @@ async function savePriv() {
     user_id:       state.userId,
     inv_type:      _privType,
     name,
+    plan_name:     isGov ? null : plan,
     principal_thb: principal,
     rate_pct:      isNaN(rate) ? null : rate,
     start_date:    start,

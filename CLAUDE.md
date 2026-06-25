@@ -98,7 +98,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `cash_accounts` | id, user_id, name, sub_type (`saving`/`fixed_deposit`/`fcd`), bank, balance (always THB), currency, interest_rate, start/maturity_date, fcd_amount, fcd_purchase_rate |
 | `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
 | `private_investments` | id, user_id, name, current_valuation, currency *(legacy — superseded by `private_holdings`, no longer read by the app)* |
-| `private_holdings` | id, user_id, inv_type (`company`/`govbond`), name NOT NULL, principal_thb (always THB), rate_pct *(annual interest / coupon %)*, start_date *(investment/purchase date)*, term_value + term_unit (`months`/`years`, company only), maturity_date *(auto from start+term, editable)*, status (`active`/`matured`/`withdrawn`; govbond only uses active/matured), notes, created_at — backs the Private Investment page |
+| `private_holdings` | id, user_id, inv_type (`company`/`govbond`), name NOT NULL, plan_name *(company only — plan within the company, e.g. "GET 1")*, principal_thb (always THB), rate_pct *(annual interest / coupon %)*, start_date *(investment/purchase date)*, term_value + term_unit (`months`/`years`, company only), maturity_date *(auto from start+term, editable)*, status (`active`/`matured`/`withdrawn`; govbond only uses active/matured), notes, created_at — backs the Private Investment page |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
 | `mutual_fund_holdings` | id, user_id, fund_name NOT NULL, category (`Onshore`/`Offshore`/`RMF`/`ESG`/`SSF`/`Other`), units, avg_cost_thb (cost/unit), current_nav_thb *(nullable)*, nav_date *(nullable — source valuation date)*, nav_updated_at *(nullable — when we last polled)*, sec_proj_id *(nullable)*, sec_fund_class_name *(nullable — exact SEC class; one proj_id has many classes)*, fund_code *(nullable — plain code, e.g. ES-FIXEDRMF; primary Finnomena NAV key, tried before SEC)*, buy_date, notes, created_at |
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
@@ -153,6 +153,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 016  mutual_fund_holdings.nav_date: stores SEC valuation date separately from nav_updated_at (last-polled ts)  ✓
 017  mutual_fund_holdings.fund_code: plain code (e.g. ES-FIXEDRMF) — primary Finnomena NAV key (tried before SEC)  ✓
 018  private_holdings: new table (company / govbond investments) — backs the rebuilt Private Investment page; supersedes private_investments  ✓
+019  private_holdings.plan_name: optional plan within a company (e.g. "GET 1"), company-only  ✓
 ```
 
 ---
@@ -397,7 +398,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v65`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v66`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
