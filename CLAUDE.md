@@ -122,6 +122,8 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | Table | Key columns |
 |---|---|
 | `news_items` | id, ticker, title, source_name, url, published_at, is_high_impact |
+| `daily_news` | id, user_id, news_date, emoji, ticker, headline, sentiment (`positive`/`negative`/`neutral`), is_holding_related, sources (jsonb array), sort_order, created_at — persisted daily Tech-News brief (per user), backs the Analysis page history |
+| `daily_news_impact` | id, news_id (FK→daily_news), user_id, impact, created_at — per-user "ผลต่อ position" line for holdings-related stories |
 | `notifications_log` | id, user_id, notification_type, sent_at |
 | `alert_cooldowns` | id, user_id, ticker, alert_type, last_sent_at — unique on (user_id, ticker, alert_type) |
 | `app_config` | key, value — stores `gas_web_app_url` |
@@ -129,7 +131,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
 - Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`
-- `bond_master` is read-only for anon; GAS writes it via service_role
+- `bond_master`, `daily_news`, `daily_news_impact` are read-only for anon; GAS writes them via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
 ### Migrations applied (001–017 ✓)
@@ -155,6 +157,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 018  private_holdings: new table (company / govbond investments) — backs the rebuilt Private Investment page; supersedes private_investments  ✓
 019  private_holdings.plan_name: optional plan within a company (e.g. "GET 1"), company-only  ✓
 020  private_holdings.payout_freq: interest/coupon payout schedule (monthly/quarterly/semi-annually/annually; null = lump sum at maturity) — drives Next Payout display  ✓
+021  daily_news + daily_news_impact: persist the daily Tech-News brief (per user) so the Analysis page can show history; anon read-only, GAS service_role writes  ✓
 ```
 
 ---
@@ -210,6 +213,7 @@ Standalone morning notification, **separate from the portfolio reviews**. `sendD
 1. **Gather holdings** — `_getUserHoldingsForBrief(userId)`: US tickers (growth/dividend/etf via `portfolios`→`holdings`) drive 🎯 matching; Thai mutual-fund names passed as secondary awareness.
 2. **Generate** — `_callClaudeWebSearch()` calls Claude (`claude-sonnet-4-6`) with the **server-side `web_search` tool** (`{type:'web_search_20250305', max_uses:6}`). One API call: the model runs its own searches for today's tech/market news and returns a JSON object `{holdings_stories[], market_stories[], sources[]}`. Stories about a held ticker go in `holdings_stories` (lead the brief); the rest in `market_stories`. Each summary is one line of Thai+English with concrete numbers + price reaction; holdings stories also get a one-line `impact` note. **Never fabricates** — every figure must come from a search result.
 3. **Render + send** — `_renderNewsBrief()` builds the message and `_sendHtml()` sends it via Telegram with **`parse_mode: HTML`** (not Markdown/MarkdownV2 — the brief is full of `$ % + - ( )` and Thai text that constantly break Markdown escaping; HTML only needs `& < >` escaped, done by `_escapeHtml`). Logged as `notification_type='news_brief'`.
+4. **Persist** — `_persistNewsBrief(userId, data)` stores each story into `daily_news` (+ per-user impact into `daily_news_impact`) so the **Analysis page** can browse history. Idempotent per (user, news_date): deletes that day's rows first, then bulk-inserts (holdings rows first, so their ids map to impact rows). `_sentimentFromEmoji()` derives the card color bucket. Fully non-fatal — a DB error here never affects the Telegram send.
 
 Visual format (matches the requested MarkdownV2 layout, rendered via HTML bold):
 ```
@@ -299,6 +303,7 @@ cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
 insurance     Insurance policies
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
+analysis      Analysis — daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) on top, then a "Tools" hub (DCA/Monthly/Weekly/All Portfolio). Reads daily_news + daily_news_impact directly via Supabase.
 dca           DCA plan approval
 monthly       Monthly Review — trigger generateDCA
 weekly        Weekly Review — trigger analyzeAll
@@ -426,7 +431,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v67`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v69`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

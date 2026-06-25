@@ -211,6 +211,7 @@ const NotificationAgent = (() => {
 
         _sendHtml(user.telegram_chat_id, msg.slice(0, 4090));
         _logNotification(user.id, 'news_brief', msg);
+        _persistNewsBrief(user.id, data); // for the Analysis page history (non-fatal)
         Logger.log(`[NewsBrief] sent to ${user.name}: ` +
           `${(data.holdings_stories || []).length} holdings + ` +
           `${(data.market_stories || []).length} market stories`);
@@ -365,6 +366,66 @@ Rules:
       msg += 'ที่มา: ' + sources.map(_escapeHtml).join(' · ');
     }
     return msg;
+  }
+
+  // Persist the brief to daily_news + daily_news_impact so the Analysis page can show
+  // history. Idempotent per (user, date): clears the day's rows first, then re-inserts.
+  // Fully non-fatal — a DB hiccup here must never affect the Telegram send.
+  function _persistNewsBrief(userId, data) {
+    try {
+      const newsDate = _bkkIsoDate();
+      const holdings = (data.holdings_stories || []).filter(s => s && s.summary);
+      const market   = (data.market_stories  || []).filter(s => s && s.summary);
+      const sources  = (data.sources || []).filter(Boolean);
+
+      // Idempotency: remove any rows already stored for this user+date.
+      // (impact rows cascade-delete via the news_id FK)
+      supabaseRequest('DELETE',
+        `daily_news?user_id=eq.${userId}&news_date=eq.${newsDate}`);
+
+      // Insert holdings stories first (they need impact rows), preserving order.
+      let order = 0;
+      const holdingRows = holdings.map(s => ({
+        user_id: userId, news_date: newsDate,
+        emoji: s.emoji || '', ticker: s.ticker || null,
+        headline: s.summary, sentiment: _sentimentFromEmoji(s.emoji),
+        is_holding_related: true, sources: sources, sort_order: order++
+      }));
+      const marketRows = market.map(s => ({
+        user_id: userId, news_date: newsDate,
+        emoji: s.emoji || '', ticker: s.ticker || null,
+        headline: s.summary, sentiment: _sentimentFromEmoji(s.emoji),
+        is_holding_related: false, sources: sources, sort_order: order++
+      }));
+
+      // Bulk insert holdings rows; PostgREST returns them in input order with ids.
+      const insertedHoldings = holdingRows.length
+        ? (supabaseRequest('POST', 'daily_news', holdingRows) || [])
+        : [];
+      if (marketRows.length) supabaseRequest('POST', 'daily_news', marketRows);
+
+      // Impact rows — one per holdings story that carried an impact line.
+      const impactRows = [];
+      insertedHoldings.forEach((row, i) => {
+        const impact = holdings[i] && holdings[i].impact;
+        if (row && row.id && impact) {
+          impactRows.push({ news_id: row.id, user_id: userId, impact: impact });
+        }
+      });
+      if (impactRows.length) supabaseRequest('POST', 'daily_news_impact', impactRows);
+
+      Logger.log(`[NewsBrief] persisted ${holdingRows.length + marketRows.length} stories (${newsDate})`);
+    } catch (e) {
+      Logger.log('[NewsBrief] persist failed (non-fatal): ' + e.message);
+    }
+  }
+
+  // Map a story emoji to a sentiment bucket (drives the Analysis card color).
+  function _sentimentFromEmoji(emoji) {
+    const e = emoji || '';
+    if ('🚀📈💰✅🟢🔼🆙'.indexOf(e) >= 0) return 'positive';
+    if ('🔴📉⚠️🔻🟥❌'.indexOf(e) >= 0)   return 'negative';
+    return 'neutral'; // 🤖 🏦 📊 🛢️ ⚪ etc.
   }
 
   function _escapeHtml(s) {

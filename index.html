@@ -718,10 +718,26 @@ body {
     <div id="partner-content"></div>
   </div>
 
-  <!-- ANALYSIS (hub for DCA, monthly review, weekly review, all portfolios) -->
+  <!-- ANALYSIS (daily Tech-News brief history + hub for DCA/reviews) -->
   <div id="page-analysis" class="page">
-    <div class="top-bar"><div class="page-title">Analysis</div></div>
+    <div class="top-bar">
+      <div class="page-title">Analysis</div>
+      <button onclick="loadAnalysis()" title="Refresh" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:0 4px">↻</button>
+    </div>
     <div style="height:12px"></div>
+
+    <!-- date selector / history -->
+    <div class="an-datebar">
+      <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
+      <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
+      <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+    </div>
+
+    <!-- news content -->
+    <div id="analysis-news"></div>
+
+    <!-- tools hub -->
+    <div class="an-tools-head">Tools</div>
     <div>
       <div class="more-row" onclick="navigate('dca')">
         <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
@@ -1603,6 +1619,53 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .more-val-num  { font-size:14px;font-weight:600; }
 .more-val-pct  { font-size:11px;color:var(--text-muted);margin-top:1px; }
 
+/* Analysis — News page */
+.an-datebar { display:flex;align-items:center;gap:8px;margin-bottom:14px; }
+.an-date-nav {
+  width:36px;height:36px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.an-date-nav:disabled { opacity:.35;cursor:default; }
+.an-date-select {
+  flex:1;height:36px;padding:0 32px 0 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;
+  appearance:none;-webkit-appearance:none;background-repeat:no-repeat;background-position:right 12px center;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6278' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.an-section-title { font-size:14px;font-weight:600;margin:20px 2px 10px;display:flex;align-items:center;gap:6px; }
+.an-section-title:first-child { margin-top:2px; }
+.an-filter-pill {
+  display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;padding:5px 10px;border-radius:999px;
+  background:rgba(79,158,255,.12);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;
+}
+.an-card {
+  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:12px;padding:13px 14px;margin-bottom:10px;
+}
+.an-card.pos { border-left-color:var(--success); }
+.an-card.neg { border-left-color:var(--danger); }
+.an-card.neu { border-left-color:var(--accent); }
+.an-card-head { display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap; }
+.an-emoji { font-size:17px;line-height:1; }
+.an-ticker {
+  font-family:'Syne',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.3px;
+  padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;
+}
+.an-ticker.pos { color:var(--success);background:rgba(22,163,74,.13); }
+.an-ticker.neg { color:var(--danger); background:rgba(220,38,38,.13); }
+.an-ticker.neu { color:var(--accent); background:rgba(79,158,255,.13); }
+.an-headline { font-size:14px;line-height:1.55;color:var(--text); }
+.an-impact {
+  margin-top:9px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.5;
+  background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.15);color:var(--text);
+}
+.an-card.neg .an-impact { background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.15); }
+.an-card.neu .an-impact { background:rgba(79,158,255,.07);border-color:rgba(79,158,255,.15); }
+.an-impact-lbl { color:var(--text-muted);font-weight:600; }
+.an-sources { margin-top:9px;font-size:11px;color:var(--text-muted); }
+.an-tools-head { font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:24px 2px 10px; }
+
 /* Ticker autocomplete */
 .ticker-suggestions {
   position:absolute;left:0;right:0;top:100%;background:var(--surface);
@@ -1971,7 +2034,7 @@ async function loadPage(page) {
   else if (page === 'dca')     await loadDCA();
   else if (page === 'partner') await loadPartner();
   else if (page === 'settings') await loadSettings();
-  else if (page === 'analysis') { /* static hub */ }
+  else if (page === 'analysis') await loadAnalysis();
   else if (page === 'monthly') await loadMonthlyReview();
   else if (page === 'weekly')  await loadWeeklyReview();
   else if (page === 'allportfolio') await loadAllPortfolio();
@@ -4408,6 +4471,138 @@ async function deleteCashAccount(id) {
   await sb.from('cash_accounts').delete().eq('id', id);
   await loadCash();
 }
+
+// ── Asset hub (More page) ─────────────────────────────────────────────────────
+
+// ── Analysis — daily Tech-News brief history ──────────────────────────────────
+
+let _anDate = null;          // selected news_date (YYYY-MM-DD)
+let _anRows = [];            // daily_news rows for the selected date
+let _anTickerFilter = null;  // active ticker filter (nice-to-have)
+
+function _anEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function _bkkToday() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+function _anDateLabel(d) {
+  const today = _bkkToday();
+  const yesterday = new Date(new Date(today + 'T00:00:00').getTime() - 86400000).toISOString().slice(0, 10);
+  if (d === today)     return 'Today · ' + _fmtShortDate(d);
+  if (d === yesterday) return 'Yesterday · ' + _fmtShortDate(d);
+  return _fmtShortDate(d);
+}
+
+async function loadAnalysis() {
+  const uid = state.userId;
+  const box = document.getElementById('analysis-news');
+  const sel = document.getElementById('an-date-select');
+  if (box) box.innerHTML = '<div class="empty"><div class="empty-icon">📰</div><div class="empty-text">Loading…</div></div>';
+
+  // Distinct dates that have a brief for this user (newest first)
+  const { data: dateRows } = await sb.from('daily_news')
+    .select('news_date').eq('user_id', uid).order('news_date', { ascending: false });
+  const dates = [...new Set((dateRows || []).map(r => r.news_date))];
+
+  const today = _bkkToday();
+  if (!_anDate || (!dates.includes(_anDate) && _anDate !== today)) {
+    _anDate = dates.includes(today) ? today : (dates[0] || today);
+  }
+
+  // Always keep today selectable (so an empty day shows the "no news" state)
+  const opts = dates.slice();
+  if (!opts.includes(today))   opts.unshift(today);
+  if (!opts.includes(_anDate)) opts.unshift(_anDate);
+  sel.innerHTML = opts
+    .map(d => `<option value="${d}"${d === _anDate ? ' selected' : ''}>${_anEsc(_anDateLabel(d))}</option>`)
+    .join('');
+
+  _anTickerFilter = null;
+  await _anRenderDate();
+}
+
+async function anSelectDate(d) { _anDate = d; _anTickerFilter = null; await _anRenderDate(); }
+
+// delta: -1 = newer, +1 = older (options are sorted newest→oldest)
+function anStepDate(delta) {
+  const sel = document.getElementById('an-date-select');
+  const opts = [...sel.options].map(o => o.value);
+  const i = opts.indexOf(_anDate);
+  if (i < 0 || i + delta < 0 || i + delta >= opts.length) return;
+  _anDate = opts[i + delta];
+  sel.value = _anDate;
+  _anTickerFilter = null;
+  _anRenderDate();
+}
+
+async function _anRenderDate() {
+  const box = document.getElementById('analysis-news');
+  const sel = document.getElementById('an-date-select');
+  const opts = [...sel.options].map(o => o.value);
+  const i = opts.indexOf(_anDate);
+  document.getElementById('an-date-next').disabled = (i <= 0);                  // newer end
+  document.getElementById('an-date-prev').disabled = (i < 0 || i >= opts.length - 1); // older end
+
+  const { data, error } = await sb.from('daily_news')
+    .select('id, emoji, ticker, headline, sentiment, is_holding_related, sources, sort_order, daily_news_impact(impact)')
+    .eq('user_id', state.userId).eq('news_date', _anDate)
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    box.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Couldn\'t load news for this date.</div></div>';
+    return;
+  }
+  _anRows = data || [];
+  _anPaint();
+}
+
+function _anPaint() {
+  const box = document.getElementById('analysis-news');
+  let rows = _anRows;
+  if (_anTickerFilter) rows = rows.filter(r => (r.ticker || '').toUpperCase() === _anTickerFilter);
+
+  if (!rows.length) {
+    const msg = _anTickerFilter ? `No news mentioning $${_anEsc(_anTickerFilter)} on this date.` : 'No news yet for this date.';
+    box.innerHTML = (_anTickerFilter ? `<div class="an-filter-pill" onclick="anClearFilter()">✕ $${_anEsc(_anTickerFilter)}</div>` : '')
+      + `<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">${msg}</div></div>`;
+    return;
+  }
+
+  const holdings = rows.filter(r => r.is_holding_related);
+  const market   = rows.filter(r => !r.is_holding_related);
+  let html = '';
+  if (_anTickerFilter) html += `<div class="an-filter-pill" onclick="anClearFilter()">✕ $${_anEsc(_anTickerFilter)} — show all</div>`;
+  if (holdings.length) {
+    html += '<div class="an-section-title">🎯 News related to your holdings</div>';
+    html += holdings.map(_anCard).join('');
+  }
+  if (market.length) {
+    html += '<div class="an-section-title">📊 Other market news</div>';
+    html += market.map(_anCard).join('');
+  }
+  box.innerHTML = html;
+}
+
+function _anSentClass(s) { return s === 'positive' ? 'pos' : s === 'negative' ? 'neg' : 'neu'; }
+
+function _anCard(r) {
+  const cls = _anSentClass(r.sentiment);
+  const impact = r.daily_news_impact && r.daily_news_impact[0] && r.daily_news_impact[0].impact;
+  const sources = Array.isArray(r.sources) ? r.sources : [];
+  const ticker = r.ticker
+    ? `<span class="an-ticker ${cls}" onclick="anFilterTicker('${_anEsc(r.ticker)}')">$${_anEsc(r.ticker)}</span>`
+    : '';
+  let h = `<div class="an-card ${cls}">`;
+  h += `<div class="an-card-head"><span class="an-emoji">${r.emoji || '•'}</span>${ticker}</div>`;
+  h += `<div class="an-headline">${_anEsc(r.headline)}</div>`;
+  if (impact) h += `<div class="an-impact"><span class="an-impact-lbl">↳ </span>${_anEsc(impact)}</div>`;
+  if (sources.length) h += `<div class="an-sources">ที่มา: ${sources.map(_anEsc).join(' · ')}</div>`;
+  h += '</div>';
+  return h;
+}
+
+function anFilterTicker(t) { _anTickerFilter = (t || '').toUpperCase(); _anPaint(); }
+function anClearFilter()   { _anTickerFilter = null; _anPaint(); }
 
 // ── Asset hub (More page) ─────────────────────────────────────────────────────
 
