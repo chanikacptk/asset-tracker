@@ -1917,6 +1917,12 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 /* ── Ticker Detail modal ─────────────────────────────────────────────────── */
 .pt-ticker { cursor:pointer; }
 .pt-ticker:hover { text-decoration:underline; text-underline-offset:2px; }
+/* Asset logos (US stocks / ETFs / crypto / gold / fund) — see ASSET_LOGOS + _assetLogoImg */
+.tk-logo { display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#15171d;border:1px solid var(--border);object-fit:contain;flex-shrink:0;vertical-align:middle;overflow:hidden; }
+.tk-badge { color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
+.tk-fund-svg { width:70%;height:70%;object-fit:contain; }
+.pt-ticker-wrap { display:inline-flex;align-items:center;gap:7px;cursor:pointer; }
+.pt-ticker-wrap:hover .pt-ticker { text-decoration:underline;text-underline-offset:2px; }
 .td-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px; }
 .td-tk   { font-family:'Syne',sans-serif;font-size:24px;font-weight:700;line-height:1; }
 .td-name { font-size:12px;color:var(--text-muted);margin-top:4px;max-width:230px; }
@@ -1983,6 +1989,66 @@ function _bankLogoImg(code, size = 28) {
   const b = THAI_BANKS[code];
   if (!b) return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--surface2);flex-shrink:0"></div>`;
   return `<img src="${_bankLogoPath(code)}" alt="${code}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${b.color}22" onerror="this.style.display='none'">`;
+}
+
+// ── Asset logos (US stocks, ETFs, crypto, gold) ───────────────────────────────
+// ticker → relative logo path. Mirror of src/config/assetLogos.js (the source of truth).
+// Relative paths (no leading slash) so they resolve under the GitHub Pages subpath.
+// Any ticker NOT here falls back to a deterministic colored initials badge.
+const ASSET_LOGOS = {
+  // US stocks — Growth portfolio, individual brand logos (davidepalazzo/ticker-logos)
+  NVDA: 'assets/logos/us-stocks/NVDA.png',  GOOGL: 'assets/logos/us-stocks/GOOGL.png',
+  AMZN: 'assets/logos/us-stocks/AMZN.png',  TSLA:  'assets/logos/us-stocks/TSLA.png',
+  AAPL: 'assets/logos/us-stocks/AAPL.png',  NFLX:  'assets/logos/us-stocks/NFLX.png',
+  COST: 'assets/logos/us-stocks/COST.png',  LLY:   'assets/logos/us-stocks/LLY.png',
+  TSM:  'assets/logos/us-stocks/TSM.png',   BKNG:  'assets/logos/us-stocks/BKNG.png',
+  RKLB: 'assets/logos/us-stocks/RKLB.png',  AVGO:  'assets/logos/us-stocks/AVGO.png',
+  // REIT / BDC with genuine individual logos
+  O:    'assets/logos/us-stocks/O.png',     MAIN:  'assets/logos/us-stocks/MAIN.png',
+  // ETFs → mapped by FUND ISSUER (ticker-logos has no per-ETF art; the issuer brand is
+  // the recognizable mark — e.g. VTI.png in the repo is literally the Vanguard wordmark)
+  VTI:  'assets/logos/issuers/vanguard.png', VOO:  'assets/logos/issuers/vanguard.png',
+  VT:   'assets/logos/issuers/vanguard.png', VXUS: 'assets/logos/issuers/vanguard.png',
+  BND:  'assets/logos/issuers/vanguard.png', VHT:  'assets/logos/issuers/vanguard.png',
+  VNQ:  'assets/logos/issuers/vanguard.png', VPU:  'assets/logos/issuers/vanguard.png',
+  SCHD: 'assets/logos/issuers/schwab.png',   SCHG: 'assets/logos/issuers/schwab.png',
+  JEPI: 'assets/logos/issuers/jpmorgan.png', JEPQ: 'assets/logos/issuers/jpmorgan.png',
+  // Invesco — note SPHD is an Invesco fund (not State Street/SPDR)
+  QQQ:  'assets/logos/issuers/invesco.png',  SPHD: 'assets/logos/issuers/invesco.png',
+  // Multi-asset (nvstly/icons). GLD = SPDR Gold Shares → keep the gold icon.
+  GLD:  'assets/logos/misc/XAU.png',        XAU:   'assets/logos/misc/XAU.png',
+  BTC:  'assets/logos/misc/BTC.png',        ETH:   'assets/logos/misc/ETH.png',
+};
+
+// deterministic hue from a ticker string (stable per ticker)
+function _tkColor(t) {
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 52% 42%)`;
+}
+function _tkInitials(t) { return (t.replace(/[^A-Z0-9]/gi, '').slice(0, 2).toUpperCase()) || '?'; }
+
+// colored initials badge — fallback for any ticker without a logo (never breaks the UI)
+function _tkBadge(ticker, size) {
+  const t = (ticker || '?').toUpperCase();
+  return `<span class="tk-logo tk-badge" style="width:${size}px;height:${size}px;font-size:${Math.max(8, Math.round(size * 0.42))}px;background:${_tkColor(t)}">${_tkInitials(t)}</span>`;
+}
+// DOM node version (used by <img> onerror to swap a broken logo for a badge)
+function _tkBadgeEl(ticker, size) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = _tkBadge(ticker, size).trim();
+  return tpl.content.firstChild;
+}
+// logo <img> if mapped, else a badge. size = px (square).
+function _assetLogoImg(ticker, size = 24) {
+  const t = (ticker || '').toUpperCase();
+  const path = ASSET_LOGOS[t];
+  if (!path) return _tkBadge(t, size);
+  return `<img src="${path}" alt="${t}" class="tk-logo" style="width:${size}px;height:${size}px" onerror="this.replaceWith(_tkBadgeEl('${t}', ${size}))">`;
+}
+// generic fund icon — Thai mutual funds have no per-fund logo in these repos
+function _fundLogoImg(size = 24) {
+  return `<span class="tk-logo" style="width:${size}px;height:${size}px"><img src="assets/logos/misc/fund.svg" alt="fund" class="tk-fund-svg"></span>`;
 }
 
 // ── Supabase client ───────────────────────────────────────────────────────────
@@ -3040,7 +3106,7 @@ function _renderPortTbody() {
   sorted.forEach(r => {
     const barFill = Math.min(r.weight / 20 * 100, 100);
     rows += `<tr>
-      <td><span class="pt-ticker" onclick="openTickerDetail('${r.ticker}')">${r.ticker}</span></td>
+      <td><span class="pt-ticker-wrap" onclick="openTickerDetail('${r.ticker}')">${_assetLogoImg(r.ticker, 22)}<span class="pt-ticker">${r.ticker}</span></span></td>
       <td class="pt-mono">${parseFloat(r.shares.toPrecision(7))}</td>
       <td class="pt-mono">${fmtUSD(r.avg_cost_usd)}</td>
       <td class="pt-mono">${r.price > 0 ? fmtUSD(r.price) : '—'}</td>
@@ -3205,7 +3271,7 @@ async function openTickerDetail(ticker) {
   const body = document.getElementById('td-body');
   body.innerHTML = `
     <div class="td-head">
-      <div><div class="td-tk">${ticker}</div></div>
+      <div style="display:flex;align-items:center;gap:12px">${_assetLogoImg(ticker, 40)}<div class="td-tk">${ticker}</div></div>
       <button onclick="closeTickerDetail()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0">✕</button>
     </div>
     <div class="td-loading"><div class="td-spin"></div>Loading ${ticker} technicals…</div>`;
@@ -3250,9 +3316,12 @@ function _tdRender(ticker, hist) {
 
   document.getElementById('td-body').innerHTML = `
     <div class="td-head">
-      <div>
-        <div class="td-tk">${ticker}</div>
-        <div class="td-name">${_anEsc ? _anEsc(hist.name || '') : (hist.name || '')}</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        ${_assetLogoImg(ticker, 40)}
+        <div>
+          <div class="td-tk">${ticker}</div>
+          <div class="td-name">${_anEsc ? _anEsc(hist.name || '') : (hist.name || '')}</div>
+        </div>
       </div>
       <div style="display:flex;align-items:flex-start;gap:10px">
         <div>
@@ -3856,9 +3925,12 @@ function _renderMFList() {
     return `
     <div class="mf-fund-card">
       <div class="mf-card-head" onclick="toggleMFExpand('${h.id}')">
-        <div class="mf-card-left">
-          <div class="mf-card-badges">${catBadge}${navBadge}</div>
-          <div class="mf-card-code" style="font-size:15px">${h.fund_name || '(unnamed)'}</div>
+        <div class="mf-card-left" style="display:flex;align-items:flex-start;gap:10px">
+          ${_fundLogoImg(30)}
+          <div style="min-width:0;flex:1">
+            <div class="mf-card-badges">${catBadge}${navBadge}</div>
+            <div class="mf-card-code" style="font-size:15px">${h.fund_name || '(unnamed)'}</div>
+          </div>
         </div>
         <div class="mf-card-right">
           <span class="mf-card-chevron${isExpanded ? ' open' : ''}">∨</span>
