@@ -30,6 +30,13 @@ export const STOCK_LOGOS = {
   BKNG:  '/assets/logos/us-stocks/BKNG.png',
   RKLB:  '/assets/logos/us-stocks/RKLB.png',
   AVGO:  '/assets/logos/us-stocks/AVGO.png',
+  // Dividend / blue-chip individual stock logos
+  MSFT:  '/assets/logos/us-stocks/MSFT.png',
+  ABBV:  '/assets/logos/us-stocks/ABBV.png',
+  KO:    '/assets/logos/us-stocks/KO.png',
+  PG:    '/assets/logos/us-stocks/PG.png',
+  MS:    '/assets/logos/us-stocks/MS.png',   // Morgan Stanley
+  JPM:   '/assets/logos/issuers/jpmorgan.png', // JPMorgan stock → Chase brand (= JEPI/JEPQ)
   // REIT / BDC that have genuine individual logos (not generic issuer brands)
   O:     '/assets/logos/us-stocks/O.png',    // Realty Income
   MAIN:  '/assets/logos/us-stocks/MAIN.png', // Main Street Capital
@@ -45,6 +52,7 @@ export const ISSUER_LOGOS = {
   schwab:    '/assets/logos/issuers/schwab.png',
   jpmorgan:  '/assets/logos/issuers/jpmorgan.png',
   invesco:   '/assets/logos/issuers/invesco.png',
+  blackrock: '/assets/logos/issuers/blackrock.png', // iShares ETFs (SGOV)
   spdr:      '/assets/logos/issuers/spdr.png', // staged — no current holding maps here (GLD = gold icon)
 };
 
@@ -60,6 +68,8 @@ export const ETF_LOGOS = {
   JEPI: ISSUER_LOGOS.jpmorgan, JEPQ: ISSUER_LOGOS.jpmorgan,
   // Invesco — NOTE: SPHD is an Invesco fund (commonly mis-grouped under SPDR/State Street).
   QQQ:  ISSUER_LOGOS.invesco,  SPHD: ISSUER_LOGOS.invesco,
+  // iShares / BlackRock
+  SGOV: ISSUER_LOGOS.blackrock,
   // GLD (SPDR Gold Shares) is intentionally kept as the gold commodity icon (see MISC_LOGOS).
 };
 

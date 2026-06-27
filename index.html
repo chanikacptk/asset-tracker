@@ -1922,13 +1922,16 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
    Badge background is chosen per-logo for contrast, identical in light AND dark theme:
    .tk-light = white badge (dark/colored logos) · .tk-dark = dark badge (white/light logos)
    · .tk-fill = full-bleed tile (e.g. gold) fills the circle · .tk-badge = initials fallback. */
-.tk-logo { display:inline-flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;vertical-align:middle;overflow:hidden;box-sizing:border-box;padding:14%; }
-.tk-logo-img { width:100%;height:100%;object-fit:contain;display:block; }
+.tk-logo { display:inline-flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;vertical-align:middle;overflow:hidden;box-sizing:border-box; }
+/* image is sized as a % of the badge (its own container) and flex-centered — the ~16%
+   gap acts as padding. NB: do NOT use CSS `padding:%` here — % padding resolves against
+   the parent cell's width, not the badge, which collapses the image to a dot. */
+.tk-logo-img { width:84%;height:84%;object-fit:contain;display:block; }
 .tk-light { background:#ffffff;border:1px solid rgba(0,0,0,.10); }
 .tk-dark  { background:#15171d;border:1px solid rgba(255,255,255,.14); }
-.tk-fill  { padding:0;background:transparent;border:1px solid var(--border); }
-.tk-fill .tk-logo-img { object-fit:cover; }
-.tk-badge { padding:0;color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
+.tk-fill  { background:transparent;border:1px solid var(--border); }
+.tk-fill .tk-logo-img { width:100%;height:100%;object-fit:cover; }
+.tk-badge { color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
 .pt-ticker-wrap { display:inline-flex;align-items:center;gap:7px;cursor:pointer; }
 .pt-ticker-wrap:hover .pt-ticker { text-decoration:underline;text-underline-offset:2px; }
 .td-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px; }
@@ -2011,6 +2014,11 @@ const ASSET_LOGOS = {
   COST: 'assets/logos/us-stocks/COST.png',  LLY:   'assets/logos/us-stocks/LLY.png',
   TSM:  'assets/logos/us-stocks/TSM.png',   BKNG:  'assets/logos/us-stocks/BKNG.png',
   RKLB: 'assets/logos/us-stocks/RKLB.png',  AVGO:  'assets/logos/us-stocks/AVGO.png',
+  // More individual stock logos (dividend / blue-chip holdings)
+  MSFT: 'assets/logos/us-stocks/MSFT.png',  ABBV:  'assets/logos/us-stocks/ABBV.png',
+  KO:   'assets/logos/us-stocks/KO.png',    PG:    'assets/logos/us-stocks/PG.png',
+  MS:   'assets/logos/us-stocks/MS.png',
+  JPM:  'assets/logos/issuers/jpmorgan.png', // JPMorgan stock → Chase brand (same as JEPI/JEPQ)
   // REIT / BDC with genuine individual logos
   O:    'assets/logos/us-stocks/O.png',     MAIN:  'assets/logos/us-stocks/MAIN.png',
   // ETFs → mapped by FUND ISSUER (ticker-logos has no per-ETF art; the issuer brand is
@@ -2021,6 +2029,7 @@ const ASSET_LOGOS = {
   VNQ:  'assets/logos/issuers/vanguard.png', VPU:  'assets/logos/issuers/vanguard.png',
   SCHD: 'assets/logos/issuers/schwab.png',   SCHG: 'assets/logos/issuers/schwab.png',
   JEPI: 'assets/logos/issuers/jpmorgan.png', JEPQ: 'assets/logos/issuers/jpmorgan.png',
+  SGOV: 'assets/logos/issuers/blackrock.png', // iShares 0-3mo Treasury → BlackRock/iShares brand
   // Invesco — note SPHD is an Invesco fund (not State Street/SPDR)
   QQQ:  'assets/logos/issuers/invesco.png',  SPHD: 'assets/logos/issuers/invesco.png',
   // Multi-asset (nvstly/icons). GLD = SPDR Gold Shares → keep the gold icon.
@@ -2031,7 +2040,7 @@ const ASSET_LOGOS = {
 // Per-logo badge style. Source images are white-on-transparent for some brands (would
 // vanish on a white badge) and full-bleed tiles for others; pick a background per logo so
 // contrast is correct in BOTH themes (these are picked from measured logo brightness).
-const LOGO_LIGHT = new Set(['AAPL', 'AMZN', 'MAIN', 'RKLB', 'SPDR']); // white/light logo → dark badge
+const LOGO_LIGHT = new Set(['AAPL', 'AMZN', 'MAIN', 'RKLB', 'SPDR', 'ABBV', 'MS', 'SGOV']); // white/light logo → dark badge
 const LOGO_FILL  = new Set(['GLD', 'XAU']);                            // full-bleed tile → fill the circle
 function _logoStyle(t) {
   if (LOGO_FILL.has(t))  return 'tk-fill';
