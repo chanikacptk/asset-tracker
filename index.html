@@ -1918,9 +1918,17 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .pt-ticker { cursor:pointer; }
 .pt-ticker:hover { text-decoration:underline; text-underline-offset:2px; }
 /* Asset logos (US stocks / ETFs / crypto / gold / fund) — see ASSET_LOGOS + _assetLogoImg */
-.tk-logo { display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#15171d;border:1px solid var(--border);object-fit:contain;flex-shrink:0;vertical-align:middle;overflow:hidden; }
-.tk-badge { color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
-.tk-fund-svg { width:70%;height:70%;object-fit:contain; }
+/* Every logo sits in a fixed-size circular badge; the image is contained + centered.
+   Badge background is chosen per-logo for contrast, identical in light AND dark theme:
+   .tk-light = white badge (dark/colored logos) · .tk-dark = dark badge (white/light logos)
+   · .tk-fill = full-bleed tile (e.g. gold) fills the circle · .tk-badge = initials fallback. */
+.tk-logo { display:inline-flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;vertical-align:middle;overflow:hidden;box-sizing:border-box;padding:14%; }
+.tk-logo-img { width:100%;height:100%;object-fit:contain;display:block; }
+.tk-light { background:#ffffff;border:1px solid rgba(0,0,0,.10); }
+.tk-dark  { background:#15171d;border:1px solid rgba(255,255,255,.14); }
+.tk-fill  { padding:0;background:transparent;border:1px solid var(--border); }
+.tk-fill .tk-logo-img { object-fit:cover; }
+.tk-badge { padding:0;color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
 .pt-ticker-wrap { display:inline-flex;align-items:center;gap:7px;cursor:pointer; }
 .pt-ticker-wrap:hover .pt-ticker { text-decoration:underline;text-underline-offset:2px; }
 .td-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px; }
@@ -2020,6 +2028,17 @@ const ASSET_LOGOS = {
   BTC:  'assets/logos/misc/BTC.png',        ETH:   'assets/logos/misc/ETH.png',
 };
 
+// Per-logo badge style. Source images are white-on-transparent for some brands (would
+// vanish on a white badge) and full-bleed tiles for others; pick a background per logo so
+// contrast is correct in BOTH themes (these are picked from measured logo brightness).
+const LOGO_LIGHT = new Set(['AAPL', 'AMZN', 'MAIN', 'RKLB', 'SPDR']); // white/light logo → dark badge
+const LOGO_FILL  = new Set(['GLD', 'XAU']);                            // full-bleed tile → fill the circle
+function _logoStyle(t) {
+  if (LOGO_FILL.has(t))  return 'tk-fill';
+  if (LOGO_LIGHT.has(t)) return 'tk-dark';
+  return 'tk-light';
+}
+
 // deterministic hue from a ticker string (stable per ticker)
 function _tkColor(t) {
   let h = 0;
@@ -2039,16 +2058,16 @@ function _tkBadgeEl(ticker, size) {
   tpl.innerHTML = _tkBadge(ticker, size).trim();
   return tpl.content.firstChild;
 }
-// logo <img> if mapped, else a badge. size = px (square).
+// logo in a circular badge if mapped, else an initials badge. size = px (square).
 function _assetLogoImg(ticker, size = 24) {
   const t = (ticker || '').toUpperCase();
   const path = ASSET_LOGOS[t];
   if (!path) return _tkBadge(t, size);
-  return `<img src="${path}" alt="${t}" class="tk-logo" style="width:${size}px;height:${size}px" onerror="this.replaceWith(_tkBadgeEl('${t}', ${size}))">`;
+  return `<span class="tk-logo ${_logoStyle(t)}" style="width:${size}px;height:${size}px"><img src="${path}" alt="${t}" class="tk-logo-img" onerror="this.parentNode.replaceWith(_tkBadgeEl('${t}', ${size}))"></span>`;
 }
-// generic fund icon — Thai mutual funds have no per-fund logo in these repos
+// generic fund icon — Thai mutual funds have no per-fund logo in these repos (white glyph → dark badge)
 function _fundLogoImg(size = 24) {
-  return `<span class="tk-logo" style="width:${size}px;height:${size}px"><img src="assets/logos/misc/fund.svg" alt="fund" class="tk-fund-svg"></span>`;
+  return `<span class="tk-logo tk-dark" style="width:${size}px;height:${size}px"><img src="assets/logos/misc/fund.svg" alt="fund" class="tk-logo-img"></span>`;
 }
 
 // ── Supabase client ───────────────────────────────────────────────────────────
