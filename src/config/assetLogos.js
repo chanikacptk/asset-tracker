@@ -46,14 +46,13 @@ export const STOCK_LOGOS = {
 // repo is just the issuer's brand (e.g. its "VTI.png" is the Vanguard wordmark, "SCHD.png"
 // the Charles Schwab logo, "JEPI.png" the Chase octagon). So we map ETFs to one consistent
 // issuer logo each. Sources: vanguard = repo VTI.png; schwab = SCHW; jpmorgan = JPM (Chase);
-// invesco = IVZ; spdr = SPDR (State Street).
+// invesco = IVZ; blackrock = BLK (iShares ETFs).
 export const ISSUER_LOGOS = {
   vanguard:  '/assets/logos/issuers/vanguard.png',
   schwab:    '/assets/logos/issuers/schwab.png',
   jpmorgan:  '/assets/logos/issuers/jpmorgan.png',
   invesco:   '/assets/logos/issuers/invesco.png',
   blackrock: '/assets/logos/issuers/blackrock.png', // iShares ETFs (SGOV)
-  spdr:      '/assets/logos/issuers/spdr.png', // staged — no current holding maps here (GLD = gold icon)
 };
 
 // ETF ticker → issuer logo.

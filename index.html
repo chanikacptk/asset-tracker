@@ -2040,7 +2040,7 @@ const ASSET_LOGOS = {
 // Per-logo badge style. Source images are white-on-transparent for some brands (would
 // vanish on a white badge) and full-bleed tiles for others; pick a background per logo so
 // contrast is correct in BOTH themes (these are picked from measured logo brightness).
-const LOGO_LIGHT = new Set(['AAPL', 'AMZN', 'MAIN', 'RKLB', 'SPDR', 'ABBV', 'MS', 'SGOV']); // white/light logo → dark badge
+const LOGO_LIGHT = new Set(['AAPL', 'AMZN', 'MAIN', 'RKLB', 'ABBV', 'MS', 'SGOV']); // white/light logo → dark badge
 const LOGO_FILL  = new Set(['GLD', 'XAU']);                            // full-bleed tile → fill the circle
 function _logoStyle(t) {
   if (LOGO_FILL.has(t))  return 'tk-fill';
