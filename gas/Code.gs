@@ -111,7 +111,7 @@ function doGet(e) {
       NotificationAgent.sendDailyNewsBrief();
       result.sent = true;
     } else if (action === 'ping') {
-      result.message = 'Smart Me GAS is alive';
+      result.message = 'MyAsset+ GAS is alive';
     } else {
       result = { ok: false, error: 'Unknown action: ' + action };
     }
@@ -148,14 +148,14 @@ function _sendTestTelegram(userId) {
     if (!user.telegram_chat_id) return; // skip users with no chat ID
 
     const msg =
-      '🤖 <b>Smart Me — Test Alert</b>\n' +
+      '🤖 <b>MyAsset+ — Test Alert</b>\n' +
       '━━━━━━━━━━━━━━━━━━\n' +
       '✅ Telegram connected successfully!\n' +
       `👤 User: ${user.name}\n` +
       `🕐 Time: ${bangkokTime}\n` +
       '📡 Status: All systems operational\n' +
       '━━━━━━━━━━━━━━━━━━\n' +
-      '<i>Smart Me Asset Tracker</i>';
+      '<i>MyAsset+ Asset Tracker</i>';
 
     const resp = UrlFetchApp.fetch(telegramUrl, {
       method: 'POST',

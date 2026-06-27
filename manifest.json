@@ -1,6 +1,6 @@
 {
-  "name": "Smart Me — Asset Tracker",
-  "short_name": "Smart Me",
+  "name": "MyAsset+ — Asset Tracker",
+  "short_name": "MyAsset+",
   "description": "Personal asset tracker — stocks, crypto, gold, Thai mutual funds, and more",
   "start_url": "./",
   "display": "standalone",
