@@ -1,4 +1,6 @@
-# Smart Me — Asset Tracker
+# MyAsset+ — Asset Tracker
+
+> **Renamed "Smart Me" → "MyAsset+" (2026-06-27)**: app name updated everywhere — `<title>`, login header, `apple-mobile-web-app-title`, `manifest.json` `name`/`short_name`, and GAS ping + Telegram test-alert strings (`gas/Code.gs`). New wallet app icon from `assets/icons/M+ V7.svg` — exported PNGs (favicon 16/32, `apple-touch-icon` 180, PWA 192/512) live in `assets/icons/`, 1024 master at `assets/icon-source.png`. The SVG rasterizes onto an **opaque white** background, so the white was **flood-filled to `#f6e9cf`** from the corners (leaving the off-white "M+" lettering intact) rather than alpha-flattened. App `theme_color`/`background_color` (manifest) + `<meta name="theme-color">` are also `#f6e9cf`. SW cache `myasset-v77`. See **"App icon"** section.
 
 ## What this is
 
@@ -8,6 +10,8 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 > **NAV source order flipped 2026-06-25**: NAV refresh is now **Tier 1 Finnomena by `fund_code`** (freshest, no key, widest coverage) → **Tier 2 SEC by `sec_proj_id`** (official fallback) → Tier 3 manual. Also: adding a fund with an auto source now kicks a **fire-and-forget** NAV refresh so its card flips 🟡→🟢 within seconds instead of waiting for the 8PM trigger.
 > **Daily Tech-News brief + Analysis page (2026-06-26)**: New holdings-aware morning brief — `NotificationAgent.sendDailyNewsBrief()` (7AM trigger `onNewsBriefTrigger`) uses Claude's **server-side `web_search` tool** to find today's tech/market news, flags stories about tickers the user holds with 🎯, sends via Telegram, and **persists** to `daily_news` + `daily_news_impact` (migration 021). The **Analysis tab** now reads those tables to show a browsable, sentiment-colored news history (date selector + 🎯 holdings / 📊 market sections), with the DCA/review hub kept below as "Tools". **Depth is decoupled**: Claude returns the full ~8-12 stories (all persisted to the page); Telegram is capped to a scannable top 6 with a "+N more" footer. See **"Daily Tech-News brief"** + **"Analysis"** sections.
 
+> **Asset logos (2026-06-27)**: Brand logo icons next to every `$ticker` (holdings tables + Ticker Detail modal) and a generic fund icon on MF cards — same dual `src/config/*.js` + inline-`const` pattern as the bank logos. US-stock logos from `ticker-logos`, ETFs mapped by **fund issuer** (Vanguard/Schwab/JPMorgan/Invesco/BlackRock), crypto + gold from `nvstly/icons`. Each logo sits in a circular badge whose background is chosen per-logo (white / dark / fill) from measured brightness so contrast is right in **both** themes; unmapped tickers fall back to a colored initials badge. See **"Asset logos"** section. SW cache now `myasset-v77`.
+
 ## Live URL
 
 **https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
@@ -16,7 +20,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 | Layer | Technology |
 |---|---|
-| Frontend | Single HTML file (`index.html`, ~6 760 lines) — vanilla JS, no build step |
+| Frontend | Single HTML file (`index.html`, ~6 860 lines) — vanilla JS, no build step |
 | Fonts | Instrument Sans (body + titles), Syne (tickers only), JetBrains Mono (table numbers only) — **do not change** |
 | Styling | CSS variables, dark/light via `html.dark` (default: dark) |
 | Charts | Chart.js 4.4.0 (CDN) |
@@ -24,7 +28,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `smart-me-v63`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v77`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -36,13 +40,13 @@ git commit -m "..."
 git push origin main   # GitHub Pages auto-deploys in ~60s
 ```
 
-**Always bump `sw.js` cache version** (`smart-me-vN`) when `index.html` changes.  
+**Always bump `sw.js` cache version** (`myasset-vN`) when `index.html` changes.  
 `index.html` is served **network-first** by the SW — a normal refresh picks up changes after deploy.
 
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS (~6 760 lines)
+index.html              Main app — all HTML/CSS/JS (~6 860 lines)
 sw.js                   Service worker (cache-first CDN, network-first app shell)
 manifest.json           PWA manifest
 portfolio_tracker.html  Design reference — NOT the active app
@@ -453,14 +457,44 @@ Key classes:
 - `.td-news-item` / `.td-news-hl` / `.td-news-emoji` / `.td-news-meta` / `.td-news-empty` / `.td-news-load` — modal news rows + empty/loading states
 - `.td-stats` / `.td-stat` / `.td-stat-lbl` / `.td-stat-val` — quick-stats grid (52wk H/L, P/E, mkt cap)
 - `.td-loading` / `.td-spin` — modal loading spinner while `getHistory` resolves
+- `.tk-logo` / `.tk-logo-img` / `.tk-light` / `.tk-dark` / `.tk-fill` / `.tk-badge` — asset-logo circular badge + per-logo background variants (see **Asset logos**)
+- `.pt-ticker-wrap` — flex wrapper (logo + `$ticker`) in holdings table cells
 
 ## Thai bank config
 
 `THAI_BANKS` embedded inline in `index.html` (19 banks). Helper: `_bankLogoImg(code, size)` → `<img>` with circular crop + brand-color border. Logos in `assets/banks/{CODE}.png`.
 
+## Asset logos (US stocks / ETFs / crypto / gold)
+
+Logo icons next to every `$ticker` in the holdings tables, the **Ticker Detail modal** header, and a generic fund icon on **Mutual Fund** cards. Same dual pattern as the banks: `src/config/assetLogos.js` is the canonical ES-module reference (`STOCK_LOGOS` / `ISSUER_LOGOS` / `ETF_LOGOS` / `MISC_LOGOS` → flattened `ASSET_LOGOS`), mirrored **inline** in `index.html` as `const ASSET_LOGOS` (the inline copy is what runs; the module is not imported). Keep the two in sync.
+
+- **Paths are relative** (`assets/logos/...`, no leading slash) so they resolve under the GitHub Pages project subpath. (The mirror file uses leading-slash paths to match `banks.js` — cosmetic only.)
+- **Sources** (downloaded once, committed): US stock logos from `davidepalazzo/ticker-logos` (`ticker_icons/<TICKER>.png`, ALL-CAPS); crypto + gold from `nvstly/icons` (`crypto_icons/`, `forex_icons/XAU.png`). Files stored UPPERCASE to match the ticker key (GitHub Pages is case-sensitive).
+  - `assets/logos/us-stocks/<TICKER>.png` — individual brand logos (Growth + blue-chip/dividend stocks, plus O/MAIN REIT/BDC).
+  - `assets/logos/issuers/<issuer>.png` — fund-**issuer** brands. `ticker-logos` has no per-ETF art (its "VTI.png" is just the Vanguard wordmark, "SCHD.png" the Schwab logo, "JEPI.png" the Chase octagon), so ETFs map to one consistent issuer logo: `vanguard` (VTI/VOO/VT/VXUS/BND/VHT/VNQ/VPU), `schwab` (SCHD/SCHG), `jpmorgan` (JEPI/JEPQ + the JPM stock), `invesco` (QQQ/**SPHD** — SPHD is an Invesco fund, not SPDR), `blackrock` (SGOV, iShares brand). Issuer files sourced from each issuer's own stock ticker (SCHW/JPM/IVZ/BLK); vanguard from the repo's VTI.png.
+  - `assets/logos/misc/` — `BTC.png`, `ETH.png`, `XAU.png` (gold; **GLD** = SPDR Gold Shares reuses it), `fund.svg` (generic mutual-fund glyph, hand-made).
+- **Helpers** (`index.html`): `_assetLogoImg(ticker, size)` returns a logo in a circular badge `<span>`, else `_tkBadge()` (deterministic colored **initials badge** — the only fallback for an unmapped ticker; never breaks the UI). `_fundLogoImg(size)` for the generic fund icon. `_tkBadgeEl()` is the DOM-node version used by `<img onerror>` to swap a broken logo for a badge.
+- **Per-logo badge background** (`_logoStyle` + `LOGO_LIGHT` / `LOGO_FILL` sets, picked from measured logo brightness so contrast is correct in **both** light and dark theme, identical in each):
+  - `.tk-light` = white badge — dark/colored logos (most).
+  - `.tk-dark` = dark badge — white-on-transparent logos (`LOGO_LIGHT`: AAPL, AMZN, MAIN, RKLB, ABBV, MS, SGOV; + the white fund glyph).
+  - `.tk-fill` = full-bleed tile fills the circle (`LOGO_FILL`: GLD, XAU).
+- **Sizing gotcha**: the `<img>` is sized `width/height:84%` of the badge and flex-centered. Do **NOT** use CSS `padding:%` on `.tk-logo` — % padding resolves against the parent cell's width (not the badge), which collapsed the image to a dot (fixed 2026-06-27).
+- Single render path: all US tabs (Growth/Dividend/ETF) go through `_renderPortTbody()` — there is no per-tab logo code. To add coverage for a new holding, just add the ticker to `ASSET_LOGOS` (and `LOGO_LIGHT` if it's a white logo). Current map covers all 30 live holdings.
+
+## App icon
+
+Source: `assets/icons/M+ V7.svg` (editable master, committed). Exported PNGs in `assets/icons/`: `favicon-16.png`, `favicon-32.png`, `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png` (192/512 are `purpose: any maskable`). 1024 raster master at `assets/icon-source.png`. Wired in `index.html` head (`<link rel="icon">` 16/32, `<link rel="apple-touch-icon">` 180, `apple-mobile-web-app-title`) + `manifest.json` `icons` array.
+
+**Regen pipeline** (no rsvg/imagemagick/inkscape on this machine — only `sips` + Python `PIL`):
+1. `qlmanage -t -s 1024 -o . "M+ V7.svg"` renders a **1024px master**. Gotcha: qlmanage rasterizes onto an **opaque white** background (the PNG has an alpha channel but every pixel is opaque), so a plain alpha-flatten is a no-op.
+2. **Flood-fill** the connected white background from all four corners to `#f6e9cf` via `PIL.ImageDraw.floodfill(im, xy, (246,233,207), thresh=60)`. This recolors only the outer background — the off-white "M+" lettering enclosed inside the brown wallet is untouched (it's not corner-connected).
+3. `Image.resize(..., LANCZOS)` to each size.
+
+Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest) + `<meta name="theme-color">`. Bump SW cache only when `index.html` itself changes (icons aren't SW-cached; browsers cache favicons hard — hard-refresh / re-add iOS home-screen shortcut to see updates).
+
 ## Service worker
 
-Cache name: **`smart-me-v70`**. Bump on every `index.html` change.
+Cache name: **`myasset-v77`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
