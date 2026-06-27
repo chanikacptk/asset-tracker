@@ -16,7 +16,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 | Layer | Technology |
 |---|---|
-| Frontend | Single HTML file (`index.html`, ~5 700 lines) — vanilla JS, no build step |
+| Frontend | Single HTML file (`index.html`, ~6 760 lines) — vanilla JS, no build step |
 | Fonts | Instrument Sans (body + titles), Syne (tickers only), JetBrains Mono (table numbers only) — **do not change** |
 | Styling | CSS variables, dark/light via `html.dark` (default: dark) |
 | Charts | Chart.js 4.4.0 (CDN) |
@@ -42,7 +42,7 @@ git push origin main   # GitHub Pages auto-deploys in ~60s
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS (~5 700 lines)
+index.html              Main app — all HTML/CSS/JS (~6 760 lines)
 sw.js                   Service worker (cache-first CDN, network-first app shell)
 manifest.json           PWA manifest
 portfolio_tracker.html  Design reference — NOT the active app
@@ -446,6 +446,13 @@ Key classes:
 - `.an-section-title` / `.an-tools-head` — Analysis section headers (🎯 / 📊) + "Tools" hub label
 - `.an-card` (`.pos` / `.neg` / `.neu`) / `.an-card-head` / `.an-emoji` / `.an-ticker` / `.an-headline` / `.an-impact` / `.an-impact-lbl` / `.an-sources` — News brief cards (sentiment-colored left border)
 - `.an-filter-pill` — active ticker-filter chip (tap to clear)
+- `.td-head` / `.td-tk` / `.td-name` / `.td-price` / `.td-chg` — Ticker Detail modal header (Syne ticker + mono price)
+- `.td-sec-lbl` — section label inside the modal (Technicals / Latest News / Quick Stats)
+- `.td-gauge-wrap` / `.td-gauge-verdict` / `.td-gauge-sub` — technicals gauge container + verdict text
+- `.td-ind-row` / `.td-ind` / `.td-ind-lbl` / `.td-ind-val` / `.td-ind-tag` — per-indicator breakdown cards (RSI / MA / MACD)
+- `.td-news-item` / `.td-news-hl` / `.td-news-emoji` / `.td-news-meta` / `.td-news-empty` / `.td-news-load` — modal news rows + empty/loading states
+- `.td-stats` / `.td-stat` / `.td-stat-lbl` / `.td-stat-val` — quick-stats grid (52wk H/L, P/E, mkt cap)
+- `.td-loading` / `.td-spin` — modal loading spinner while `getHistory` resolves
 
 ## Thai bank config
 
