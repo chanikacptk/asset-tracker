@@ -1155,6 +1155,12 @@ body {
   <button class="btn btn-primary" id="gold-modal-save-btn" onclick="saveGold()">Add Gold</button>
 </div>
 
+<!-- ── Ticker Detail modal ───────────────────────────────────────────────────── -->
+<div id="td-modal-overlay" onclick="closeTickerDetail()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
+<div id="td-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:22px 20px calc(28px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
+  <div id="td-body"></div>
+</div>
+
 <!-- ── Private Investment modal ──────────────────────────────────────────────── -->
 <div id="priv-modal-overlay" onclick="closePrivModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;backdrop-filter:blur(3px)"></div>
 <div id="priv-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:301;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
@@ -1907,6 +1913,40 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .pt-th-sort:hover { color:var(--text); }
 .pt-sort-ind { display:inline-block;margin-left:3px;font-size:9px;opacity:.5; }
 .pt-sort-ind.active { opacity:1;color:var(--accent); }
+
+/* ── Ticker Detail modal ─────────────────────────────────────────────────── */
+.pt-ticker { cursor:pointer; }
+.pt-ticker:hover { text-decoration:underline; text-underline-offset:2px; }
+.td-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px; }
+.td-tk   { font-family:'Syne',sans-serif;font-size:24px;font-weight:700;line-height:1; }
+.td-name { font-size:12px;color:var(--text-muted);margin-top:4px;max-width:230px; }
+.td-price{ font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;text-align:right;line-height:1.1; }
+.td-chg  { font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;text-align:right;margin-top:3px; }
+.td-sec-lbl { font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px; }
+.td-gauge-wrap { display:flex;flex-direction:column;align-items:center;padding:6px 0 2px; }
+.td-gauge-verdict { font-size:20px;font-weight:700;margin-top:2px;line-height:1; }
+.td-gauge-sub { font-size:11px;color:var(--text-muted);margin-top:5px; }
+.td-ind-row { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px; }
+.td-ind { background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 6px;text-align:center; }
+.td-ind-lbl { font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted); }
+.td-ind-val { font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;margin-top:3px; }
+.td-ind-tag { font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;letter-spacing:.04em; }
+.td-stats { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+.td-stat { background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px; }
+.td-stat-lbl { font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted); }
+.td-stat-val { font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;margin-top:4px; }
+.td-news-item { padding:9px 0;border-bottom:1px solid var(--border); }
+.td-news-item:last-child { border-bottom:none;padding-bottom:0; }
+.td-news-item:first-child { padding-top:2px; }
+.td-news-hl { font-size:13px;line-height:1.4;display:flex;gap:7px;align-items:baseline; }
+.td-news-emoji { flex-shrink:0; }
+.td-news-meta { font-size:11px;color:var(--text-muted);margin-top:4px; }
+.td-news-empty { font-size:12px;color:var(--text-muted);line-height:1.5;padding:6px 0; }
+.td-news-load { font-size:12px;color:var(--text-muted);padding:6px 0; }
+.td-loading { text-align:center;color:var(--text-muted);padding:34px 0;font-size:13px; }
+.td-spin { width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:tdspin .7s linear infinite;margin:0 auto 12px; }
+@keyframes tdspin { to { transform:rotate(360deg); } }
 </style>
 
 <script>
@@ -3000,7 +3040,7 @@ function _renderPortTbody() {
   sorted.forEach(r => {
     const barFill = Math.min(r.weight / 20 * 100, 100);
     rows += `<tr>
-      <td><span class="pt-ticker">${r.ticker}</span></td>
+      <td><span class="pt-ticker" onclick="openTickerDetail('${r.ticker}')">${r.ticker}</span></td>
       <td class="pt-mono">${parseFloat(r.shares.toPrecision(7))}</td>
       <td class="pt-mono">${fmtUSD(r.avg_cost_usd)}</td>
       <td class="pt-mono">${r.price > 0 ? fmtUSD(r.price) : '—'}</td>
@@ -3046,6 +3086,269 @@ function _gapCell(gap, target) {
 function _signalBadge(signal) {
   const cls = { BUY:'b-buy', SELL:'b-sell', HOLD:'b-hold', TRIM:'b-trim' }[signal] || '';
   return `<span class="pt-badge ${cls}">${signal}</span>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Ticker Detail modal — client-side technicals gauge (RSI / SMA / MACD)
+   Data comes from GAS getHistory (6-month daily closes); math runs here.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// ── Indicator math (validated against live NVDA series) ──────────────────────
+function _techSMA(a, p) {
+  if (!a || a.length < p) return null;
+  let s = 0; for (let i = a.length - p; i < a.length; i++) s += a[i];
+  return s / p;
+}
+function _techEMASeries(a, p) {
+  if (!a || a.length < p) return [];
+  const k = 2 / (p + 1);
+  let e = 0; for (let i = 0; i < p; i++) e += a[i]; e /= p;
+  const out = [e];
+  for (let i = p; i < a.length; i++) { e = a[i] * k + e * (1 - k); out.push(e); }
+  return out;
+}
+function _techRSI(a, p = 14) {
+  if (!a || a.length < p + 1) return null;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= p; i++) { const d = a[i] - a[i - 1]; if (d >= 0) gain += d; else loss -= d; }
+  gain /= p; loss /= p;
+  for (let i = p + 1; i < a.length; i++) {
+    const d = a[i] - a[i - 1];
+    gain = (gain * (p - 1) + (d > 0 ? d : 0)) / p;
+    loss = (loss * (p - 1) + (d < 0 ? -d : 0)) / p;
+  }
+  if (loss === 0) return 100;
+  return 100 - 100 / (1 + gain / loss);
+}
+function _techMACD(a) {
+  const fast = _techEMASeries(a, 12), slow = _techEMASeries(a, 26);
+  if (!slow.length) return null;
+  const off = fast.length - slow.length;
+  const line = slow.map((v, i) => fast[i + off] - v);
+  const sig = _techEMASeries(line, 9);
+  if (!sig.length) return null;
+  const macd = line[line.length - 1], signal = sig[sig.length - 1];
+  return { macd, signal, hist: macd - signal };
+}
+
+const _TD_LEVELS = ['Strong Sell', 'Sell', 'Neutral', 'Buy', 'Strong Buy'];
+const _TD_COLORS = ['#dc2626', '#f97316', '#6b7280', '#84cc16', '#16a34a'];
+
+// Combine the three indicators into a single score in [-1, +1] (+ = buy).
+function _techGauge(closes) {
+  const price = closes[closes.length - 1];
+  const sma20 = _techSMA(closes, 20);
+  const sma50 = _techSMA(closes, 50);
+  const rsi = _techRSI(closes, 14);
+  const macd = _techMACD(closes);
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+  // RSI: oversold (low) → buy, overbought (high) → sell. RSI30→+1, RSI70→-1.
+  const cRsi = rsi != null ? clamp((50 - rsi) / 20, -1, 1) : 0;
+  // Trend: price vs SMA20/50 and the 20/50 cross. Bullish stack → buy.
+  const cMa = (sma20 != null && sma50 != null)
+    ? (Math.sign(price - sma20) + Math.sign(price - sma50) + Math.sign(sma20 - sma50)) / 3
+    : 0;
+  // Momentum: MACD above its signal line → buy; scaled by ~1% of price.
+  const cMacd = macd ? clamp((macd.macd - macd.signal) / (price * 0.01), -1, 1) : 0;
+
+  const score = (cRsi + cMa + cMacd) / 3;
+  const idx = score <= -0.5 ? 0 : score < -0.1 ? 1 : score < 0.1 ? 2 : score < 0.5 ? 3 : 4;
+  return { score, idx, label: _TD_LEVELS[idx], color: _TD_COLORS[idx],
+           price, sma20, sma50, rsi, macd, comp: { rsi: cRsi, ma: cMa, macd: cMacd } };
+}
+
+// ── SVG semicircle gauge with needle ─────────────────────────────────────────
+function _tdGaugeSVG(score) {
+  const cx = 100, cy = 100, r = 80;
+  const pol = (deg, rad) => [cx + rad * Math.cos(deg * Math.PI / 180), cy - rad * Math.sin(deg * Math.PI / 180)];
+  const bounds = [180, 144, 108, 72, 36, 0]; // 5 segments, left→right
+  let segs = '';
+  for (let i = 0; i < 5; i++) {
+    const [x1, y1] = pol(bounds[i], r);
+    const [x2, y2] = pol(bounds[i + 1], r);
+    segs += `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
+      fill="none" stroke="${_TD_COLORS[i]}" stroke-width="13" stroke-linecap="butt" opacity="0.92"/>`;
+  }
+  const ang = 90 * (1 - Math.max(-1, Math.min(1, score))); // score→angle
+  const [nx, ny] = pol(ang, r - 14);
+  return `<svg viewBox="0 0 200 116" style="width:100%;max-width:260px;height:auto">
+    ${segs}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}"
+      stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="6" fill="var(--text)"/>
+    <circle cx="${cx}" cy="${cy}" r="2.5" fill="var(--surface)"/>
+  </svg>`;
+}
+
+function _tdIndCard(lbl, val, tag, color) {
+  return `<div class="td-ind">
+    <div class="td-ind-lbl">${lbl}</div>
+    <div class="td-ind-val">${val}</div>
+    <div class="td-ind-tag" style="color:${color}">${tag}</div>
+  </div>`;
+}
+
+function _tdFmtCap(v) {
+  if (v == null || !(v > 0)) return '—';
+  if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+  if (v >= 1e9)  return '$' + (v / 1e9).toFixed(1) + 'B';
+  if (v >= 1e6)  return '$' + (v / 1e6).toFixed(0) + 'M';
+  return fmtUSD(v);
+}
+
+async function openTickerDetail(ticker) {
+  ticker = (ticker || '').toUpperCase();
+  if (!ticker) return;
+  document.getElementById('td-modal-overlay').style.display = 'block';
+  document.getElementById('td-modal').style.display = 'block';
+  const body = document.getElementById('td-body');
+  body.innerHTML = `
+    <div class="td-head">
+      <div><div class="td-tk">${ticker}</div></div>
+      <button onclick="closeTickerDetail()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div class="td-loading"><div class="td-spin"></div>Loading ${ticker} technicals…</div>`;
+
+  if (!state.gasUrl) {
+    body.querySelector('.td-loading').innerHTML = 'Backend not configured (set GAS URL in Settings).';
+    return;
+  }
+  let hist = null;
+  try {
+    const r = await callGAS('getHistory', { symbol: ticker });
+    if (r?.ok && r.history) hist = r.history;
+  } catch (_) {}
+
+  if (!hist || !hist.closes || hist.closes.length < 30) {
+    body.querySelector('.td-loading').innerHTML =
+      `ไม่พบข้อมูลราคาเพียงพอสำหรับ ${ticker} — ลองใหม่อีกครั้ง`;
+    return;
+  }
+  _tdRender(ticker, hist);
+}
+
+function _tdRender(ticker, hist) {
+  const g = _techGauge(hist.closes);
+  const price = hist.price || g.price;
+  const prev = hist.prevClose;
+  const chg = (prev && prev > 0) ? price - prev : null;
+  const chgPct = chg != null ? (chg / prev) * 100 : null;
+  const chgCls = chg == null ? '' : chg >= 0 ? 'gc' : 'rc';
+  const chgStr = chg == null ? '' :
+    `${chg >= 0 ? '+' : ''}${fmtUSD(chg)} (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
+
+  // Indicator tags
+  const rsiTag = g.rsi == null ? '—' : g.rsi >= 70 ? 'Overbought' : g.rsi <= 30 ? 'Oversold' : 'Neutral';
+  const rsiClr = g.rsi == null ? 'var(--text-muted)' : g.rsi >= 70 ? 'var(--danger)' : g.rsi <= 30 ? 'var(--success)' : 'var(--text-muted)';
+  const maBull = g.comp.ma > 0.1, maBear = g.comp.ma < -0.1;
+  const maTag = maBull ? 'Bullish' : maBear ? 'Bearish' : 'Mixed';
+  const maClr = maBull ? 'var(--success)' : maBear ? 'var(--danger)' : 'var(--text-muted)';
+  const macdBull = g.macd && g.macd.hist > 0;
+  const macdTag = !g.macd ? '—' : macdBull ? 'Bullish' : 'Bearish';
+  const macdClr = !g.macd ? 'var(--text-muted)' : macdBull ? 'var(--success)' : 'var(--danger)';
+
+  document.getElementById('td-body').innerHTML = `
+    <div class="td-head">
+      <div>
+        <div class="td-tk">${ticker}</div>
+        <div class="td-name">${_anEsc ? _anEsc(hist.name || '') : (hist.name || '')}</div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div>
+          <div class="td-price">${fmtUSD(price)}</div>
+          ${chg != null ? `<div class="td-chg ${chgCls}">${chgStr}</div>` : ''}
+        </div>
+        <button onclick="closeTickerDetail()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0">✕</button>
+      </div>
+    </div>
+
+    <div class="card2" style="margin-bottom:16px">
+      <div class="td-sec-lbl">Technicals · Daily</div>
+      <div class="td-gauge-wrap">
+        ${_tdGaugeSVG(g.score)}
+        <div class="td-gauge-verdict" style="color:${g.color}">${g.label}</div>
+        <div class="td-gauge-sub">Based on RSI · MA trend · MACD</div>
+      </div>
+      <div class="td-ind-row">
+        ${_tdIndCard('RSI (14)', g.rsi != null ? g.rsi.toFixed(1) : '—', rsiTag, rsiClr)}
+        ${_tdIndCard('MA 20/50', g.sma20 != null ? (price >= g.sma20 ? '▲' : '▼') + ' ' + g.sma20.toFixed(1) : '—', maTag, maClr)}
+        ${_tdIndCard('MACD', g.macd ? (g.macd.hist >= 0 ? '+' : '') + g.macd.hist.toFixed(2) : '—', macdTag, macdClr)}
+      </div>
+    </div>
+
+    <div class="card2" style="margin-bottom:16px" id="td-news">
+      <div class="td-sec-lbl">Latest News</div>
+      <div class="td-news-load">กำลังโหลดข่าว…</div>
+    </div>
+
+    <div class="td-sec-lbl">Quick Stats</div>
+    <div class="td-stats">
+      <div class="td-stat"><div class="td-stat-lbl">52-Week High</div><div class="td-stat-val">${hist.week52High != null ? fmtUSD(hist.week52High) : '—'}</div></div>
+      <div class="td-stat"><div class="td-stat-lbl">52-Week Low</div><div class="td-stat-val">${hist.week52Low != null ? fmtUSD(hist.week52Low) : '—'}</div></div>
+      <div class="td-stat"><div class="td-stat-lbl">P/E Ratio</div><div class="td-stat-val">${hist.peRatio != null ? hist.peRatio.toFixed(1) : '—'}</div></div>
+      <div class="td-stat"><div class="td-stat-lbl">Market Cap</div><div class="td-stat-val">${_tdFmtCap(hist.marketCap)}</div></div>
+    </div>`;
+
+  _tdLoadNews(ticker); // fire-and-forget; fills #td-news when ready
+}
+
+// Normalize a headline to a token set for similarity de-duplication.
+function _tdNewsTokens(s) {
+  return new Set((s || '').toLowerCase().replace(/\$[a-z]+/g, ' ')
+    .replace(/[^a-z0-9ก-๙\s]/g, ' ').split(/\s+/).filter(w => w.length > 2));
+}
+function _tdNewsSimilar(a, b) {
+  const A = _tdNewsTokens(a), B = _tdNewsTokens(b);
+  if (!A.size || !B.size) return false;
+  let inter = 0; A.forEach(t => { if (B.has(t)) inter++; });
+  const jac = inter / (A.size + B.size - inter);
+  return jac >= 0.5; // overlap = same story (conservative: distinct stories score far lower)
+}
+
+async function _tdLoadNews(ticker) {
+  const box = document.getElementById('td-news');
+  if (!box) return;
+  let rows = [];
+  try {
+    const { data } = await sb.from('daily_news')
+      .select('emoji, ticker, headline, sentiment, sources, news_date')
+      .eq('user_id', state.userId).ilike('ticker', ticker)
+      .order('news_date', { ascending: false }).limit(8);
+    rows = data || [];
+  } catch (_) {}
+
+  // De-duplicate by headline similarity (keep newest), cap at 5.
+  const uniq = [];
+  for (const r of rows) {
+    if (!uniq.some(u => _tdNewsSimilar(u.headline, r.headline))) uniq.push(r);
+    if (uniq.length >= 5) break;
+  }
+
+  // #td-news may have been replaced if the user reopened another ticker.
+  if (document.getElementById('td-news') !== box) return;
+
+  if (!uniq.length) {
+    box.innerHTML = `<div class="td-sec-lbl">Latest News</div>
+      <div class="td-news-empty">ยังไม่มีข่าวล่าสุดสำหรับ ${_anEsc(ticker)} — ข่าวจะอัปเดตทุกเช้าผ่าน Daily Brief</div>`;
+    return;
+  }
+
+  const items = uniq.map(r => {
+    const src = (Array.isArray(r.sources) && r.sources.length) ? _anEsc(r.sources[0]) : '';
+    const date = _anEsc(_anDateLabel(r.news_date));
+    const meta = [src, date].filter(Boolean).join(' · ');
+    return `<div class="td-news-item">
+      <div class="td-news-hl"><span class="td-news-emoji">${r.emoji || '📰'}</span><span>${_anEsc(r.headline)}</span></div>
+      ${meta ? `<div class="td-news-meta">${meta}</div>` : ''}
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div class="td-sec-lbl">Latest News</div>${items}`;
+}
+
+function closeTickerDetail() {
+  document.getElementById('td-modal-overlay').style.display = 'none';
+  document.getElementById('td-modal').style.display = 'none';
 }
 
 function _srCell(a) {

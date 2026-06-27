@@ -54,6 +54,12 @@ function doGet(e) {
       if (!symbol || !(price > 0)) throw new Error('symbol and price > 0 required');
       DataAgent.savePrice(symbol, price, asset_type, currency);
       result.saved = true;
+    } else if (action === 'getHistory') {
+      const symbol = (e?.parameter?.symbol || '').toUpperCase().trim();
+      if (!symbol) throw new Error('symbol required');
+      const hist = _yahooHistory(symbol);
+      if (!hist) throw new Error('History not found: ' + symbol);
+      result.history = hist;
     } else if (action === 'searchTicker') {
       const q = e?.parameter?.q || '';
       if (!q) throw new Error('q required');
@@ -187,6 +193,67 @@ function _yahooQuoteMeta(symbol) {
     const data = JSON.parse(resp.getContentText());
     return data?.chart?.result?.[0]?.meta || null;
   } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 6-month daily history + meta for the Ticker Detail modal's technicals gauge.
+ * Returns { symbol, name, currency, price, prevClose, week52High, week52Low,
+ *           closes:[...], marketCap, peRatio }. Closes are chronological, nulls dropped.
+ * PE/marketCap come from the v7 quote endpoint and degrade to null if it's
+ * unavailable (Yahoo now gates it behind a crumb from some IPs). Never throws.
+ */
+function _yahooHistory(symbol) {
+  try {
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+      encodeURIComponent(symbol) + '?interval=1d&range=6mo';
+    const resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (resp.getResponseCode() !== 200) return null;
+    const result = JSON.parse(resp.getContentText())?.chart?.result?.[0];
+    if (!result) return null;
+    const meta = result.meta || {};
+    const closes = (result.indicators?.quote?.[0]?.close || []).filter(function(c) { return c != null; });
+    if (closes.length < 30) return null; // not enough data for SMA50/MACD
+
+    const out = {
+      symbol:     symbol,
+      name:       meta.shortName || meta.longName || symbol,
+      currency:   meta.currency || 'USD',
+      price:      meta.regularMarketPrice != null ? meta.regularMarketPrice : closes[closes.length - 1],
+      prevClose:  meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose,
+      week52High: meta.fiftyTwoWeekHigh != null ? meta.fiftyTwoWeekHigh : null,
+      week52Low:  meta.fiftyTwoWeekLow  != null ? meta.fiftyTwoWeekLow  : null,
+      closes:     closes,
+      marketCap:  null,
+      peRatio:    null
+    };
+
+    // Best-effort enrichment — PE + market cap. Non-fatal.
+    try {
+      const qUrl = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + encodeURIComponent(symbol);
+      const qResp = UrlFetchApp.fetch(qUrl, {
+        muteHttpExceptions: true,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      if (qResp.getResponseCode() === 200) {
+        const q = JSON.parse(qResp.getContentText())?.quoteResponse?.result?.[0];
+        if (q) {
+          out.marketCap = q.marketCap != null ? q.marketCap : null;
+          out.peRatio   = q.trailingPE != null ? q.trailingPE : null;
+          if (out.week52High == null && q.fiftyTwoWeekHigh != null) out.week52High = q.fiftyTwoWeekHigh;
+          if (out.week52Low  == null && q.fiftyTwoWeekLow  != null) out.week52Low  = q.fiftyTwoWeekLow;
+          if (q.longName || q.shortName) out.name = q.longName || q.shortName;
+        }
+      }
+    } catch (e2) { /* enrichment is optional */ }
+
+    return out;
+  } catch (e) {
+    Logger.log('[getHistory] failed for ' + symbol + ': ' + e.message);
     return null;
   }
 }

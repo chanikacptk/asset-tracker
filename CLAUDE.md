@@ -198,6 +198,7 @@ Called from frontend via `callGAS(action, params)`:
 | `fetchNews` | NewsAgent.fetchForAllHoldings() |
 | `updateSRLevels` | DataAgent.updateDynamicSRLevels() |
 | `getPrice` | Yahoo Finance single quote |
+| `getHistory` | `_yahooHistory(symbol)` — 6-month daily **closes** + `price`, `prevClose`, `week52High/Low`, best-effort `marketCap`/`peRatio` (v7 quote, degrades to null). Backs the **Ticker Detail modal** technicals gauge (RSI/SMA/MACD computed client-side). Never throws |
 | `getGoldPrice` | DataAgent.fetchGoldPrice() — live spot, saves to DB, returns `{price, source}` |
 | `savePrice` | DataAgent.savePrice() |
 | `searchTicker` | Yahoo Finance search |
@@ -336,6 +337,10 @@ Nav highlight logic:
 - `_computeUSCombinedMetrics(portfolios)` — fetches all holdings + prev-day prices, returns combined value/PL/dayChange
 - `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + prev prices + analyses; renders stats bar + table
 - Stats bar includes: Value · Cost · P/L · 1D Change · N positions
+- **Ticker Detail modal** — tapping a `$ticker` in any holdings table calls `openTickerDetail(ticker)` (no navigation). Fetches GAS `getHistory`, then renders: header (price + day change) → **technicals gauge** → news → quick stats. Bottom-sheet modal (`#td-modal`), same pattern as gold/bond modals.
+  - **Technicals** (all client-side, pure functions): `_techRSI` (Wilder 14), `_techSMA` (20/50), `_techMACD` (12/26/9), combined by `_techGauge(closes)` into a score ∈ [−1,+1] (avg of 3 normalized components: RSI oversold→buy, MA trend stack, MACD histogram) → bucket `Strong Sell…Strong Buy`. `_tdGaugeSVG(score)` draws the 5-segment semicircle + needle. Validated on live NVDA (−0.46 → "Sell").
+  - **News** (`_tdLoadNews`): reads `daily_news` for the user `ilike` ticker, newest first, dedupes by headline similarity (`_tdNewsSimilar`, Jaccard ≥ 0.5), caps 5. Empty state in Thai. No live API — uses persisted brief only.
+  - Globals/CSS: `.td-*` classes; functions all prefixed `_tech*` / `_td*` / `openTickerDetail` / `closeTickerDetail`.
 
 ### Gold
 - `loadGold(_liveRefreshed?)` — fetches holdings + XAU price (DB cache) + prev-day price + sr_levels; renders metric cards + S/R bar + table. After render, fires `callGAS('getGoldPrice')` in background; if live price differs >0.1% from cached, updates `state.cache['XAU']` and re-renders once with `_liveRefreshed=true` to prevent loop.
@@ -448,7 +453,7 @@ Key classes:
 
 ## Service worker
 
-Cache name: **`smart-me-v69`**. Bump on every `index.html` change.
+Cache name: **`smart-me-v70`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
