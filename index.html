@@ -1343,11 +1343,13 @@ body {
 <div id="loanpay-modal-overlay" onclick="closeLoanPayModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:302;backdrop-filter:blur(3px)"></div>
 <div id="loanpay-modal" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:303;background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px calc(32px + var(--safe-bottom));max-height:92dvh;overflow-y:auto">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-    <div style="font-size:18px;font-weight:700" id="loanpay-modal-title">Mark Installment Paid</div>
+    <div style="font-size:18px;font-weight:700" id="loanpay-modal-title">Record Payment</div>
     <button onclick="closeLoanPayModal()" style="background:var(--surface2);border:none;color:var(--text-muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
   </div>
 
-  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Paid Amount (THB)</div>
+  <div id="loanpay-context" style="font-size:13px;color:var(--text-muted);margin-bottom:16px"></div>
+
+  <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Amount Paid (THB) <span style="font-weight:400;text-transform:none">— partial or full</span></div>
   <input id="loanpay-amount" type="text" inputmode="decimal" placeholder="0.00" oninput="_numInputFmt(this)"
     style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;margin-bottom:14px">
 
@@ -1356,7 +1358,7 @@ body {
     style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:14px">
 
   <div id="loanpay-modal-error" style="font-size:13px;color:var(--danger);margin-bottom:10px;min-height:16px"></div>
-  <button class="btn btn-primary" onclick="confirmLoanPay()">Confirm Paid</button>
+  <button class="btn btn-primary" onclick="confirmLoanPay()">Record Payment</button>
 </div>
 
 <!-- ── Bond modal ─────────────────────────────────────────────────────────── -->
@@ -5527,22 +5529,40 @@ function _loanSchedule(loan) {
   return rows;
 }
 
-// Live status of one installment (overdue is date-derived, never stored)
+// Per-installment status colors (partial = orange/--warning)
+const _LOAN_PMT_COLOR = {
+  paid:    'var(--success)',
+  partial: 'var(--warning)',
+  overdue: 'var(--danger)',
+  pending: 'var(--text-muted)'
+};
+const _LOAN_PMT_LABEL = { paid: 'Paid', partial: 'Partial', overdue: 'Overdue', pending: 'Pending' };
+const _EPS = 0.005;
+
+// Cumulative amount paid on one installment (paid_amount is reused as the running tally)
+function _loanPaid(p)     { return Number(p.paid_amount) || 0; }
+function _loanExpected(p) { return Number(p.expected_amount) || 0; }
+function _loanIsFullyPaid(p) { return _loanExpected(p) > 0 && _loanPaid(p) >= _loanExpected(p) - _EPS; }
+function _loanIsOverdue(p)   { return !_loanIsFullyPaid(p) && p.due_date && _daysTo(p.due_date) < 0; }
+
+// Live status of one installment — derived from amount paid vs expected + today
 function _loanPmtStatus(p) {
-  if (p.status === 'paid') return 'paid';
-  if (p.due_date && _daysTo(p.due_date) < 0) return 'overdue';
+  if (_loanIsFullyPaid(p)) return 'paid';
+  if (_loanPaid(p) > 0)    return 'partial';
+  if (_loanIsOverdue(p))   return 'overdue';   // nothing paid + past due
   return 'pending';
 }
 
-// Live status of a loan from its payments
-function _loanStatus(payments) {
-  if (payments.length && payments.every(p => p.status === 'paid')) return 'completed';
-  if (payments.some(p => _loanPmtStatus(p) === 'overdue')) return 'overdue';
+function _loanPaidSum(payments)       { return payments.reduce((s, p) => s + _loanPaid(p), 0); }
+function _loanFullyPaidCount(payments) { return payments.filter(_loanIsFullyPaid).length; }
+
+// Live status of a loan — completed when the whole principal is collected
+function _loanStatus(loan, payments) {
+  const principal = Number(loan.principal_thb) || 0;
+  if (principal > 0 && _loanPaidSum(payments) >= principal - _EPS) return 'completed';
+  if (payments.some(_loanIsOverdue)) return 'overdue';
   return 'active';
 }
-
-function _loanPaidSum(payments)  { return payments.reduce((s, p) => s + (Number(p.paid_amount) || 0), 0); }
-function _loanPaidCount(payments) { return payments.filter(p => p.status === 'paid').length; }
 
 // Re-sync the schedule to current loan terms WITHOUT losing paid history:
 // keep every paid row as-is, regenerate all pending rows from the loan.
@@ -5579,7 +5599,7 @@ async function loadLoans() {
   let totPrincipal = 0, totRemaining = 0, totInterest = 0, activeCount = 0;
   loans.forEach(l => {
     const pmts = l.loan_payments || [];
-    if (_loanStatus(pmts) === 'completed') return;
+    if (_loanStatus(l, pmts) === 'completed') return;
     activeCount++;
     const principal = Number(l.principal_thb) || 0;
     totPrincipal += principal;
@@ -5608,17 +5628,19 @@ async function loadLoans() {
 }
 
 function _renderLoanCard(l) {
-  const pmts    = l.loan_payments || [];
-  const status  = _loanStatus(pmts);
-  const st      = _LOAN_STATUS[status];
-  const n       = parseInt(l.num_installments) || pmts.length || 0;
-  const paid    = _loanPaidCount(pmts);
-  const pct     = n > 0 ? Math.min(100, Math.round((paid / n) * 100)) : 0;
+  const pmts      = l.loan_payments || [];
+  const status    = _loanStatus(l, pmts);
+  const st        = _LOAN_STATUS[status];
+  const n         = parseInt(l.num_installments) || pmts.length || 0;
+  const fullyPaid = _loanFullyPaidCount(pmts);
   const principal = Number(l.principal_thb) || 0;
-  const remaining = Math.max(0, principal - _loanPaidSum(pmts));
+  const collected = _loanPaidSum(pmts);
+  const remaining = Math.max(0, principal - collected);
+  // Progress bar tracks ฿ collected vs principal (so partials show up), label keeps the installment count
+  const pct       = principal > 0 ? Math.min(100, Math.round((collected / principal) * 100)) : 0;
 
-  // Next due = earliest still-pending installment
-  const next = pmts.filter(p => p.status !== 'paid' && p.due_date)
+  // Next due = earliest installment not yet fully paid
+  const next = pmts.filter(p => !_loanIsFullyPaid(p) && p.due_date)
     .sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
 
   return `
@@ -5642,11 +5664,11 @@ function _renderLoanCard(l) {
         <div style="height:7px;border-radius:999px;background:var(--surface2);overflow:hidden">
           <div style="height:100%;width:${pct}%;background:${st.color};border-radius:999px;transition:width .3s"></div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">${paid} of ${n} installment${n !== 1 ? 's' : ''} paid</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">${fullyPaid} of ${n} installment${n !== 1 ? 's' : ''} paid · ${fmtTHB(collected)} collected</div>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <span style="font-size:12px;color:var(--text-muted)">Next payment</span>
-        <span style="font-size:12px;font-weight:600">${next ? `${fmtTHB(Number(next.expected_amount) || 0)} · ${_fmtShortDate(next.due_date)}` : '—'}</span>
+        <span style="font-size:12px;font-weight:600">${next ? `${fmtTHB(Math.max(0, _loanExpected(next) - _loanPaid(next)))} · ${_fmtShortDate(next.due_date)}` : '—'}</span>
       </div>
     </div>`;
 }
@@ -5670,16 +5692,18 @@ function closeLoanDetail() {
 }
 
 function _renderLoanDetail(l) {
-  const pmts    = (l.loan_payments || []).slice().sort((a, b) => a.installment_number - b.installment_number);
-  const status  = _loanStatus(pmts);
-  const st      = _LOAN_STATUS[status];
+  const pmts      = (l.loan_payments || []).slice().sort((a, b) => a.installment_number - b.installment_number);
+  const status    = _loanStatus(l, pmts);
+  const st        = _LOAN_STATUS[status];
   const principal = Number(l.principal_thb) || 0;
-  const remaining = Math.max(0, principal - _loanPaidSum(pmts));
-  const paid    = _loanPaidCount(pmts);
-  const n       = parseInt(l.num_installments) || pmts.length || 0;
-  const freqLbl = l.frequency === 'custom'
+  const collected = _loanPaidSum(pmts);
+  const remaining = Math.max(0, principal - collected);
+  const fullyPaid = _loanFullyPaidCount(pmts);
+  const n         = parseInt(l.num_installments) || pmts.length || 0;
+  const freqLbl   = l.frequency === 'custom'
     ? `Every ${_loanInterval(l)} month${_loanInterval(l) !== 1 ? 's' : ''}`
     : (l.frequency === 'quarterly' ? 'Quarterly' : 'Monthly');
+  const rateLbl   = l.interest_rate != null ? ` · ${Number(l.interest_rate)}%` : ' · interest-free';
 
   const head = `
     <button class="bond-back-btn" onclick="closeLoanDetail()">‹ All Loans</button>
@@ -5687,7 +5711,7 @@ function _renderLoanDetail(l) {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
         <div style="min-width:0">
           <div style="font-weight:800;font-size:18px">${l.borrower_name}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${freqLbl}${l.loan_date ? ' · since ' + _fmtShortDate(l.loan_date) : ''}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${freqLbl}${rateLbl}${l.loan_date ? ' · since ' + _fmtShortDate(l.loan_date) : ''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:${st.color}22;color:${st.color}">${st.label}</span>
@@ -5696,30 +5720,47 @@ function _renderLoanDetail(l) {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
         <div><div style="font-size:11px;color:var(--text-muted)">Principal</div><div style="font-size:15px;font-weight:700">${fmtTHB(principal)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-muted)">Collected</div><div style="font-size:15px;font-weight:700;color:var(--success)">${fmtTHB(collected)}</div></div>
         <div><div style="font-size:11px;color:var(--text-muted)">Remaining</div><div style="font-size:15px;font-weight:700">${fmtTHB(remaining)}</div></div>
-        <div><div style="font-size:11px;color:var(--text-muted)">Interest</div><div style="font-size:15px;font-weight:700">${l.interest_rate != null ? Number(l.interest_rate) + '%' : '—'}</div></div>
-        <div><div style="font-size:11px;color:var(--text-muted)">Progress</div><div style="font-size:15px;font-weight:700">${paid} / ${n}</div></div>
+        <div><div style="font-size:11px;color:var(--text-muted)">Progress</div><div style="font-size:15px;font-weight:700">${fullyPaid} / ${n} paid</div></div>
       </div>
       ${l.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">${l.notes}</div>` : ''}
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Payment Schedule</div>`;
 
   const rows = pmts.length ? pmts.map(p => {
-    const ps = _loanPmtStatus(p);
-    const clr = ps === 'paid' ? 'var(--success)' : (ps === 'overdue' ? 'var(--danger)' : 'var(--text-muted)');
-    const isPaid = ps === 'paid';
+    const ps       = _loanPmtStatus(p);
+    const clr      = _LOAN_PMT_COLOR[ps];
+    const expected = _loanExpected(p);
+    const paidAmt  = _loanPaid(p);
+    const isFull   = _loanIsFullyPaid(p);
+    const overdue  = _loanIsOverdue(p);            // not-fully-paid + past due
+    const tallyClr = paidAmt > 0 ? (isFull ? 'var(--success)' : 'var(--warning)') : 'var(--text-muted)';
     return `
       <div class="card2" style="padding:12px 14px;margin-bottom:8px;border-left:3px solid ${clr}">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div style="min-width:0">
-            <div style="font-size:14px;font-weight:700">#${p.installment_number} · ${fmtTHB(Number(p.expected_amount) || 0)}</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Due ${_fmtShortDate(p.due_date)}${ps === 'overdue' ? ' · <span style="color:var(--danger);font-weight:600">Overdue</span>' : ''}</div>
-            ${isPaid ? `<div style="font-size:11px;color:var(--success);margin-top:2px">Paid ${fmtTHB(Number(p.paid_amount) || 0)} on ${_fmtShortDate(p.paid_date)}</div>` : ''}
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:14px;font-weight:700">#${p.installment_number} · ${fmtTHB(expected)}</span>
+              <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:${clr}22;color:${clr}">${_LOAN_PMT_LABEL[ps]}${overdue && paidAmt > 0 ? ' · overdue' : ''}</span>
+            </div>
+            <div style="font-size:11px;color:${tallyClr};margin-top:3px">Paid ${fmtTHB(paidAmt)} / ${fmtTHB(expected)}${!isFull && paidAmt > 0 ? ` · ${fmtTHB(Math.max(0, expected - paidAmt))} left` : ''}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+              <span style="font-size:11px;color:var(--text-muted)">Due</span>
+              <input type="date" value="${p.due_date || ''}" onchange="saveLoanDueDate('${p.id}', this.value)"
+                style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)" title="Edit due date">
+              <span style="font-size:11px">✏️</span>
+              ${overdue ? '<span style="font-size:11px;color:var(--danger);font-weight:600">Overdue</span>' : ''}
+            </div>
+            ${paidAmt > 0 && p.paid_date ? `<div style="font-size:10px;color:var(--text-muted);margin-top:3px">Last payment ${_fmtShortDate(p.paid_date)}</div>` : ''}
           </div>
-          <div style="flex-shrink:0">
-            ${isPaid
-              ? `<button class="pt-act-btn" onclick="unmarkLoanPay('${p.id}')" title="Unmark">↺</button>`
-              : `<button onclick="openLoanPay('${p.id}', ${Number(p.expected_amount) || 0})" style="border:none;background:var(--success);color:#fff;font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;cursor:pointer">Mark Paid</button>`}
+          <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            ${!isFull
+              ? `<button onclick="openLoanPay('${p.id}', ${expected}, ${paidAmt})" style="border:none;background:var(--success);color:#fff;font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;cursor:pointer;white-space:nowrap">Record Payment</button>`
+              : ''}
+            ${paidAmt > 0
+              ? `<button class="pt-act-btn" onclick="unmarkLoanPay('${p.id}')" title="Reset / unmark">↺</button>`
+              : ''}
           </div>
         </div>
       </div>`;
@@ -5728,10 +5769,18 @@ function _renderLoanDetail(l) {
   document.getElementById('loans-detail-panel').innerHTML = head + rows;
 }
 
-// ── Mark paid / unmark ────────────────────────────────────────
-function openLoanPay(paymentId, expectedAmt) {
-  _loanPayCtx = { paymentId };
-  document.getElementById('loanpay-amount').value = (Number(expectedAmt) || 0).toLocaleString('en-US');
+// ── Record payment (supports partial) / unmark ────────────────
+// Increment semantics: the entered amount is ADDED to what's already paid on
+// the installment. Prefill = remaining due (full expected on the first payment).
+function openLoanPay(paymentId, expectedAmt, paidSoFar) {
+  const expected = Number(expectedAmt) || 0;
+  const already  = Number(paidSoFar) || 0;
+  const remaining = Math.max(0, expected - already);
+  _loanPayCtx = { paymentId, expected, already };
+  document.getElementById('loanpay-context').innerHTML =
+    `Installment total <strong>${fmtTHB(expected)}</strong>`
+    + (already > 0 ? ` · already paid <strong style="color:var(--warning)">${fmtTHB(already)}</strong>` : '');
+  document.getElementById('loanpay-amount').value = (remaining || expected).toLocaleString('en-US');
   document.getElementById('loanpay-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('loanpay-modal-error').textContent = '';
   document.getElementById('loanpay-modal-overlay').style.display = 'block';
@@ -5749,9 +5798,11 @@ async function confirmLoanPay() {
   const errEl  = document.getElementById('loanpay-modal-error');
   const amount = _parseNum(document.getElementById('loanpay-amount').value);
   const date   = document.getElementById('loanpay-date').value || null;
-  if (!amount || amount <= 0) { errEl.textContent = 'Paid amount must be greater than 0.'; return; }
+  if (!amount || amount <= 0) { errEl.textContent = 'Payment amount must be greater than 0.'; return; }
+  const newPaid = (_loanPayCtx.already || 0) + amount;        // add to existing tally
+  const status  = newPaid >= (_loanPayCtx.expected || 0) - 0.005 ? 'paid' : 'pending';
   const { error } = await sb.from('loan_payments')
-    .update({ paid_amount: amount, paid_date: date, status: 'paid' })
+    .update({ paid_amount: newPaid, paid_date: date, paid_at: new Date().toISOString(), status })
     .eq('id', _loanPayCtx.paymentId);
   if (error) { errEl.textContent = error.message; return; }
   closeLoanPayModal();
@@ -5759,9 +5810,18 @@ async function confirmLoanPay() {
 }
 
 async function unmarkLoanPay(paymentId) {
-  if (!confirm('Unmark this installment as paid?')) return;
+  if (!confirm('Reset this installment? This clears all payments recorded against it.')) return;
   await sb.from('loan_payments')
-    .update({ paid_amount: null, paid_date: null, status: 'pending' })
+    .update({ paid_amount: 0, paid_date: null, paid_at: null, status: 'pending' })
+    .eq('id', paymentId);
+  if (_selectedLoanId) await selectLoan(_selectedLoanId);
+}
+
+// Edit ONE installment's due date independently (does not shift the rest).
+// Overdue status is recomputed on re-render from the new date vs today.
+async function saveLoanDueDate(paymentId, newDate) {
+  await sb.from('loan_payments')
+    .update({ due_date: newDate || null })
     .eq('id', paymentId);
   if (_selectedLoanId) await selectLoan(_selectedLoanId);
 }

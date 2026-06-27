@@ -28,7 +28,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v78`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v79`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -113,7 +113,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | Table | Key columns |
 |---|---|
 | `loans` | id, user_id, borrower_name NOT NULL, principal_thb (always THB), interest_rate *(nullable annual % — some loans interest-free)*, loan_date, frequency (`monthly`/`quarterly`/`custom`), custom_interval_months *(months between installments when `custom`)*, installment_amount, num_installments, status (`active`/`completed`/`overdue` — stored baseline `active`; **live status derived in UI** from payments + today), notes, created_at — backs the Loan page |
-| `loan_payments` | id, loan_id (FK→loans, **ON DELETE CASCADE**), installment_number, due_date, expected_amount, paid_amount *(nullable until paid)*, paid_date *(nullable)*, status (`pending`/`paid`; **`overdue` is date-derived in UI, never stored**), created_at — installment schedule |
+| `loan_payments` | id, loan_id (FK→loans, **ON DELETE CASCADE**), installment_number, due_date *(editable per-row in the UI — does not shift the others)*, expected_amount, paid_amount *(**cumulative amount paid on this installment** — running tally; supports partial payments)*, paid_date *(date borrower paid)*, paid_at *(timestamp the payment was recorded)*, status (`pending`/`paid`; **`partial` + `overdue` are derived in UI, never stored**), created_at — installment schedule |
 
 > **Loans are DELIBERATELY EXCLUDED from net worth / Total Asset.** Never add them into `calcUserData`, the home donut, or `loadMore`'s asset subtotal. They show only on the Loan page's own summary, plus an outstanding-balance row in the Asset hub flagged "not in net worth".
 
@@ -172,6 +172,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 020  private_holdings.payout_freq: interest/coupon payout schedule (monthly/quarterly/semi-annually/annually; null = lump sum at maturity) — drives Next Payout display  ✓
 021  daily_news + daily_news_impact: persist the daily Tech-News brief (per user) so the Analysis page can show history; anon read-only, GAS service_role writes  ✓
 022  loans + loan_payments: receivables tracker (money lent out) + installment schedule; anon RW RLS. Loans EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
+023  loan_payments.paid_at: timestamp a payment was recorded (partial-payment support reuses existing paid_amount as the cumulative tally)  ⚠️ RUN IN SUPABASE
 ```
 
 ---
@@ -322,7 +323,7 @@ cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
 insurance     Insurance policies
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
-loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist (Mark Paid / Unmark per row). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
+loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist: per-row **Record Payment** (partial or full — amount added to a running tally), inline **editable due date**, and reset (↺). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
 analysis      Analysis — daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) on top, then a "Tools" hub (DCA/Monthly/Weekly/All Portfolio). Reads daily_news + daily_news_impact directly via Supabase.
 dca           DCA plan approval
 monthly       Monthly Review — trigger generateDCA
@@ -397,14 +398,16 @@ Nav highlight logic:
 
 ### Loans (receivables)
 - `loadLoans()` — fetches `loans` with embedded `loan_payments(*)`, renders the summary card (Total Remaining / Principal Lent / Expected Interest — **active = non-completed loans only**) + one `_renderLoanCard()` per loan. Resets to list view; shows the + button. All THB.
-- **Status is fully derived** (never trust the stored column for display): `_loanPmtStatus(p)` → paid / overdue (`due_date < today` & unpaid) / pending; `_loanStatus(payments)` → completed (all paid) / overdue (any overdue) / active. Colors via `_LOAN_STATUS` (active=accent/blue, completed=muted/gray, overdue=danger/red).
+- **Status is fully derived from `paid_amount` vs `expected_amount` + today** (never trust the stored column for display). Per-installment `_loanPmtStatus(p)`: `paid` (paid ≥ expected) / `partial` (0 < paid < expected) / `overdue` (nothing paid & past due) / `pending`. Helpers: `_loanPaid`/`_loanExpected`/`_loanIsFullyPaid`/`_loanIsOverdue` (overdue = not-fully-paid & past due — flagged even on a `partial` row). `_loanStatus(loan, payments)`: `completed` when **whole principal collected** (Σ paid ≥ principal) / `overdue` (any overdue installment) / `active`. Loan colors `_LOAN_STATUS` (active=accent/blue, completed=muted/gray, overdue=danger/red); per-row colors `_LOAN_PMT_COLOR` (partial=**warning/orange**).
+- **Partial payments** (option (b) — per-row running tally, no auto-roll-forward): `paid_amount` is the cumulative ฿ paid on the installment. `_loanPaidSum` = Σ paid across rows; loan **Remaining** = principal − Σ paid (reflects actual ฿ received, not just full-paid count); **Collected** = Σ paid; **Progress** = `_loanFullyPaidCount` (rows fully paid) / N, and the list progress bar tracks ฿ collected / principal.
 - `_loanSchedule(loan)` — pure function: generates the installment rows (due date = `loan_date` + interval×i, expected = `installment_amount`). Interval months from `_loanInterval` (monthly=1, quarterly=3, custom=`custom_interval_months`). Used by both the modal live preview (`calcLoanSchedulePreview`) and persistence.
 - `_syncLoanSchedule(loanId, loan)` — (re)builds the schedule on save **without losing paid history**: keeps every `paid` row, deletes all `pending` rows, re-inserts pending rows for installment numbers not already paid. Runs on both create and edit.
-- Card: borrower + principal, remaining, progress bar (`paid of N`), next pending payment, status badge. Tap card → `selectLoan(id)` master-detail view (`_renderLoanDetail`) with the full schedule checklist; `closeLoanDetail()` returns to the list.
-- Mark paid: per-row **Mark Paid** → `openLoanPay(id, expected)` → `loanpay-modal` (paid amount + date, default to expected/today) → `confirmLoanPay()` PATCHes the payment row. **Unmark** (`unmarkLoanPay`) clears paid_amount/paid_date → pending.
+- Card: borrower + principal, remaining, progress bar, `X of N paid · ฿collected`, next pending payment (remaining due on the earliest not-fully-paid row), status badge. Tap card → `selectLoan(id)` master-detail view (`_renderLoanDetail`) with the full schedule checklist; `closeLoanDetail()` returns to the list.
+- **Record Payment** (partial-aware, **increment** semantics): per-row button → `openLoanPay(id, expected, paidSoFar)` → `loanpay-modal` (shows "already paid", input prefilled with the **remaining due**, date defaults today) → `confirmLoanPay()` **adds** the entered amount to `paid_amount`, sets `paid_date` + `paid_at`, and flips `status` to `paid` once the tally reaches expected. **Reset ↺** (`unmarkLoanPay`) zeroes `paid_amount`/`paid_date`/`paid_at` → pending.
+- **Editable due dates**: each row renders an inline `<input type="date">` (+ ✏️ hint) → `saveLoanDueDate(paymentId, newDate)` PATCHes that one row's `due_date` only — **never shifts the rest** (real-world renegotiation hits one payment at a time); overdue recomputes on re-render.
 - Modal: `openAddLoan` / `openEditLoan` / `saveLoan` / `deleteLoan` (cascade-deletes payments). Frequency toggle `setLoanFreq` (monthly/quarterly/custom; custom reveals the interval field). `saveLoan` upserts the loan then calls `_syncLoanSchedule`.
 - **Loans are excluded from net worth** — `loadLoans`/`loadMore` are the only readers; nothing wires into `calcUserData`/donut.
-- Globals: `_loanEditId`, `_loanFreq`, `_selectedLoanId`, `_loanPayCtx`. Reuses `_numInputFmt` / `_parseNum` / `_fmtShortDate` / `_daysTo` / `fmtTHB` and the `.bond-back-btn` style.
+- Globals: `_loanEditId`, `_loanFreq`, `_selectedLoanId`, `_loanPayCtx` (`{paymentId, expected, already}`). Reuses `_numInputFmt` / `_parseNum` / `_fmtShortDate` / `_daysTo` / `fmtTHB` and the `.bond-back-btn` style.
 
 ### Analysis (News brief history)
 - `loadAnalysis()` — entry for the Analysis tab. Queries distinct `news_date` for `state.userId`, populates the date dropdown, defaults `_anDate` to **the most recent day that has news** (today if present, else latest; today is always kept selectable so an empty day shows "No news yet"), then `_anRenderDate()`.
@@ -516,7 +519,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v78`**. Bump on every `index.html` change.
+Cache name: **`myasset-v79`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
