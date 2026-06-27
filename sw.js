@@ -1,4 +1,4 @@
-const CACHE = 'myasset-v77';
+const CACHE = 'myasset-v78';
 const PRECACHE = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'

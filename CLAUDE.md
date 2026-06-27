@@ -28,7 +28,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v77`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v78`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -109,6 +109,14 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 | `thai_bonds` | id, user_id, bond_name NOT NULL, bond_code, credit_rating, face_value_thb, units, coupon_rate, coupon_type, issued_date, maturity_date, purchase_date, purchase_price_thb, price_per_unit_thb, notes |
 | `bond_master` | bond_code PK, bond_name, issuer, credit_rating, coupon_rate, coupon_type, issued_date, maturity_date, scraped_at — ThaiBMA scrape cache |
 
+### Loans (receivables — money lent OUT)
+| Table | Key columns |
+|---|---|
+| `loans` | id, user_id, borrower_name NOT NULL, principal_thb (always THB), interest_rate *(nullable annual % — some loans interest-free)*, loan_date, frequency (`monthly`/`quarterly`/`custom`), custom_interval_months *(months between installments when `custom`)*, installment_amount, num_installments, status (`active`/`completed`/`overdue` — stored baseline `active`; **live status derived in UI** from payments + today), notes, created_at — backs the Loan page |
+| `loan_payments` | id, loan_id (FK→loans, **ON DELETE CASCADE**), installment_number, due_date, expected_amount, paid_amount *(nullable until paid)*, paid_date *(nullable)*, status (`pending`/`paid`; **`overdue` is date-derived in UI, never stored**), created_at — installment schedule |
+
+> **Loans are DELIBERATELY EXCLUDED from net worth / Total Asset.** Never add them into `calcUserData`, the home donut, or `loadMore`'s asset subtotal. They show only on the Loan page's own summary, plus an outstanding-balance row in the Asset hub flagged "not in net worth".
+
 ### Market & Rates
 | Table | Key columns |
 |---|---|
@@ -135,7 +143,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
-- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`, `loans`, `loan_payments` (the latter scoped by parent `loan_id`, not `user_id`)
 - `bond_master`, `daily_news`, `daily_news_impact` are read-only for anon; GAS writes them via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
@@ -163,6 +171,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 019  private_holdings.plan_name: optional plan within a company (e.g. "GET 1"), company-only  ✓
 020  private_holdings.payout_freq: interest/coupon payout schedule (monthly/quarterly/semi-annually/annually; null = lump sum at maturity) — drives Next Payout display  ✓
 021  daily_news + daily_news_impact: persist the daily Tech-News brief (per user) so the Analysis page can show history; anon read-only, GAS service_role writes  ✓
+022  loans + loan_payments: receivables tracker (money lent out) + installment schedule; anon RW RLS. Loans EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
 ```
 
 ---
@@ -313,6 +322,7 @@ cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
 insurance     Insurance policies
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
+loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist (Mark Paid / Unmark per row). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
 analysis      Analysis — daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) on top, then a "Tools" hub (DCA/Monthly/Weekly/All Portfolio). Reads daily_news + daily_news_impact directly via Supabase.
 dca           DCA plan approval
 monthly       Monthly Review — trigger generateDCA
@@ -324,7 +334,7 @@ partner       Partner view (no nav entry; navigate('partner') directly)
 
 Nav highlight logic:
 - `nav-analysis` → analysis, monthly, weekly, allportfolio, dca
-- `nav-more` → gold, **mf**, insurance, private, **bonds**
+- `nav-more` → gold, **mf**, insurance, private, **bonds**, **loans**
 - `nav-cash` → cash
 - others → `nav-${page}`
 
@@ -383,6 +393,18 @@ Nav highlight logic:
 - `loadMore()` — fetches live THB values for all 5 asset types in parallel (gold, insurance, private, **MF**, bonds), renders each row as: icon + name | ฿value + % of subtotal | ›
 - % is share of the five-asset subtotal (gold + insurance + private + MF + bonds), not total portfolio
 - MF value = `units × current_nav_thb` (falls back to cost basis when NAV not set)
+- **Loans row** is separate: shows total **outstanding** balance (principal − Σ paid) with a "Receivable · not in net worth" sublabel and **no %** — its value is never folded into the subtotal/`total` above.
+
+### Loans (receivables)
+- `loadLoans()` — fetches `loans` with embedded `loan_payments(*)`, renders the summary card (Total Remaining / Principal Lent / Expected Interest — **active = non-completed loans only**) + one `_renderLoanCard()` per loan. Resets to list view; shows the + button. All THB.
+- **Status is fully derived** (never trust the stored column for display): `_loanPmtStatus(p)` → paid / overdue (`due_date < today` & unpaid) / pending; `_loanStatus(payments)` → completed (all paid) / overdue (any overdue) / active. Colors via `_LOAN_STATUS` (active=accent/blue, completed=muted/gray, overdue=danger/red).
+- `_loanSchedule(loan)` — pure function: generates the installment rows (due date = `loan_date` + interval×i, expected = `installment_amount`). Interval months from `_loanInterval` (monthly=1, quarterly=3, custom=`custom_interval_months`). Used by both the modal live preview (`calcLoanSchedulePreview`) and persistence.
+- `_syncLoanSchedule(loanId, loan)` — (re)builds the schedule on save **without losing paid history**: keeps every `paid` row, deletes all `pending` rows, re-inserts pending rows for installment numbers not already paid. Runs on both create and edit.
+- Card: borrower + principal, remaining, progress bar (`paid of N`), next pending payment, status badge. Tap card → `selectLoan(id)` master-detail view (`_renderLoanDetail`) with the full schedule checklist; `closeLoanDetail()` returns to the list.
+- Mark paid: per-row **Mark Paid** → `openLoanPay(id, expected)` → `loanpay-modal` (paid amount + date, default to expected/today) → `confirmLoanPay()` PATCHes the payment row. **Unmark** (`unmarkLoanPay`) clears paid_amount/paid_date → pending.
+- Modal: `openAddLoan` / `openEditLoan` / `saveLoan` / `deleteLoan` (cascade-deletes payments). Frequency toggle `setLoanFreq` (monthly/quarterly/custom; custom reveals the interval field). `saveLoan` upserts the loan then calls `_syncLoanSchedule`.
+- **Loans are excluded from net worth** — `loadLoans`/`loadMore` are the only readers; nothing wires into `calcUserData`/donut.
+- Globals: `_loanEditId`, `_loanFreq`, `_selectedLoanId`, `_loanPayCtx`. Reuses `_numInputFmt` / `_parseNum` / `_fmtShortDate` / `_daysTo` / `fmtTHB` and the `.bond-back-btn` style.
 
 ### Analysis (News brief history)
 - `loadAnalysis()` — entry for the Analysis tab. Queries distinct `news_date` for `state.userId`, populates the date dropdown, defaults `_anDate` to **the most recent day that has news** (today if present, else latest; today is always kept selectable so an empty day shows "No news yet"), then `_anRenderDate()`.
@@ -494,7 +516,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v77`**. Bump on every `index.html` change.
+Cache name: **`myasset-v78`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
