@@ -2075,6 +2075,24 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-spin { width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--accent);
   border-radius:50%;animation:tdspin .7s linear infinite;margin:0 auto 12px; }
 @keyframes tdspin { to { transform:rotate(360deg); } }
+/* DCA Simulator (Ticker Detail modal) */
+.td-dca-input-wrap { display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:0 12px;margin-bottom:10px; }
+.td-dca-input-wrap:focus-within { border-color:var(--accent); }
+.td-dca-sign { color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:15px; }
+input.td-dca-input { flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;padding:11px 0;min-width:0; }
+.td-dca-presets { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px; }
+.td-dca-preset { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 0;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif; }
+.td-dca-preset:hover { border-color:var(--accent);color:var(--accent); }
+.td-dca-row, .td-dca-head { display:grid;grid-template-columns:64px 1fr 20px 1fr;align-items:center;gap:6px; }
+.td-dca-head { padding-bottom:7px; }
+.td-dca-row { padding:8px 0;border-bottom:1px solid var(--border); }
+.td-dca-row:last-child { border-bottom:none;padding-bottom:0; }
+.td-dca-col-lbl { font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);text-align:right; }
+.td-dca-lbl { font-size:11px;font-weight:600;color:var(--text-muted); }
+.td-dca-cur { font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;text-align:right;color:var(--text-muted); }
+.td-dca-new { font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;text-align:right; }
+.td-dca-arrow { color:var(--text-muted);text-align:center;font-size:12px; }
+.td-dca-delta { font-size:10px;font-weight:700;margin-top:2px; }
 </style>
 
 <script>
@@ -3454,6 +3472,31 @@ function _tdRender(ticker, hist) {
   const macdTag = !g.macd ? '—' : macdBull ? 'Bullish' : 'Bearish';
   const macdClr = !g.macd ? 'var(--text-muted)' : macdBull ? 'var(--success)' : 'var(--danger)';
 
+  // DCA Simulator — only when the user actually holds this ticker (look up current tab's rows)
+  const hold = (Array.isArray(_portTableData) ? _portTableData : []).find(r => r.ticker === ticker);
+  _tdDca = hold && price > 0
+    ? { ticker, price, shares: hold.shares || 0, avgCost: hold.avg_cost_usd || 0 }
+    : null;
+  const dcaSection = _tdDca ? `
+    <div class="card2" style="margin-top:16px">
+      <div class="td-sec-lbl">จำลองซื้อเพิ่ม · DCA Simulator</div>
+      <div class="td-dca-input-wrap">
+        <span class="td-dca-sign">$</span>
+        <input id="td-dca-input" class="td-dca-input" type="text" inputmode="decimal"
+               placeholder="100" autocomplete="off" oninput="_tdDcaCalc()">
+      </div>
+      <div class="td-dca-presets">
+        ${[50,100,200,500].map(a => `<button class="td-dca-preset" onclick="_tdDcaSet(${a})">$${a}</button>`).join('')}
+      </div>
+      <div class="td-dca-head">
+        <div></div>
+        <div class="td-dca-col-lbl">Current</div>
+        <div></div>
+        <div class="td-dca-col-lbl" id="td-dca-after-lbl">After</div>
+      </div>
+      <div id="td-dca-result"></div>
+    </div>` : '';
+
   document.getElementById('td-body').innerHTML = `
     <div class="td-head">
       <div style="display:flex;align-items:center;gap:12px">
@@ -3497,9 +3540,88 @@ function _tdRender(ticker, hist) {
       <div class="td-stat"><div class="td-stat-lbl">52-Week Low</div><div class="td-stat-val">${hist.week52Low != null ? fmtUSD(hist.week52Low) : '—'}</div></div>
       <div class="td-stat"><div class="td-stat-lbl">P/E Ratio</div><div class="td-stat-val">${hist.peRatio != null ? hist.peRatio.toFixed(1) : '—'}</div></div>
       <div class="td-stat"><div class="td-stat-lbl">Market Cap</div><div class="td-stat-val">${_tdFmtCap(hist.marketCap)}</div></div>
-    </div>`;
+    </div>
+    ${dcaSection}`;
 
+  if (_tdDca) _tdDcaCalc(); // seed the comparison rows with the current (no-buy) state
   _tdLoadNews(ticker); // fire-and-forget; fills #td-news when ready
+}
+
+// DCA Simulator state for the open Ticker Detail modal: { ticker, price, shares, avgCost }
+let _tdDca = null;
+
+function _tdDcaSet(amt) {
+  const inp = document.getElementById('td-dca-input');
+  if (!inp) return;
+  inp.value = amt;
+  _tdDcaCalc();
+}
+
+function _tdDcaCalc() {
+  if (!_tdDca) return;
+  const inp = document.getElementById('td-dca-input');
+  const res = document.getElementById('td-dca-result');
+  const hdr = document.getElementById('td-dca-after-lbl');
+  if (!inp || !res) return;
+
+  const { price, shares, avgCost } = _tdDca;
+  const amt = parseFloat((inp.value || '').replace(/,/g, '')) || 0;
+
+  // Current position
+  const curCost  = shares * avgCost;
+  const curValue = shares * price;
+  const curPlPct = curCost > 0 ? ((curValue - curCost) / curCost) * 100 : 0;
+
+  if (!(amt > 0)) {
+    if (hdr) hdr.textContent = 'After';
+    res.innerHTML = _tdDcaRows(shares, avgCost, curValue, curPlPct,
+                               shares, avgCost, curValue, curPlPct, 0, false);
+    return;
+  }
+
+  // Simulated position after buying `amt` of USD at the current price
+  const newShares = amt / price;
+  const totShares = shares + newShares;
+  const totCost   = curCost + amt;
+  const newAvg    = totShares > 0 ? totCost / totShares : 0;
+  const newValue  = totShares * price;
+  const newPlPct  = totCost > 0 ? ((newValue - totCost) / totCost) * 100 : 0;
+
+  if (hdr) hdr.textContent = `After +${fmtUSD(amt)}`;
+  res.innerHTML = _tdDcaRows(shares, avgCost, curValue, curPlPct,
+                             totShares, newAvg, newValue, newPlPct, newAvg - avgCost, true);
+}
+
+function _tdDcaRows(cs, ca, cv, cpl, ns, na, nv, npl, avgDelta, changed) {
+  const arrow = '<span class="td-dca-arrow">→</span>';
+  const plCls = v => v >= 0 ? 'gc' : 'rc';
+  const plStr = v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+  let deltaHtml = '';
+  if (changed && Math.abs(avgDelta) >= 0.005) {
+    const down = avgDelta < 0; // buying below your average pulls it down — the good case
+    deltaHtml = `<div class="td-dca-delta ${down ? 'gc' : 'rc'}">${down ? '↓ -' : '↑ +'}${fmtUSD(Math.abs(avgDelta))}</div>`;
+  }
+  return `
+    <div class="td-dca-row">
+      <div class="td-dca-lbl">Shares</div>
+      <div class="td-dca-cur">${cs.toFixed(4)}</div>${arrow}
+      <div class="td-dca-new">${ns.toFixed(4)}</div>
+    </div>
+    <div class="td-dca-row">
+      <div class="td-dca-lbl">Avg Cost</div>
+      <div class="td-dca-cur">${fmtUSD(ca)}</div>${arrow}
+      <div class="td-dca-new">${fmtUSD(na)}${deltaHtml}</div>
+    </div>
+    <div class="td-dca-row">
+      <div class="td-dca-lbl">Value</div>
+      <div class="td-dca-cur">${fmtUSD(cv)}</div>${arrow}
+      <div class="td-dca-new">${fmtUSD(nv)}</div>
+    </div>
+    <div class="td-dca-row">
+      <div class="td-dca-lbl">P/L %</div>
+      <div class="td-dca-cur ${plCls(cpl)}">${plStr(cpl)}</div>${arrow}
+      <div class="td-dca-new ${plCls(npl)}">${plStr(npl)}</div>
+    </div>`;
 }
 
 // Normalize a headline to a token set for similarity de-duplication.
@@ -3558,6 +3680,7 @@ async function _tdLoadNews(ticker) {
 function closeTickerDetail() {
   document.getElementById('td-modal-overlay').style.display = 'none';
   document.getElementById('td-modal').style.display = 'none';
+  _tdDca = null; // clear simulator state so a stale ticker can't be recalculated
 }
 
 function _srCell(a) {
