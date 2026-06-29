@@ -26,8 +26,8 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 | Layer | Technology |
 |---|---|
-| Frontend | Single HTML file (`index.html`, ~6 860 lines) — vanilla JS, no build step |
-| Fonts | Instrument Sans (body + titles), Syne (tickers only), JetBrains Mono (table numbers only) — **do not change** |
+| Frontend | Single HTML file (`index.html`, ~7 925 lines) — vanilla JS, no build step |
+| Fonts | Instrument Sans (everything, incl. table numbers), Syne (tickers only) — **do not change**. JetBrains Mono fully removed 2026-06-29; `.mono`/`.pt-mono` now map to Instrument Sans — never reintroduce mono |
 | Styling | CSS variables, dark/light via `html.dark` (default: dark) |
 | Charts | Chart.js 4.4.0 (CDN) |
 | Database | Supabase (PostgreSQL + REST API) |
@@ -52,7 +52,7 @@ git push origin main   # GitHub Pages auto-deploys in ~60s
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS (~6 860 lines)
+index.html              Main app — all HTML/CSS/JS (~7 925 lines)
 sw.js                   Service worker (cache-first CDN, network-first app shell)
 manifest.json           PWA manifest
 portfolio_tracker.html  Design reference — NOT the active app
@@ -464,7 +464,7 @@ Key classes:
 - `.card` / `.card2` — primary / secondary card
 - `.g2x` / `.g4x` — 2 or 4-column grid
 - `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font)
-- `.mono` — JetBrains Mono (table numbers only)
+- `.mono` — table numbers (now Instrument Sans; JetBrains Mono removed 2026-06-29)
 - `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells
 - `.pt-sr` / `.pt-sr-s` / `.pt-sr-r` — S/R level display
 - `.gc` / `.rc` / `.ac` — green/red/amber color utilities
