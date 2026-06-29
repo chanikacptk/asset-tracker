@@ -14,6 +14,10 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **Loan page — receivables (2026-06-27)**: New **Loan** page under the Asset hub for money the user lends OUT (migrations 022 + 023). `loans` + `loan_payments` (installment schedule, FK cascade). Per-loan cards (remaining, progress bar, next payment, status badge) → detail view with a payment-schedule checklist. **Partial payments**: `paid_amount` is a cumulative running tally; per-row status derived as paid / **partial (orange)** / overdue / pending; "Record Payment" adds to the tally (prefilled with the remaining due). **Per-row editable due dates** (inline date picker, independent — never shifts the rest). **DELIBERATELY excluded from net worth** — shown only on its own summary + an "outstanding · not in net worth" Asset-hub row; nothing wires into `calcUserData`/donut. SW cache `myasset-v79`. See the **Loans** rows in the DB tables, Pages, and Key functions sections. ⚠️ Run migrations 022 + 023 in Supabase.
 
+> **DCA simulator in Ticker Detail modal (2026-06-29)**: New "จำลองซื้อเพิ่ม · DCA Simulator" card below Quick Stats in the Ticker Detail modal — simulate adding to a position before buying. Amount input + preset chips ($50/$100/$200/$500) recalc **live** (no submit) and show Current → After for Shares / Avg Cost / Value / P/L %, with an avg-cost delta badge (↓ green when DCA pulls the average down). **Only renders for tickers the user actually holds** (looked up in `_portTableData`). Pure client-side math, no DB/GAS calls. SW cache `myasset-v80`. See the **Ticker Detail modal** bullet in Key functions. No migration.
+
+> **Insurance — detailed policy tracking (2026-06-29)**: Rebuilt the Insurance page into a full policy record (migration 024). `insurance_policies` extended with `policy_type` (Endowment/Unit Linked/Whole Life/Other), `policy_number`, `insured_name`, `status` (in_force/lapsed/matured), `policy_date`, `premium_mode` (annually/semi-annually/quarterly/monthly) + `premium_amount_thb` (per-payment), `payment_method`, `next_due_date`, `last_payment_date`/`_amount_thb`/`_method`, `notes`, `created_at` — **product name reuses the NOT-NULL `policy_name`**; legacy `annual_premium_thb` + `surrender_value_thb` stay but are no longer read. Page = summary (active count, annual premium commitment = Σ premium×freq for in-force, ⏰ due-within-30-days highlight) + per-policy cards (type badge, status dot, sum-assured/maturity/premium/next-due grid, "Last paid" line, edit/delete) + add/edit modal. Added anon insert/update/delete RLS. **⚠️ Insurance is now DELIBERATELY EXCLUDED from net worth** (informational only) — removed from `calcUserData` (no longer queried), the home donut segment, and `loadMore`'s subtotal; the Asset-hub row now shows total annual premium with an "Informational · not in net worth" sublabel (loans-style). SW cache `myasset-v82`. See the **Insurance** rows in DB tables, Pages, Key functions. ⚠️ Run migration 024 in Supabase.
+
 ## Live URL
 
 **https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
@@ -30,7 +34,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v79`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v82`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -103,7 +107,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 |---|---|
 | `gold_holdings` | id, user_id, name, purchase_date, troy_oz, avg_cost_usd, notes |
 | `cash_accounts` | id, user_id, name, sub_type (`saving`/`fixed_deposit`/`fcd`), bank, balance (always THB), currency, interest_rate, start/maturity_date, fcd_amount, fcd_purchase_rate |
-| `insurance_policies` | id, user_id, policy_name, annual_premium_thb, surrender_value_thb |
+| `insurance_policies` | id, user_id, policy_name *(= product name, NOT NULL)*, policy_type (`Endowment`/`Unit Linked`/`Whole Life`/`Other`), insurer, policy_number, insured_name, status (`in_force`/`lapsed`/`matured`), policy_date, maturity_date, sum_assured_thb, premium_mode (`annually`/`semi-annually`/`quarterly`/`monthly`), premium_amount_thb *(per payment)*, payment_method, next_due_date, last_payment_date, last_payment_amount_thb, last_payment_method, notes, created_at, ~~annual_premium_thb~~ + ~~surrender_value_thb~~ *(legacy, no longer read)* — **INFORMATIONAL ONLY, excluded from net worth** |
 | `private_investments` | id, user_id, name, current_valuation, currency *(legacy — superseded by `private_holdings`, no longer read by the app)* |
 | `private_holdings` | id, user_id, inv_type (`company`/`govbond`), name NOT NULL, plan_name *(company only — plan within the company, e.g. "GET 1")*, principal_thb (always THB), rate_pct *(annual interest / coupon %)*, start_date *(investment/purchase date)*, term_value + term_unit (`months`/`years`, company only), maturity_date *(auto from start+term, editable)*, payout_freq *(`monthly`/`quarterly`/`semi-annually`/`annually`; null = lump sum at maturity)*, status (`active`/`matured`/`withdrawn`; govbond only uses active/matured), notes, created_at — backs the Private Investment page |
 | `crypto_holdings` | id, user_id, coin_id, symbol, quantity, avg_cost_usd *(schema only, no UI)* |
@@ -145,7 +149,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 ### RLS pattern
 - All tables: `anon_read_all` SELECT policy (frontend filters by `user_id` in JS)
-- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`, `loans`, `loan_payments` (the latter scoped by parent `loan_id`, not `user_id`)
+- Frontend (anon key) can write: `holdings`, `portfolios`, `watchlist`, `cash_accounts`, `gold_holdings`, `dca_plan_items`, `private_investments`, `private_holdings`, `thai_bonds`, `mutual_fund_holdings`, `insurance_policies`, `loans`, `loan_payments` (the latter scoped by parent `loan_id`, not `user_id`)
 - `bond_master`, `daily_news`, `daily_news_impact` are read-only for anon; GAS writes them via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
@@ -175,6 +179,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 021  daily_news + daily_news_impact: persist the daily Tech-News brief (per user) so the Analysis page can show history; anon read-only, GAS service_role writes  ✓
 022  loans + loan_payments: receivables tracker (money lent out) + installment schedule; anon RW RLS. Loans EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
 023  loan_payments.paid_at: timestamp a payment was recorded (partial-payment support reuses existing paid_amount as the cumulative tally)  ⚠️ RUN IN SUPABASE
+024  insurance_policies: detailed policy columns (policy_type/number, insured_name, status, dates, premium_mode + amount, payment_method, next/last payment, notes, created_at) + anon write RLS. Insurance EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
 ```
 
 ---
@@ -322,7 +327,7 @@ us            US Portfolio — combined metric cards, tab per portfolio, holding
 gold          Gold — metric cards, S/R bar, holdings table, add/edit modal
 mf            Mutual Funds — hero (total + P/L + "checked / NAV as of" dates), sort bar, expandable fund cards with NAV date badge, SEC name search, auto-refresh via SEC API
 cash          Cash — total summary card, grouped by type (Savings/FD/FCD)
-insurance     Insurance policies
+insurance     Insurance — INFORMATIONAL ONLY (excluded from net worth). Summary (active count + annual premium commitment + ⏰ due-within-30-days) + per-policy cards (type badge, status dot, sum-assured/maturity/premium/next-due grid, last-paid line, edit/delete) + add/edit modal. All THB.
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
 loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist: per-row **Record Payment** (partial or full — amount added to a running tally), inline **editable due date**, and reset (↺). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
@@ -354,10 +359,11 @@ Nav highlight logic:
 - `_computeUSCombinedMetrics(portfolios)` — fetches all holdings + prev-day prices, returns combined value/PL/dayChange
 - `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + prev prices + analyses; renders stats bar + table
 - Stats bar includes: Value · Cost · P/L · 1D Change · N positions
-- **Ticker Detail modal** — tapping a `$ticker` in any holdings table calls `openTickerDetail(ticker)` (no navigation). Fetches GAS `getHistory`, then renders: header (price + day change) → **technicals gauge** → news → quick stats. Bottom-sheet modal (`#td-modal`), same pattern as gold/bond modals.
+- **Ticker Detail modal** — tapping a `$ticker` in any holdings table calls `openTickerDetail(ticker)` (no navigation). Fetches GAS `getHistory`, then renders: header (price + day change) → **technicals gauge** → news → quick stats → **DCA simulator**. Bottom-sheet modal (`#td-modal`), same pattern as gold/bond modals.
   - **Technicals** (all client-side, pure functions): `_techRSI` (Wilder 14), `_techSMA` (20/50), `_techMACD` (12/26/9), combined by `_techGauge(closes)` into a score ∈ [−1,+1] (avg of 3 normalized components: RSI oversold→buy, MA trend stack, MACD histogram) → bucket `Strong Sell…Strong Buy`. `_tdGaugeSVG(score)` draws the 5-segment semicircle + needle. Validated on live NVDA (−0.46 → "Sell").
   - **News** (`_tdLoadNews`): reads `daily_news` for the user `ilike` ticker, newest first, dedupes by headline similarity (`_tdNewsSimilar`, Jaccard ≥ 0.5), caps 5. Empty state in Thai. No live API — uses persisted brief only.
-  - Globals/CSS: `.td-*` classes; functions all prefixed `_tech*` / `_td*` / `openTickerDetail` / `closeTickerDetail`.
+  - **DCA simulator** ("จำลองซื้อเพิ่ม" — below Quick Stats): simulate adding to the position before buying. **Only renders when the user actually holds the ticker** — looks it up in `_portTableData` (current tab's rows, case-insensitive match) for live shares + avg cost; hidden otherwise. Amount input (USD, `inputmode=decimal`) + preset chips ($50/$100/$200/$500 via `_tdDcaSet`) recalc **live on every keystroke** (`_tdDcaCalc`, no submit). Shows Current → After side-by-side for Shares / Avg Cost / Value / P/L % (`_tdDcaRows`), P/L color-coded; new shares = `amt÷price`, new avg = `(shares×avgCost+amt)÷(shares+newShares)`. An avg-cost **delta badge** (`↓ -$X` green when buying pulls the average down, `↑ +$X` red) sits under the new avg. Pure client-side math, no DB/GAS calls. State in `_tdDca` (`{ticker, price, shares, avgCost}`), cleared by `closeTickerDetail`.
+  - Globals/CSS: `.td-*` classes (incl. `.td-dca-*`); functions all prefixed `_tech*` / `_td*` / `openTickerDetail` / `closeTickerDetail`.
 
 ### Gold
 - `loadGold(_liveRefreshed?)` — fetches holdings + XAU price (DB cache) + prev-day price + sr_levels; renders metric cards + S/R bar + table. After render, fires `callGAS('getGoldPrice')` in background; if live price differs >0.1% from cached, updates `state.cache['XAU']` and re-renders once with `_liveRefreshed=true` to prevent loop.
@@ -391,6 +397,13 @@ Nav highlight logic:
 - Modal: type toggle (**Private Company** / **Government Bond**) re-labels fields & hides term/withdrawn for govbond. `calcPrivMaturity()` auto-fills maturity = start + term (months/years), still editable. `savePriv()` is a pure DB insert/update (no external calls).
 - Net-worth contribution = `principal_thb` (THB), wired into `calcUserData` + `loadMore` as `privateUSD`/`privTHB`.
 - Globals: `_privEditId`, `_privType`, `_privStatus`. Reuses `_daysTo` / `_fmtShortDate` / `_numInputFmt` / `_parseNum` from the bonds section.
+
+### Insurance (informational — excluded from net worth)
+- `loadInsurance()` — fetches `insurance_policies`, renders a summary card + per-policy cards + add/edit modal. **Active = `status === 'in_force'`.** Summary: active count, annual premium commitment (`_insAnnualPremium` = `premium_amount_thb × _INS_FREQ[mode]`, summed over in-force only), and a ⏰ "due within 30 days" highlight (in-force policies whose `next_due_date` is 0–30 days out via `_daysTo`). Every render shows an "ℹ️ Informational only — not in net worth" note.
+- Card: product name (`policy_name`) + `policy_type` badge + insurer/`policy_number`, status dot (`_INS_STATUS`: in_force=green / lapsed=red / matured=gray), 2-col grid (Sum Assured | Maturity, Premium + mode | Next Due), "Last paid: …" line, edit ✎ / delete 🗑.
+- Modal (`#ins-modal`): policy-type pills (`setInsType`), insurer/number, product name (required → `policy_name`), insured + status, policy/maturity dates, sum assured, premium mode + amount (`_insRenderAnnual` live-previews the annualized total), payment method, next due, optional latest-payment (date/amount/method), notes. `saveIns()` is a pure DB insert/update; `openAddIns`/`openEditIns`/`closeInsModal`/`deleteIns`. Money fields use `_numInputFmt`/`_parseNum`.
+- **EXCLUDED from net worth** — `calcUserData` no longer queries `insurance_policies`; the home donut "Insurance" segment was removed; `loadMore` shows the Asset-hub row as total annual premium (in-force) with no % and an "Informational · not in net worth" sublabel. Legacy `annual_premium_thb` / `surrender_value_thb` columns are untouched but unread.
+- Globals/helpers: `_insEditId`, `_insType`, `_INS_FREQ` (payments/yr by mode), `_INS_STATUS`, `_insAnnualPremium`, `_esc` (shared HTML-escape). Reuses `_fmtShortDate` / `_daysTo` / `_numInputFmt` / `_parseNum` / `fmtTHB`.
 
 ### Asset hub (More page)
 - `loadMore()` — fetches live THB values for all 5 asset types in parallel (gold, insurance, private, **MF**, bonds), renders each row as: icon + name | ฿value + % of subtotal | ›
@@ -483,6 +496,8 @@ Key classes:
 - `.td-ind-row` / `.td-ind` / `.td-ind-lbl` / `.td-ind-val` / `.td-ind-tag` — per-indicator breakdown cards (RSI / MA / MACD)
 - `.td-news-item` / `.td-news-hl` / `.td-news-emoji` / `.td-news-meta` / `.td-news-empty` / `.td-news-load` — modal news rows + empty/loading states
 - `.td-stats` / `.td-stat` / `.td-stat-lbl` / `.td-stat-val` — quick-stats grid (52wk H/L, P/E, mkt cap)
+- `.td-dca-input-wrap` / `.td-dca-sign` / `.td-dca-input` / `.td-dca-presets` / `.td-dca-preset` — DCA simulator amount input + preset chips
+- `.td-dca-head` / `.td-dca-row` / `.td-dca-col-lbl` / `.td-dca-lbl` / `.td-dca-cur` / `.td-dca-new` / `.td-dca-arrow` / `.td-dca-delta` — DCA simulator Current → After comparison grid + avg-cost delta badge
 - `.td-loading` / `.td-spin` — modal loading spinner while `getHistory` resolves
 - `.tk-logo` / `.tk-logo-img` / `.tk-light` / `.tk-dark` / `.tk-fill` / `.tk-badge` — asset-logo circular badge + per-logo background variants (see **Asset logos**)
 - `.pt-ticker-wrap` — flex wrapper (logo + `$ticker`) in holdings table cells
@@ -521,7 +536,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v79`**. Bump on every `index.html` change.
+Cache name: **`myasset-v82`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
