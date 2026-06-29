@@ -3472,8 +3472,10 @@ function _tdRender(ticker, hist) {
   const macdTag = !g.macd ? '—' : macdBull ? 'Bullish' : 'Bearish';
   const macdClr = !g.macd ? 'var(--text-muted)' : macdBull ? 'var(--success)' : 'var(--danger)';
 
-  // DCA Simulator — only when the user actually holds this ticker (look up current tab's rows)
-  const hold = (Array.isArray(_portTableData) ? _portTableData : []).find(r => r.ticker === ticker);
+  // DCA Simulator — only when the user actually holds this ticker (look up current tab's rows).
+  // Match case-insensitively: openTickerDetail upper-cases `ticker`, but stored tickers may differ.
+  const hold = (Array.isArray(_portTableData) ? _portTableData : [])
+    .find(r => (r.ticker || '').toUpperCase() === ticker);
   _tdDca = hold && price > 0
     ? { ticker, price, shares: hold.shares || 0, avgCost: hold.avg_cost_usd || 0 }
     : null;
