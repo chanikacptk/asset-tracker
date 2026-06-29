@@ -16,7 +16,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **DCA simulator in Ticker Detail modal (2026-06-29)**: New "จำลองซื้อเพิ่ม · DCA Simulator" card below Quick Stats in the Ticker Detail modal — simulate adding to a position before buying. Amount input + preset chips ($50/$100/$200/$500) recalc **live** (no submit) and show Current → After for Shares / Avg Cost / Value / P/L %, with an avg-cost delta badge (↓ green when DCA pulls the average down). **Only renders for tickers the user actually holds** (looked up in `_portTableData`). Pure client-side math, no DB/GAS calls. SW cache `myasset-v80`. See the **Ticker Detail modal** bullet in Key functions. No migration.
 
-> **Insurance — detailed policy tracking (2026-06-29)**: Rebuilt the Insurance page into a full policy record (migration 024). `insurance_policies` extended with `policy_type` (Endowment/Unit Linked/Whole Life/Other), `policy_number`, `insured_name`, `status` (in_force/lapsed/matured), `policy_date`, `premium_mode` (annually/semi-annually/quarterly/monthly) + `premium_amount_thb` (per-payment), `payment_method`, `next_due_date`, `last_payment_date`/`_amount_thb`/`_method`, `notes`, `created_at` — **product name reuses the NOT-NULL `policy_name`**; legacy `annual_premium_thb` + `surrender_value_thb` stay but are no longer read. Page = summary (active count, annual premium commitment = Σ premium×freq for in-force, ⏰ due-within-30-days highlight) + per-policy cards (type badge, status dot, sum-assured/maturity/premium/next-due grid, "Last paid" line, edit/delete) + add/edit modal. Added anon insert/update/delete RLS. **⚠️ Insurance is now DELIBERATELY EXCLUDED from net worth** (informational only) — removed from `calcUserData` (no longer queried), the home donut segment, and `loadMore`'s subtotal; the Asset-hub row now shows total annual premium with an "Informational · not in net worth" sublabel (loans-style). SW cache `myasset-v82`. See the **Insurance** rows in DB tables, Pages, Key functions. ⚠️ Run migration 024 in Supabase.
+> **Insurance — detailed policy tracking (2026-06-29)**: Rebuilt the Insurance page into a full policy record (migration 024). `insurance_policies` extended with `policy_type` (Endowment/Unit Linked/Whole Life/Other), `policy_number`, `insured_name`, `status` (in_force/lapsed/matured), `policy_date`, `premium_mode` (annually/semi-annually/quarterly/monthly) + `premium_amount_thb` (per-payment), `payment_method`, `next_due_date`, `last_payment_date`/`_amount_thb`/`_method`, `notes`, `created_at` — **product name reuses the NOT-NULL `policy_name`**; legacy `annual_premium_thb` + `surrender_value_thb` stay but are no longer read. Page = summary (active count, annual premium commitment = Σ premium×freq for in-force, ⏰ due-within-30-days highlight) + per-policy cards (type badge, status dot, sum-assured/maturity/premium/next-due grid, "Last paid" line, edit/delete) + add/edit modal. Added anon insert/update/delete RLS. **⚠️ Insurance is now DELIBERATELY EXCLUDED from net worth** (informational only) — removed from `calcUserData` (no longer queried), the home donut segment, and `loadMore`'s subtotal; the Asset-hub row now shows total annual premium with an "Informational · not in net worth" sublabel (loans-style). SW cache `myasset-v83`. See the **Insurance** rows in DB tables, Pages, Key functions. ⚠️ Run migration 024 in Supabase.
 
 ## Live URL
 
@@ -34,7 +34,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v82`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v83`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -536,7 +536,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v82`**. Bump on every `index.html` change.
+Cache name: **`myasset-v83`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
