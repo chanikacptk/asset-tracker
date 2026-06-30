@@ -18,6 +18,8 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **Insurance — detailed policy tracking (2026-06-29)**: Rebuilt the Insurance page into a full policy record (migration 024). `insurance_policies` extended with `policy_type` (Endowment/Unit Linked/Whole Life/Other), `policy_number`, `insured_name`, `status` (in_force/lapsed/matured), `policy_date`, `premium_mode` (annually/semi-annually/quarterly/monthly) + `premium_amount_thb` (per-payment), `payment_method`, `next_due_date`, `last_payment_date`/`_amount_thb`/`_method`, `notes`, `created_at` — **product name reuses the NOT-NULL `policy_name`**; legacy `annual_premium_thb` + `surrender_value_thb` stay but are no longer read. Page = summary (active count, annual premium commitment = Σ premium×freq for in-force, ⏰ due-within-30-days highlight) + per-policy cards (type badge, status dot, sum-assured/maturity/premium/next-due grid, "Last paid" line, edit/delete) + add/edit modal. Added anon insert/update/delete RLS. **⚠️ Insurance is now DELIBERATELY EXCLUDED from net worth** (informational only) — removed from `calcUserData` (no longer queried), the home donut segment, and `loadMore`'s subtotal; the Asset-hub row now shows total annual premium with an "Informational · not in net worth" sublabel (loans-style). SW cache `myasset-v83`. See the **Insurance** rows in DB tables, Pages, Key functions. ⚠️ Run migration 024 in Supabase.
 
+> **MF "Guess code from fund name" helper (2026-06-30)**: New 🔍 button under the **Fund code** field in the MF add/edit modal — searches **Finnomena** by the typed fund name (falls back to a partial code in the field) and shows a tappable list of share classes; tapping fills `fund_code`, which the existing fire-and-forget refresh turns into a live NAV on save. Finnomena's search is strongest on **code fragments / short names** (full English names return fuzzy hits) — fine here since funds are often named by their code (e.g. holding `fund_name = "TGSMARTRMF-A"`). New GAS action `mfGuessCode` → `DataAgent.searchFinnomenaFunds(q)` (`…/funds/v2/public/funds/search?q=`, no key, never throws → `[{short_code, name_en, name_th, active}]`); frontend `guessFundCode()`/`_pickFundCode()` mirror the SEC-search pattern, reusing the `.mf-search-row*` styles. No migration. SW cache `myasset-v84`. ⚠️ Paste `gas/DataAgent.gs` + `gas/Code.gs` into the Apps Script IDE and redeploy the Web App, else the button returns "Search failed".
+
 ## Live URL
 
 **https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
@@ -34,7 +36,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v83`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v84`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -229,6 +231,7 @@ Called from frontend via `callGAS(action, params)`:
 | `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with an auto source. **Tiered**: Tier 1 Finnomena by `fund_code` (`_fetchFinnomenaNav`) → Tier 2 SEC by `sec_proj_id` (`_secNavForHolding`) → Tier 3 manual (untouched). Stores `current_nav_thb`, `nav_date` (source valuation date), `nav_updated_at`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV. Holdings query: `or=(sec_proj_id.not.is.null,fund_code.not.is.null)` |
 | `mfLookupClasses` | DataAgent.lookupMFClasses(projId) — returns `[{fund_class_name, last_val, nav_date}]` for the "Find classes" picker |
 | `mfSearchFunds` | DataAgent.lookupMFFunds(q) — searches SEC `/v2/fund/general-info/profiles?fund_class_name=` by (partial) name; returns `[{proj_id, fund_class_name, proj_name_en, amc_name}]`; partial matching works; user taps result to auto-fill `sec_proj_id` + class |
+| `mfGuessCode` | DataAgent.searchFinnomenaFunds(q) — Finnomena `GET …/funds/v2/public/funds/search?q=` by fund name or code fragment; no key; returns `[{short_code, name_en, name_th, active}]` (≤25); backs the MF modal's "Guess code from fund name" button → user taps to fill `fund_code`. Never throws |
 
 ## Daily Tech-News brief (NotificationAgent)
 
@@ -269,6 +272,7 @@ Visual format (matches the requested MarkdownV2 layout, rendered via HTML bold):
 | Mutual fund NAV (Tier 1) | **Finnomena public API** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/{fund_code}/nav/q?range=1M` — **no API key**, keyed by plain fund code (e.g. `ES-FIXEDRMF`), returns `{ data: { fund_id, short_code, navs:[{date,value,amount}] } }` (`value`=NAV/unit, chronological). Freshest source, widest coverage (incl. funds **absent from SEC profiles** like ES-FIXEDRMF). Source is Morningstar (`fund_id` = Morningstar SecId). Confirmed reachable from GAS 2026-06-24. Tried first whenever a `fund_code` is set. **Code matching is case-insensitive and trims whitespace** (verified 2026-06-25 with `ES-GQGRMF`: lowercase + trailing-space both 200); an unknown code returns HTTP 404 with a `{status:false}` JSON body. `_fetchFinnomenaNav` never throws | `current_nav_thb` + `nav_date` + `nav_updated_at` on `mutual_fund_holdings` |
 | Mutual fund NAV (Tier 2 fallback) | SEC Open Data v2 `GET /v2/fund/daily-info/nav?proj_id&start_nav_date&end_nav_date` (header `Ocp-Apim-Subscription-Key`); response wrapped in `{ items: [...], next_cursor, page_size }`; `last_val` = NAV/unit; matched on exact `fund_class_name`; **NAV lag is fund-specific** (not just weekends) — SEC publishes days after valuation date; `_secApiItems` follows `next_cursor` pagination (≤10 pages) so all rows are fetched. Official fallback, used only when Finnomena returns nothing | same columns on `mutual_fund_holdings` |
 | Mutual fund search | SEC Open Data v2 `GET /v2/fund/general-info/profiles?fund_class_name=` — partial name matching works (e.g. "KKP CorePath" → 12 results); fields: `proj_id`, `fund_class_name`, `proj_name_en`, `comp_name_en` (AMC) | frontend display only |
+| Mutual fund code search | **Finnomena public** `GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/search?q=` — no key; returns `{ data: [{ short_code, name_th, name_en, sec_is_active, … }] }`; matches **code fragments / short names** well (full English names give fuzzy hits). Backs the modal's "Guess code from fund name" helper to fill `fund_code` | frontend display only |
 
 > Thai Mutual Fund NAV fetching (SEC Open Data API + scrapers) was removed 2026-06-19. See **"Mutual Funds — rebuild plan"** at the bottom for prior findings and the fresh-start design.
 
@@ -380,10 +384,11 @@ Nav highlight logic:
 - Badge: 🟢 **Auto NAV · DD Mon** (SEC valuation date inline) when `isAuto`, else 🟡 **Manual NAV**.
 - **Modal**: Buy/Sell type toggle, free-text fund name (`autocapitalize="words"`) + `<datalist>` local autocomplete + **🔍 Search SEC database** button, category pills (Onshore/Offshore/RMF/ESG/SSF/Other), 3 input methods (Total Baht / Total Units / Manual), Cost/Unit, Purchase date, optional Current NAV, optional `sec_proj_id` + **Find classes** button + class name field, collapsible notes. All money fields use `inputmode="decimal"` (shows decimal-point key on mobile). `saveMF()` is a pure DB insert/update; **never awaits a GAS/external call**. After the save commits, closes, and reloads the list, if the holding has a `fund_code` or `sec_proj_id` it kicks a **fire-and-forget** `callGAS('refreshMFNav')` (`.then`/`.catch`, never awaited) so a new auto-source fund flips 🟡 Manual → 🟢 Auto within a few seconds instead of waiting for the 8PM trigger or a manual ↻. All errors swallowed.
 - **SEC fund search**: `searchMFFunds()` → GAS `mfSearchFunds?q=` → tappable results list → `_pickMFFund(i)` auto-fills `sec_proj_id` + `sec_fund_class_name`. Explicit button; never blocks save.
+- **Guess fund code** (under the Fund code field): `guessFundCode()` → GAS `mfGuessCode?q=` (Finnomena search) → tappable share-class list → `_pickFundCode(i)` fills `mf-fund-code`. Query = fund-name box, falling back to a partial code typed in the field. State in `_mfCodeResults`, cleared by `_mfModalReset`; reuses the `.mf-search-row*` styles. Pure convenience — never blocks save; the post-save fire-and-forget `refreshMFNav` then flips 🟡→🟢.
 - **Find classes**: `lookupMFClasses()` → GAS `mfLookupClasses?projId=` → class dropdown (`_onMFClassSelect`). Use after pasting a proj_id manually.
 - `openMFNavModal(id, name)` / `saveMFNav()` — "Update NAV" button stores `current_nav_thb` + `nav_updated_at` only (no `nav_date` — that's SEC-sourced).
 - Top-bar ↻ → `refreshMFNav()` → GAS `refreshMFNav` → reloads page.
-- Globals: `_mfListData`, `_mfEditId`, `_mfSortKey`, `_mfExpandedId`, `_mfCategory`, `_mfInputMethod`, `_mfType`, `_mfNavId`, `_mfSearchResults`.
+- Globals: `_mfListData`, `_mfEditId`, `_mfSortKey`, `_mfExpandedId`, `_mfCategory`, `_mfInputMethod`, `_mfType`, `_mfNavId`, `_mfSearchResults`, `_mfCodeResults`.
 
 ### Cash
 - `loadCash()` — shows total summary card (grouped by sub_type) above account sections
@@ -485,7 +490,7 @@ Key classes:
 - `.mf-nav-btn` — "Update NAV" button in card detail
 - `.mf-cat-pill` / `.mf-cat-pill.active` — category selector pills in modal
 - `.mf-sort-select` — sort dropdown
-- `.mf-search-row` / `.mf-search-row-name` / `.mf-search-row-sub` / `.mf-search-row-pid` — SEC fund search result rows
+- `.mf-search-row` / `.mf-search-row-name` / `.mf-search-row-sub` / `.mf-search-row-pid` — SEC fund search **and** Finnomena code-guess result rows
 - `.an-datebar` / `.an-date-select` / `.an-date-nav` — Analysis page date selector + ‹/› nav
 - `.an-section-title` / `.an-tools-head` — Analysis section headers (🎯 / 📊) + "Tools" hub label
 - `.an-card` (`.pos` / `.neg` / `.neu`) / `.an-card-head` / `.an-emoji` / `.an-ticker` / `.an-headline` / `.an-impact` / `.an-impact-lbl` / `.an-sources` — News brief cards (sentiment-colored left border)
@@ -536,7 +541,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v83`**. Bump on every `index.html` change.
+Cache name: **`myasset-v84`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
