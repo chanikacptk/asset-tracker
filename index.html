@@ -51,7 +51,7 @@ body {
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 #app { display: flex; flex-direction: column; min-height: 100dvh; }
 
-.page { display: none; flex: 1; padding: 16px 16px calc(80px + var(--safe-bottom)); }
+.page { display: none; flex: 1; padding: 16px 16px calc(96px + var(--safe-bottom)); }
 .page.active { display: block; }
 
 /* ── Bottom nav ──────────────────────────────────────────────────────────── */
@@ -61,17 +61,18 @@ body {
   border-top: 1px solid var(--border);
   box-shadow: 0 -2px 12px rgba(0,0,0,0.07);
   display: flex;
-  padding-bottom: var(--safe-bottom);
+  padding-bottom: calc(var(--safe-bottom) + 6px);
   z-index: 100;
 }
 .nav-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  padding: 8px 2px; gap: 2px; background: none; border: none;
-  color: var(--text-muted); cursor: pointer; font-size: 9px;
+  flex: 1; min-height: 52px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 12px 2px; gap: 4px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer; font-size: 10.5px;
   transition: color 0.15s;
 }
 .nav-item.active { color: var(--accent); }
-.nav-item svg { width: 20px; height: 20px; }
+.nav-item svg { width: 25px; height: 25px; }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 .top-bar {
@@ -256,7 +257,7 @@ body {
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 #toast {
-  position: fixed; bottom: calc(80px + var(--safe-bottom) + 8px); left: 50%;
+  position: fixed; bottom: calc(96px + var(--safe-bottom) + 8px); left: 50%;
   transform: translateX(-50%) translateY(20px); opacity: 0;
   background: var(--surface2); color: var(--text);
   padding: 10px 20px; border-radius: 20px; font-size: 14px;
