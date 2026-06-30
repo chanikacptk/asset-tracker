@@ -22,6 +22,8 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **MF cards now show AMC logos (2026-06-30)**: Replaced the generic black fund glyph on Mutual Fund cards with the issuing **AMC** (asset-management company) logo, derived from the fund-code/name prefix by `_mfAmc(h)` (KKP→kkp, KT-→ktam, ES-→eastspring, 1AM-/ONE-→one, PRINCIPAL→principal, UOB→uob, TISCO/TG/TE→tisco, K-→kasikorn). `AMC_LOGOS` map (inline in `index.html` + mirrored in `src/config/assetLogos.js`) → `assets/logos/amc/*.png`. Five bank-affiliated AMCs **reuse the bank brand logos** (copied from `assets/banks/`: KKP, KBANK→kasikorn, TISCO, UOB, KTB→ktam); **Eastspring** = its double-chevron mark (cropped from Wikimedia Commons), **Principal** = the white-P gradient tile (principal.com apple-touch-icon, rendered `tk-fill`). Per-AMC badge style via `AMC_LOGO_DARK` (kkp = pale logo → dark badge) / `AMC_LOGO_FILL` (principal). **Fallback: an AMC with no sourced logo (ONE Asset Management — only a low-res wordmark exists) renders a colored initials badge** (`_tkBadge`, same as unmapped stock tickers) — text from `AMC_LABEL[amc]` so all of an AMC's funds share one badge (ONE → "ON"), never a broken/blank slot. `_fundLogoImg(h, size)` takes the holding; `_fundBadgeLabel(h, amc)` picks the badge text (AMC label → AMC key → fund code). `fund.svg` is no longer referenced. 21 of 23 holdings show a logo; the 2 ONE funds (1AM-DAILY-RA, ONE-DISC-ASSF) show the "ON" badge. No migration. SW cache `myasset-v86`. See **"Asset logos"** + **"Thai AMC logos"**.
 
+> **Bigger bottom-nav touch targets (2026-06-30)**: Enlarged the 6-tab bottom nav for comfortable mobile tapping. `.nav-item` now `min-height:52px` + `justify-content:center` (whole icon+label block is a ≥44×44px touch target), padding `8px`→`12px`, icons `20px`→`25px`, label font `9px`→`10.5px`, gap `2px`→`4px`; `#bottom-nav` padding-bottom `var(--safe-bottom)`→`calc(var(--safe-bottom) + 6px)` (more clearance above the iOS home indicator). To keep the taller bar from overlapping content, the reserve was bumped `80px`→`96px` in both `.page` bottom padding and the `#toast` offset. CSS-only, no JS/markup change (single shared nav → applies to every page). No migration. SW cache `myasset-v87`.
+
 ## Live URL
 
 **https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
@@ -38,7 +40,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v86`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v87`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -554,7 +556,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v86`**. Bump on every `index.html` change.
+Cache name: **`myasset-v87`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
