@@ -20,7 +20,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **MF "Guess code from fund name" helper (2026-06-30)**: New 🔍 button under the **Fund code** field in the MF add/edit modal — searches **Finnomena** by the typed fund name (falls back to a partial code in the field) and shows a tappable list of share classes; tapping fills `fund_code`, which the existing fire-and-forget refresh turns into a live NAV on save. Finnomena's search is strongest on **code fragments / short names** (full English names return fuzzy hits) — fine here since funds are often named by their code (e.g. holding `fund_name = "TGSMARTRMF-A"`). New GAS action `mfGuessCode` → `DataAgent.searchFinnomenaFunds(q)` (`…/funds/v2/public/funds/search?q=`, no key, never throws → `[{short_code, name_en, name_th, active}]`); frontend `guessFundCode()`/`_pickFundCode()` mirror the SEC-search pattern, reusing the `.mf-search-row*` styles. No migration. SW cache `myasset-v84`. ⚠️ Paste `gas/DataAgent.gs` + `gas/Code.gs` into the Apps Script IDE and redeploy the Web App, else the button returns "Search failed".
 
-> **MF cards now show AMC logos (2026-06-30)**: Replaced the generic black fund glyph on Mutual Fund cards with the issuing **AMC** (asset-management company) logo, derived from the fund-code/name prefix by `_mfAmc(h)` (KKP→kkp, KT-→ktam, ES-→eastspring, 1AM-/ONE-→one, PRINCIPAL→principal, UOB→uob, TISCO/TG/TE→tisco, K-→kasikorn). `AMC_LOGOS` map (inline in `index.html` + mirrored in `src/config/assetLogos.js`) → `assets/logos/amc/*.png`. Five bank-affiliated AMCs **reuse the bank brand logos** (copied from `assets/banks/`: KKP, KBANK→kasikorn, TISCO, UOB, KTB→ktam); **Eastspring** = its double-chevron mark (cropped from Wikimedia Commons), **Principal** = the white-P gradient tile (principal.com apple-touch-icon, rendered `tk-fill`). Per-AMC badge style via `AMC_LOGO_DARK` (kkp = pale logo → dark badge) / `AMC_LOGO_FILL` (principal). **Fallback rule: an unknown AMC — or one with no sourced logo (ONE Asset Management: only a low-res wordmark exists) — renders NO icon, never a placeholder** (a missing/wrong logo looks worse than none). `_fundLogoImg(h, size)` now takes the holding and returns `''` when no logo. `fund.svg` is no longer referenced. Covers 21 of 23 live holdings; only the 2 ONE funds (1AM-DAILY-RA, ONE-DISC-ASSF) show no icon. No migration. SW cache `myasset-v85`. See **"Asset logos"** + **"Thai AMC logos"**.
+> **MF cards now show AMC logos (2026-06-30)**: Replaced the generic black fund glyph on Mutual Fund cards with the issuing **AMC** (asset-management company) logo, derived from the fund-code/name prefix by `_mfAmc(h)` (KKP→kkp, KT-→ktam, ES-→eastspring, 1AM-/ONE-→one, PRINCIPAL→principal, UOB→uob, TISCO/TG/TE→tisco, K-→kasikorn). `AMC_LOGOS` map (inline in `index.html` + mirrored in `src/config/assetLogos.js`) → `assets/logos/amc/*.png`. Five bank-affiliated AMCs **reuse the bank brand logos** (copied from `assets/banks/`: KKP, KBANK→kasikorn, TISCO, UOB, KTB→ktam); **Eastspring** = its double-chevron mark (cropped from Wikimedia Commons), **Principal** = the white-P gradient tile (principal.com apple-touch-icon, rendered `tk-fill`). Per-AMC badge style via `AMC_LOGO_DARK` (kkp = pale logo → dark badge) / `AMC_LOGO_FILL` (principal). **Fallback: an AMC with no sourced logo (ONE Asset Management — only a low-res wordmark exists) renders a colored initials badge** (`_tkBadge`, same as unmapped stock tickers) — text from `AMC_LABEL[amc]` so all of an AMC's funds share one badge (ONE → "ON"), never a broken/blank slot. `_fundLogoImg(h, size)` takes the holding; `_fundBadgeLabel(h, amc)` picks the badge text (AMC label → AMC key → fund code). `fund.svg` is no longer referenced. 21 of 23 holdings show a logo; the 2 ONE funds (1AM-DAILY-RA, ONE-DISC-ASSF) show the "ON" badge. No migration. SW cache `myasset-v86`. See **"Asset logos"** + **"Thai AMC logos"**.
 
 ## Live URL
 
@@ -38,7 +38,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v85`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v86`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -538,8 +538,8 @@ Mutual funds have no per-fund artwork, so each MF card is badged by its issuing 
 - **Map**: `AMC_LOGOS` (inline `const` in `index.html`, mirrored in `src/config/assetLogos.js` — keep in sync) → `assets/logos/amc/*.png`.
 - **Sources**: 5 bank-affiliated AMCs **reuse the bank brand logos**, copied from `assets/banks/` (KKP→`kkp.png`, KBANK→`kasikorn.png`, TISCO→`tisco.png`, UOB→`uob.png`, KTB→`ktam.png`). **Eastspring** = its double-chevron mark cropped/trimmed from the Wikimedia Commons `Eastspring Investments.png` wordmark (the wide wordmark itself is illegible in a circle). **Principal** = the white-P blue-gradient apple-touch-icon from principal.com.
 - **Badge style** (same `.tk-logo` system as asset logos): `tk-light` (white badge) for all except `AMC_LOGO_DARK` = `{kkp}` (pale logo → dark badge) and `AMC_LOGO_FILL` = `{principal}` (full-bleed colored tile, `object-fit:cover`). Verified in both themes.
-- **Fallback (deliberate)**: an unknown AMC — or one with no sourced logo — renders **NO icon**, never a placeholder. `_fundLogoImg(h, size)` returns `''` in that case (a missing/wrong logo looks worse than none). **ONE Asset Management** (`1AM-`/`ONE-`) resolves to `amc='one'` but has no `AMC_LOGOS` entry (only a low-res wordmark exists), so its funds show no icon. To add it later: drop a clean square logo at `assets/logos/amc/one.png` and add the `one:` line to both `AMC_LOGOS` copies.
-- Coverage: 21 of 23 live holdings logo'd; only the 2 ONE funds are icon-less. `assets/logos/misc/fund.svg` is now unused.
+- **Fallback**: an AMC with no logo renders a **colored initials badge** (`_tkBadge` — the same deterministic badge unmapped stock tickers use), never a broken/blank slot or the old generic glyph. Badge text comes from `_fundBadgeLabel(h, amc)` = `AMC_LABEL[amc]` (known AMC, so every fund of that AMC shares one badge) → AMC key → `fund_code`/`fund_name`. **ONE Asset Management** (`1AM-`/`ONE-`) resolves to `amc='one'`, has no `AMC_LOGOS` entry (only a low-res wordmark exists), and `AMC_LABEL.one='ONE'` → both ONE funds show a purple **"ON"** badge. To upgrade to a real logo later: drop a clean square logo at `assets/logos/amc/one.png`, add the `one:` line to both `AMC_LOGOS` copies, and remove the `AMC_LABEL.one` entry.
+- Coverage: 21 of 23 live holdings logo'd; the 2 ONE funds show the "ON" initials badge. `assets/logos/misc/fund.svg` is now unused.
 
 ## App icon
 
@@ -554,7 +554,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v85`**. Bump on every `index.html` change.
+Cache name: **`myasset-v86`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

@@ -2375,6 +2375,8 @@ const AMC_LOGOS = {
 };
 const AMC_LOGO_DARK = new Set(['kkp']);        // pale logo → dark badge
 const AMC_LOGO_FILL = new Set(['principal']);  // full-bleed colored tile → fill the circle
+// Known AMC with no sourced logo → initials-badge text (so all its funds share one badge).
+const AMC_LABEL = { one: 'ONE' };
 // fund (code|class|name prefix) → AMC key. Order matters (KKP before K-, KT- before K-).
 function _mfAmc(h) {
   const code = String(h.fund_code || h.sec_fund_class_name || h.fund_name || '').toUpperCase().trim();
@@ -2389,13 +2391,21 @@ function _mfAmc(h) {
   if (code.startsWith('K-') || code.startsWith('KPLAN') || code.startsWith('K ')) return 'kasikorn';
   return null;
 }
-// AMC logo badge for a fund holding, or '' (NO icon) when the AMC is unknown / has no logo.
+// AMC logo badge for a fund holding. Falls back to a colored initials badge (AMC label
+// when known, else the fund code/name) when the AMC has no sourced logo — same badge
+// the holdings tables use for unmapped tickers, so it never shows a broken/blank slot.
 function _fundLogoImg(h, size = 24) {
   const amc  = _mfAmc(h);
   const path = amc && AMC_LOGOS[amc];
-  if (!path) return '';
-  const cls = AMC_LOGO_FILL.has(amc) ? 'tk-fill' : (AMC_LOGO_DARK.has(amc) ? 'tk-dark' : 'tk-light');
-  return `<span class="tk-logo ${cls}" style="width:${size}px;height:${size}px"><img src="${path}" alt="${amc}" class="tk-logo-img" onerror="this.parentNode.style.display='none'"></span>`;
+  if (path) {
+    const cls = AMC_LOGO_FILL.has(amc) ? 'tk-fill' : (AMC_LOGO_DARK.has(amc) ? 'tk-dark' : 'tk-light');
+    return `<span class="tk-logo ${cls}" style="width:${size}px;height:${size}px"><img src="${path}" alt="${amc}" class="tk-logo-img" onerror="this.parentNode.replaceWith(_tkBadgeEl('${_fundBadgeLabel(h, amc)}', ${size}))"></span>`;
+  }
+  return _tkBadge(_fundBadgeLabel(h, amc), size);
+}
+// Text for a fund's initials badge: AMC label if known, else the AMC key, else fund code/name.
+function _fundBadgeLabel(h, amc) {
+  return (amc && AMC_LABEL[amc]) || amc || h.fund_code || h.fund_name || '?';
 }
 
 // ── Supabase client ───────────────────────────────────────────────────────────
