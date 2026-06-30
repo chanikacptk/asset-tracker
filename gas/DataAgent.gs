@@ -986,6 +986,52 @@ const DataAgent = (() => {
   }
 
   /**
+   * Finnomena fund search by name OR code fragment — backs the MF modal's
+   * "Guess fund code" helper. The Tier-1 NAV path is keyed by the plain
+   * short_code (e.g. TGSMARTRMF-A), so this returns candidate codes the user
+   * taps to fill the Fund code field. No API key. Never throws.
+   *   GET https://www.finnomena.com/fn3/api/fund/v2/public/funds/search?q={q}
+   *   → { data: [{ short_code, name_th, name_en, sec_is_active, … }, …] }
+   * Returns [{ short_code, name_en, name_th, active }] (≤25, code/exact matches first).
+   */
+  function searchFinnomenaFunds(query) {
+    const q = (query || '').trim();
+    if (!q) return [];
+    const url = 'https://www.finnomena.com/fn3/api/fund/v2/public/funds/search?q=' +
+      encodeURIComponent(q);
+    try {
+      const r = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Accept': 'application/json' },
+        muteHttpExceptions: true,
+        followRedirects: true
+      });
+      const httpCode = r.getResponseCode();
+      const body = r.getContentText() || '';
+      if (httpCode !== 200 || body.charAt(0) !== '{') {
+        Logger.log('[Finnomena] search "' + q + '" HTTP ' + httpCode + ': ' + body.substring(0, 120));
+        return [];
+      }
+      const data = JSON.parse(body).data;
+      if (!Array.isArray(data)) { Logger.log('[Finnomena] search "' + q + '": no data array'); return []; }
+      const out = data
+        .filter(f => f && f.short_code)
+        .map(f => ({
+          short_code: String(f.short_code),
+          name_en: f.name_en || '',
+          name_th: f.name_th || '',
+          active: f.sec_is_active !== false
+        }))
+        .slice(0, 25);
+      Logger.log('[Finnomena] search "' + q + '" → ' + out.length + ' result(s)');
+      return out;
+    } catch (e) {
+      Logger.log('[Finnomena] search "' + q + '" error: ' + e.message);
+      return [];
+    }
+  }
+
+  /**
    * Daily refresh — for every holding with an automated NAV source, fetch the latest
    * NAV and update current_nav_thb + nav_date + nav_updated_at. Tiered source:
    *   Tier 1  Finnomena by fund_code (freshest, no key, widest coverage incl. ES-FIXEDRMF)
@@ -1050,7 +1096,8 @@ const DataAgent = (() => {
 
   return {
     fetchAll, checkRealtimeAlerts, savePrice, updateDynamicSRLevels,
-    fetchGoldPrice, scrapeBondInfo, refreshMFNav, lookupMFClasses, lookupMFFunds
+    fetchGoldPrice, scrapeBondInfo, refreshMFNav, lookupMFClasses, lookupMFFunds,
+    searchFinnomenaFunds
   };
 })();
 

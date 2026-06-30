@@ -96,6 +96,10 @@ function doGet(e) {
       const q = (e?.parameter?.q || '').trim();
       if (!q) throw new Error('q required');
       result.funds = DataAgent.lookupMFFunds(q);
+    } else if (action === 'mfGuessCode') {
+      const q = (e?.parameter?.q || '').trim();
+      if (!q) throw new Error('q required');
+      result.codes = DataAgent.searchFinnomenaFunds(q);
     } else if (action === 'getConfig') {
       const key = (e?.parameter?.key || '').trim();
       if (!key) throw new Error('key required');

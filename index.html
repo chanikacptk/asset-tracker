@@ -619,7 +619,11 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <!-- Fund code (optional — Finnomena fallback for funds not in SEC, e.g. ES-FIXEDRMF) -->
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund code <span style="font-weight:400;text-transform:none">(optional — auto NAV via Finnomena if not in SEC)</span></div>
     <input id="mf-fund-code" type="text" placeholder="e.g. ES-FIXEDRMF" autocapitalize="characters"
-      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'Instrument Sans',sans-serif;margin-bottom:4px">
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'Instrument Sans',sans-serif;margin-bottom:6px">
+    <button id="mf-guess-btn" onclick="guessFundCode()"
+      style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px">🔍 Guess code from fund name</button>
+    <div id="mf-guess-status" style="font-size:11px;color:var(--text-muted);min-height:14px;margin-bottom:6px"></div>
+    <div id="mf-guess-results" style="display:none;margin-bottom:8px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Used only when there's no SEC proj_id. The exact code on finnomena.com/fund/&lt;code&gt;.</div>
 
     <!-- Notes (collapsible) -->
@@ -4387,6 +4391,10 @@ function _mfModalReset() {
   const searchRes = document.getElementById('mf-search-results');
   searchRes.style.display = 'none'; searchRes.innerHTML = '';
   document.getElementById('mf-search-status').textContent = '';
+  _mfCodeResults = [];
+  const guessRes = document.getElementById('mf-guess-results');
+  guessRes.style.display = 'none'; guessRes.innerHTML = '';
+  document.getElementById('mf-guess-status').textContent = '';
   document.getElementById('mf-class-status').textContent =
     'Find it by searching the fund at secopendata.sec.or.th and copying the proj_id. Leave blank to keep NAV manual.';
   document.getElementById('mf-class-status').style.color = 'var(--text-muted)';
@@ -4745,6 +4753,52 @@ function _pickMFFund(i) {
   cs.style.color = 'var(--success)';
   cs.textContent = '✓ proj_id + class set from search. NAV refreshes nightly.';
   document.getElementById('mf-class-select').style.display = 'none';
+}
+
+// Guess the Finnomena fund_code from the typed fund name (or a partial code).
+// Hits Finnomena's fund search via GAS → tappable list of share classes → fills
+// the Fund code field. Pure convenience; never blocks the save.
+let _mfCodeResults = [];
+async function guessFundCode() {
+  const q = document.getElementById('mf-fund-name').value.trim()
+            || document.getElementById('mf-fund-code').value.trim();
+  const statusEl = document.getElementById('mf-guess-status');
+  const resEl    = document.getElementById('mf-guess-results');
+  const btn      = document.getElementById('mf-guess-btn');
+  if (!q) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'Type the fund name above (or a partial code) first.'; return; }
+
+  statusEl.style.color = 'var(--text-muted)';
+  statusEl.textContent = 'Searching Finnomena…';
+  resEl.style.display = 'none';
+  btn.disabled = true;
+  const r = await callGAS('mfGuessCode', { q });
+  btn.disabled = false;
+
+  if (!r || !r.ok) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = 'Search failed' + (r?.error ? ': ' + r.error : '') + ' — you can still type the code manually.'; return; }
+  _mfCodeResults = r.codes || [];
+  if (!_mfCodeResults.length) { statusEl.style.color = 'var(--warning)'; statusEl.textContent = 'No Finnomena match. Try the English name, or type the exact code from finnomena.com/fund/<code>.'; return; }
+
+  statusEl.style.color = 'var(--text)';
+  statusEl.textContent = _mfCodeResults.length + ' match(es) — tap the share class you hold:';
+  resEl.innerHTML = _mfCodeResults.map((f, i) => {
+    const nm = f.name_en || f.name_th || '';
+    const inactive = f.active === false ? ' · inactive' : '';
+    return `<div class="mf-search-row" onclick="_pickFundCode(${i})">
+      <div class="mf-search-row-name"><span class="mf-search-row-pid">${_esc(f.short_code)}</span>${inactive}</div>
+      ${nm ? `<div class="mf-search-row-sub">${_esc(nm)}</div>` : ''}
+    </div>`;
+  }).join('');
+  resEl.style.display = 'block';
+}
+
+function _pickFundCode(i) {
+  const f = _mfCodeResults[i];
+  if (!f) return;
+  document.getElementById('mf-fund-code').value = f.short_code || '';
+  document.getElementById('mf-guess-results').style.display = 'none';
+  const st = document.getElementById('mf-guess-status');
+  st.style.color = 'var(--success)';
+  st.textContent = '✓ Fund code set to ' + (f.short_code || '') + ' — NAV auto-refreshes on save.';
 }
 
 // Manual "Refresh NAV" — fire the same GAS job the daily trigger runs.
