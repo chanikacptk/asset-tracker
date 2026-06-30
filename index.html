@@ -2355,9 +2355,47 @@ function _assetLogoImg(ticker, size = 24) {
   if (!path) return _tkBadge(t, size);
   return `<span class="tk-logo ${_logoStyle(t)}" style="width:${size}px;height:${size}px"><img src="${path}" alt="${t}" class="tk-logo-img" onerror="this.parentNode.replaceWith(_tkBadgeEl('${t}', ${size}))"></span>`;
 }
-// generic fund icon — Thai mutual funds have no per-fund logo in these repos (white glyph → dark badge)
-function _fundLogoImg(size = 24) {
-  return `<span class="tk-logo tk-dark" style="width:${size}px;height:${size}px"><img src="assets/logos/misc/fund.svg" alt="fund" class="tk-logo-img"></span>`;
+// ── Thai AMC (asset-management company) logos for mutual funds ────────────────
+// Funds have no per-FUND artwork, so we badge each by its issuing AMC, derived from
+// the fund-code/name prefix (mirrors the comp_name_en SEC gives us). Five AMCs are
+// bank-affiliated and reuse the existing brand logos (copied into assets/logos/amc/).
+// Eastspring = its double-chevron mark (Wikimedia); Principal = the white-P tile.
+// IMPORTANT: an unknown AMC (or one with no sourced logo, e.g. ONE) renders NO icon —
+// a missing/wrong logo looks worse than none. Mirror of src/config/assetLogos.js.
+const AMC_LOGOS = {
+  kkp:        'assets/logos/amc/kkp.png',        // Kiatnakin Phatra  (KKP*)
+  kasikorn:   'assets/logos/amc/kasikorn.png',   // Kasikorn Asset    (K-*)
+  tisco:      'assets/logos/amc/tisco.png',      // TISCO Asset       (TISCO*, TG*, TE*)
+  uob:        'assets/logos/amc/uob.png',        // UOB Asset         (UOB*)
+  ktam:       'assets/logos/amc/ktam.png',       // Krung Thai Asset  (KT-*)
+  eastspring: 'assets/logos/amc/eastspring.png', // Eastspring        (ES-*)
+  principal:  'assets/logos/amc/principal.png',  // Principal Asset   (PRINCIPAL*)
+  // 'one' (ONE Asset Management — 1AM-/ONE-) intentionally has NO entry: only a low-res
+  // wordmark exists, which is illegible in a small circle. Resolves to no icon.
+};
+const AMC_LOGO_DARK = new Set(['kkp']);        // pale logo → dark badge
+const AMC_LOGO_FILL = new Set(['principal']);  // full-bleed colored tile → fill the circle
+// fund (code|class|name prefix) → AMC key. Order matters (KKP before K-, KT- before K-).
+function _mfAmc(h) {
+  const code = String(h.fund_code || h.sec_fund_class_name || h.fund_name || '').toUpperCase().trim();
+  if (!code) return null;
+  if (code.startsWith('KKP'))                              return 'kkp';
+  if (code.startsWith('KT-') || code.startsWith('KTAM'))   return 'ktam';
+  if (code.startsWith('ES-') || code.startsWith('ES '))    return 'eastspring';
+  if (code.startsWith('1AM') || code.startsWith('ONE-') || code.startsWith('ONE ')) return 'one';
+  if (code.startsWith('PRINCIPAL'))                        return 'principal';
+  if (code.startsWith('UOB'))                              return 'uob';
+  if (code.startsWith('TISCO') || code.startsWith('TG') || code.startsWith('TE')) return 'tisco';
+  if (code.startsWith('K-') || code.startsWith('KPLAN') || code.startsWith('K ')) return 'kasikorn';
+  return null;
+}
+// AMC logo badge for a fund holding, or '' (NO icon) when the AMC is unknown / has no logo.
+function _fundLogoImg(h, size = 24) {
+  const amc  = _mfAmc(h);
+  const path = amc && AMC_LOGOS[amc];
+  if (!path) return '';
+  const cls = AMC_LOGO_FILL.has(amc) ? 'tk-fill' : (AMC_LOGO_DARK.has(amc) ? 'tk-dark' : 'tk-light');
+  return `<span class="tk-logo ${cls}" style="width:${size}px;height:${size}px"><img src="${path}" alt="${amc}" class="tk-logo-img" onerror="this.parentNode.style.display='none'"></span>`;
 }
 
 // ── Supabase client ───────────────────────────────────────────────────────────
@@ -4340,7 +4378,7 @@ function _renderMFList() {
     <div class="mf-fund-card">
       <div class="mf-card-head" onclick="toggleMFExpand('${h.id}')">
         <div class="mf-card-left" style="display:flex;align-items:flex-start;gap:10px">
-          ${_fundLogoImg(30)}
+          ${_fundLogoImg(h, 30)}
           <div style="min-width:0;flex:1">
             <div class="mf-card-badges">${catBadge}${navBadge}</div>
             <div class="mf-card-code" style="font-size:15px">${h.fund_name || '(unnamed)'}</div>

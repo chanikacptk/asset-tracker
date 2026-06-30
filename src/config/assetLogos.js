@@ -83,3 +83,21 @@ export const MISC_LOGOS = {
 
 // Flattened ticker → path map (what index.html mirrors as ASSET_LOGOS).
 export const ASSET_LOGOS = { ...STOCK_LOGOS, ...ETF_LOGOS, ...MISC_LOGOS };
+
+// Thai AMC (asset-management company) logos for mutual funds. Funds have no per-fund
+// artwork, so each is badged by its issuing AMC, derived from the fund-code prefix
+// (see _mfAmc in index.html). Five AMCs are bank-affiliated and reuse the bank brand
+// logos (copied into assets/logos/amc/); Eastspring = its double-chevron mark
+// (Wikimedia Commons), Principal = the white-P gradient tile (principal.com).
+// An AMC with NO entry here (e.g. ONE Asset Management) renders no icon by design —
+// a missing/wrong logo looks worse than none.
+export const AMC_LOGOS = {
+  kkp:        '/assets/logos/amc/kkp.png',        // Kiatnakin Phatra  (KKP*)
+  kasikorn:   '/assets/logos/amc/kasikorn.png',   // Kasikorn Asset    (K-*)
+  tisco:      '/assets/logos/amc/tisco.png',      // TISCO Asset       (TISCO*, TG*, TE*)
+  uob:        '/assets/logos/amc/uob.png',        // UOB Asset         (UOB*)
+  ktam:       '/assets/logos/amc/ktam.png',       // Krung Thai Asset  (KT-*)
+  eastspring: '/assets/logos/amc/eastspring.png', // Eastspring        (ES-*)
+  principal:  '/assets/logos/amc/principal.png',  // Principal Asset   (PRINCIPAL*)
+  // 'one' (1AM-/ONE-) intentionally omitted — only a low-res wordmark exists → no icon.
+};
