@@ -756,30 +756,70 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     </div>
     <div style="height:12px"></div>
 
-    <!-- date selector / history -->
-    <div class="an-datebar">
-      <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
-      <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
-      <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+    <!-- tabs: จัดการพอร์ต | เปรียบเทียบ Benchmark -->
+    <div class="an-tabs">
+      <button id="an-tab-btn-manage"    class="an-tab active" onclick="anSwitchTab('manage')">จัดการพอร์ต</button>
+      <button id="an-tab-btn-benchmark" class="an-tab"        onclick="anSwitchTab('benchmark')">เปรียบเทียบ Benchmark</button>
     </div>
 
-    <!-- news content -->
-    <div id="analysis-news"></div>
+    <!-- ── TAB 1: manage (news brief history + tools) ── -->
+    <div id="an-tab-manage">
+      <!-- date selector / history -->
+      <div class="an-datebar">
+        <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
+        <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
+        <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+      </div>
 
-    <!-- tools hub -->
-    <div class="an-tools-head">Tools</div>
-    <div>
-      <div class="more-row" onclick="navigate('dca')">
-        <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
+      <!-- news content -->
+      <div id="analysis-news"></div>
+
+      <!-- tools hub -->
+      <div class="an-tools-head">Tools</div>
+      <div>
+        <div class="more-row" onclick="navigate('dca')">
+          <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
+        </div>
+        <div class="more-row" onclick="navigate('monthly')">
+          <span class="more-icon">🗓️</span><div><div class="more-label">Monthly Review</div><div class="more-sub">Regenerate DCA plan & summary</div></div><span class="more-arrow">›</span>
+        </div>
+        <div class="more-row" onclick="navigate('weekly')">
+          <span class="more-icon">📆</span><div><div class="more-label">Weekly Review</div><div class="more-sub">AI signals across all portfolios</div></div><span class="more-arrow">›</span>
+        </div>
+        <div class="more-row" onclick="navigate('allportfolio')">
+          <span class="more-icon">📊</span><div><div class="more-label">All Portfolio</div><div class="more-sub">Latest signals for every holding</div></div><span class="more-arrow">›</span>
+        </div>
       </div>
-      <div class="more-row" onclick="navigate('monthly')">
-        <span class="more-icon">🗓️</span><div><div class="more-label">Monthly Review</div><div class="more-sub">Regenerate DCA plan & summary</div></div><span class="more-arrow">›</span>
+    </div>
+
+    <!-- ── TAB 2: benchmark comparison ── -->
+    <div id="an-tab-benchmark" style="display:none">
+      <div class="bm-title">Benchmarks</div>
+      <div class="bm-sub">เปรียบเทียบการเติบโตของพอร์ตคุณกับดัชนีตลาดหุ้นสหรัฐฯ (NASDAQ · S&amp;P 500) — ทุกเส้นถูกปรับฐานเป็น <b>100</b> ณ วันเริ่มต้น จึงเทียบผลตอบแทนแบบ % ได้ตรงกันไม่ว่ามูลค่าจริงจะต่างกันแค่ไหน</div>
+
+      <div class="bm-lbl">พอร์ตโฟลิโอ</div>
+      <div id="bm-port-pills" class="bm-pills"></div>
+
+      <div class="bm-lbl">Timescale</div>
+      <div class="bm-pills">
+        <button class="bm-seg-btn"        data-scale="1m" onclick="bmSetScale('1m',this)">minute</button>
+        <button class="bm-seg-btn"        data-scale="1h" onclick="bmSetScale('1h',this)">hour</button>
+        <button class="bm-seg-btn active"  data-scale="1d" onclick="bmSetScale('1d',this)">day</button>
       </div>
-      <div class="more-row" onclick="navigate('weekly')">
-        <span class="more-icon">📆</span><div><div class="more-label">Weekly Review</div><div class="more-sub">AI signals across all portfolios</div></div><span class="more-arrow">›</span>
+
+      <div class="bm-lbl">Timeframe</div>
+      <div class="bm-pills">
+        <button class="bm-seg-btn"        data-tf="1mo" onclick="bmSetTf('1mo',this)">1M</button>
+        <button class="bm-seg-btn"        data-tf="3mo" onclick="bmSetTf('3mo',this)">3M</button>
+        <button class="bm-seg-btn active"  data-tf="6mo" onclick="bmSetTf('6mo',this)">6M</button>
+        <button class="bm-seg-btn"        data-tf="1y"  onclick="bmSetTf('1y',this)">1Y</button>
+        <button class="bm-seg-btn"        data-tf="ytd" onclick="bmSetTf('ytd',this)">YTD</button>
       </div>
-      <div class="more-row" onclick="navigate('allportfolio')">
-        <span class="more-icon">📊</span><div><div class="more-label">All Portfolio</div><div class="more-sub">Latest signals for every holding</div></div><span class="more-arrow">›</span>
+
+      <div class="bm-chart-card card">
+        <div id="bm-chart-status" class="bm-status"></div>
+        <div class="bm-chart-wrap"><canvas id="bm-chart"></canvas></div>
+        <div id="bm-legend" class="bm-legend"></div>
       </div>
     </div>
   </div>
@@ -1935,6 +1975,38 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .an-impact-lbl { color:var(--text-muted);font-weight:600; }
 .an-sources { margin-top:9px;font-size:11px;color:var(--text-muted); }
 .an-tools-head { font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:24px 2px 10px; }
+
+/* Analysis tabs (จัดการพอร์ต | เปรียบเทียบ Benchmark) */
+.an-tabs { display:flex;gap:8px;margin-bottom:18px; }
+.an-tab {
+  flex:1;padding:11px 12px;border-radius:11px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:700;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.an-tab.active { background:#eab308;border-color:#eab308;color:#1a1205; }
+
+/* Benchmark comparison */
+.bm-title { font-size:21px;font-weight:800;margin:2px 2px 5px; }
+.bm-sub   { font-size:12.5px;line-height:1.6;color:var(--text-muted);margin:0 2px 6px; }
+.bm-lbl   { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 2px 8px; }
+.bm-pills { display:flex;flex-wrap:wrap;gap:7px; }
+.bm-pill {
+  padding:7px 13px;border-radius:999px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.bm-pill.active { background:#eab308;border-color:#eab308;color:#1a1205; }
+.bm-seg-btn {
+  padding:7px 15px;border-radius:9px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:12.5px;font-weight:600;cursor:pointer;
+}
+.bm-seg-btn.active { background:#eab308;border-color:#eab308;color:#1a1205; }
+.bm-chart-card { margin-top:18px;padding:16px 12px 14px; }
+.bm-chart-wrap { position:relative;height:300px; }
+.bm-status { font-size:12px;color:var(--text-muted);text-align:center;padding:8px 4px;line-height:1.5; }
+.bm-legend { display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin-top:14px; }
+.bm-legend span { display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--text);font-weight:600; }
+.bm-legend i { width:18px;border-top:2.5px dashed currentColor;display:inline-block; }
 
 /* Ticker autocomplete */
 .ticker-suggestions {
@@ -5368,6 +5440,15 @@ let _anDate = null;          // selected news_date (YYYY-MM-DD)
 let _anRows = [];            // daily_news rows for the selected date
 let _anTickerFilter = null;  // active ticker filter (nice-to-have)
 
+// Benchmark comparison tab
+let _bmScale     = '1d';     // '1m' | '1h' | '1d' (Yahoo interval)
+let _bmTf        = '6mo';    // '1mo' | '3mo' | '6mo' | '1y' | 'ytd'
+let _bmPorts     = [];       // [{id, name, emoji}] for this user's portfolios
+let _bmSel       = 'total';  // 'total' | Set<portfolioId>
+let _bmInited    = false;
+let _bmReqSeq    = 0;        // guards against out-of-order async renders
+const _BM_NASDAQ = '#eab308', _BM_SP = '#14b8a6', _BM_PORT = '#22d3ee';
+
 function _anEsc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -5382,6 +5463,7 @@ function _anDateLabel(d) {
 }
 
 async function loadAnalysis() {
+  anSwitchTab('manage');   // always land on the news/tools tab
   const uid = state.userId;
   const box = document.getElementById('analysis-news');
   const sel = document.getElementById('an-date-select');
@@ -5491,6 +5573,249 @@ function _anCard(r) {
 
 function anFilterTicker(t) { _anTickerFilter = (t || '').toUpperCase(); _anPaint(); }
 function anClearFilter()   { _anTickerFilter = null; _anPaint(); }
+
+// ── Benchmark comparison ──────────────────────────────────────────────────────
+// Tabs. Manage tab is the existing news+tools; benchmark lazy-inits on first open.
+function anSwitchTab(tab) {
+  const isBm = tab === 'benchmark';
+  document.getElementById('an-tab-manage').style.display    = isBm ? 'none' : '';
+  document.getElementById('an-tab-benchmark').style.display = isBm ? '' : 'none';
+  document.getElementById('an-tab-btn-manage').classList.toggle('active', !isBm);
+  document.getElementById('an-tab-btn-benchmark').classList.toggle('active', isBm);
+  if (isBm && !_bmInited) initBenchmark();
+}
+
+function _bmEmoji(p) {
+  const n = (p.name || '').toLowerCase(), t = (p.type || '').toLowerCase();
+  if (n.includes('ai'))                       return '🤖';
+  if (n.includes('etf') || t === 'etf')       return '🌍';
+  if (n.includes('growth') || t === 'growth') return '🚀';
+  if (n.includes('dividend') || t === 'dividend') return '💰';
+  return '📊';
+}
+
+async function initBenchmark() {
+  _bmInited = true;
+  const { data: ports } = await sb.from('portfolios')
+    .select('id, name, type').eq('user_id', state.userId).order('created_at');
+  _bmPorts = (ports || []).map(p => ({ id: p.id, name: p.name, emoji: _bmEmoji(p) }));
+  _bmSel = 'total';
+  _bmRenderPills();
+  renderBenchmark();
+}
+
+function _bmRenderPills() {
+  const el = document.getElementById('bm-port-pills');
+  const isTotal = _bmSel === 'total';
+  let html = `<button class="bm-pill ${isTotal ? 'active' : ''}" onclick="bmTogglePort('total')">Total</button>`;
+  html += _bmPorts.map(p => {
+    const on = !isTotal && _bmSel.has(p.id);
+    return `<button class="bm-pill ${on ? 'active' : ''}" onclick="bmTogglePort('${p.id}')">${p.emoji} ${_anEsc(p.name)}</button>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function bmTogglePort(id) {
+  if (id === 'total') {
+    _bmSel = 'total';
+  } else {
+    // starting from Total, a specific pick clears Total and selects just that one
+    if (_bmSel === 'total') _bmSel = new Set([id]);
+    else {
+      _bmSel.has(id) ? _bmSel.delete(id) : _bmSel.add(id);
+      if (_bmSel.size === 0) _bmSel = 'total';   // never leave nothing selected
+    }
+  }
+  _bmRenderPills();
+  renderBenchmark();
+}
+
+function bmSetScale(scale, btn) {
+  _bmScale = scale;
+  btn.parentElement.querySelectorAll('.bm-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderBenchmark();
+}
+function bmSetTf(tf, btn) {
+  _bmTf = tf;
+  btn.parentElement.querySelectorAll('.bm-seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderBenchmark();
+}
+
+// Yahoo intraday range limits: 1m data only goes back ~7d. Clamp so the fetch
+// never returns empty. (1h is fine up to ~2y, so timeframe applies as-is there.)
+function _bmRange() { return _bmScale === '1m' ? '5d' : _bmTf; }
+
+// Which portfolio ids are currently selected (Total = all of this user's).
+function _bmSelectedIds() {
+  return _bmSel === 'total' ? _bmPorts.map(p => p.id) : [..._bmSel];
+}
+function _bmSelLabel() {
+  if (_bmSel === 'total') return 'Total';
+  const names = _bmPorts.filter(p => _bmSel.has(p.id)).map(p => p.name);
+  return names.length <= 2 ? names.join(' + ') : `${names.length} portfolios`;
+}
+
+function _bmStatus(msg) {
+  const el = document.getElementById('bm-chart-status');
+  if (el) el.textContent = msg || '';
+}
+
+async function renderBenchmark() {
+  const seq = ++_bmReqSeq;
+  _bmStatus('กำลังโหลดข้อมูล…');
+  _bmRenderChart(null);   // clear while loading
+
+  // 1) aggregate shares per ticker across the selected portfolios
+  const ids = _bmSelectedIds();
+  const shares = {};   // ticker -> total shares
+  if (ids.length) {
+    const { data: hlds } = await sb.from('holdings')
+      .select('ticker, shares, portfolio_id').in('portfolio_id', ids);
+    for (const h of hlds || []) {
+      const tk = (h.ticker || '').toUpperCase();
+      if (!tk) continue;
+      shares[tk] = (shares[tk] || 0) + (h.shares || 0);
+    }
+  }
+  const tickers = Object.keys(shares);
+  const symbols = ['^GSPC', '^IXIC', ...tickers];
+
+  // 2) fetch date-stamped closes from Yahoo (via GAS)
+  const resp = await callGAS('benchmarkHistory', {
+    symbols: symbols.join(','), range: _bmRange(), interval: _bmScale
+  });
+  if (seq !== _bmReqSeq) return;   // a newer request superseded this one
+  if (!resp || !resp.ok || !resp.series) { _bmStatus('โหลดข้อมูลไม่สำเร็จ — ลองใหม่อีกครั้ง'); return; }
+  const series = resp.series;
+  if (!series['^GSPC'] && !series['^IXIC']) { _bmStatus('ไม่มีข้อมูลดัชนีในช่วงเวลานี้'); return; }
+
+  // 3) master time axis from S&P 500 (fallback NASDAQ)
+  const master = series['^GSPC'] || series['^IXIC'];
+  const keys = [], labels = [];
+  for (let i = 0; i < master.t.length; i++) {
+    if (master.c[i] == null) continue;
+    keys.push(_bmKey(master.t[i]));
+    labels.push(_bmLabel(master.t[i]));
+  }
+  if (keys.length < 2) { _bmStatus('ข้อมูลไม่พอสำหรับช่วงเวลานี้'); return; }
+
+  // 4) align every symbol onto the master axis (forward/back-filled)
+  const aligned = {};
+  for (const sym in series) aligned[sym] = _bmAlignSeries(series[sym], keys);
+
+  // 5) portfolio series = Σ shares × close, then forward-fill gaps
+  let port = null;
+  if (tickers.length) {
+    port = keys.map((_, idx) => {
+      let sum = 0, any = false;
+      for (const tk of tickers) {
+        const arr = aligned[tk];
+        if (arr && arr[idx] != null) { sum += shares[tk] * arr[idx]; any = true; }
+      }
+      return any ? sum : null;
+    });
+    port = _bmFfill(port);
+  }
+
+  // 6) normalize to 100 at first point
+  const dsN = series['^IXIC'] ? _bmNorm(aligned['^IXIC']) : null;
+  const dsS = series['^GSPC'] ? _bmNorm(aligned['^GSPC']) : null;
+  const dsP = port ? _bmNorm(port) : null;
+
+  _bmStatus('');
+  _bmRenderChart({ labels, nasdaq: dsN, sp: dsS, port: dsP, portLabel: _bmSelLabel() });
+}
+
+// day → bucket by UTC date so index/stock timestamps line up; intraday → raw ts
+function _bmKey(t) {
+  if (_bmScale === '1d') return new Date(t * 1000).toISOString().slice(0, 10);
+  return String(t);
+}
+function _bmLabel(t) {
+  const d = new Date(t * 1000);
+  if (_bmScale === '1d') return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Align one {t,c} series to the master key list; forward-fill, back-fill the head.
+function _bmAlignSeries(s, keys) {
+  const m = new Map();
+  for (let i = 0; i < s.t.length; i++) if (s.c[i] != null) m.set(_bmKey(s.t[i]), s.c[i]);
+  let first = null;
+  for (const k of keys) if (m.has(k)) { first = m.get(k); break; }
+  const out = []; let last = null;
+  for (const k of keys) {
+    if (m.has(k)) last = m.get(k);
+    out.push(last != null ? last : first);
+  }
+  return out;
+}
+function _bmFfill(arr) {
+  const first = arr.find(v => v != null);
+  let last = null;
+  return arr.map(v => { if (v != null) last = v; return last != null ? last : first; });
+}
+function _bmNorm(arr) {
+  const base = arr.find(v => v != null);
+  if (!base) return arr.map(() => null);
+  return arr.map(v => v != null ? (v / base) * 100 : null);
+}
+
+function _bmRenderChart(d) {
+  if (state.charts['bm-chart']) { state.charts['bm-chart'].destroy(); delete state.charts['bm-chart']; }
+  const legendEl = document.getElementById('bm-legend');
+  if (legendEl) legendEl.innerHTML = '';
+  const canvas = document.getElementById('bm-chart');
+  if (!canvas || !d) return;
+
+  const isDark  = document.documentElement.classList.contains('dark');
+  const gridClr = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+  const tickClr = isDark ? '#5a6278' : '#6b7280';
+
+  const mk = (label, data, color) => ({
+    label, data, borderColor: color, backgroundColor: color,
+    borderWidth: 2, borderDash: [6, 4], tension: 0,
+    pointRadius: 0, pointHoverRadius: 4, pointHitRadius: 12, spanGaps: true
+  });
+  const datasets = [];
+  if (d.nasdaq) datasets.push(mk('NASDAQ', d.nasdaq, _BM_NASDAQ));
+  if (d.sp)     datasets.push(mk('S&P 500', d.sp, _BM_SP));
+  if (d.port)   datasets.push(mk(d.portLabel, d.port, _BM_PORT));
+
+  state.charts['bm-chart'] = new Chart(canvas, {
+    type: 'line',
+    data: { labels: d.labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 400 },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v == null) return ` ${ctx.dataset.label}: —`;
+              const chg = v - 100;
+              return ` ${ctx.dataset.label}: ${v.toFixed(1)} (${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%)`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: gridClr }, ticks: { color: tickClr, maxTicksLimit: 7, maxRotation: 0, autoSkip: true } },
+        y: { grid: { color: gridClr }, ticks: { color: tickClr, callback: v => v.toFixed(0) } }
+      }
+    }
+  });
+
+  if (legendEl) {
+    legendEl.innerHTML = datasets.map(ds =>
+      `<span style="color:${ds.borderColor}"><i></i><span style="color:var(--text)">${_anEsc(ds.label)}</span></span>`
+    ).join('');
+  }
+}
 
 // ── Asset hub (More page) ─────────────────────────────────────────────────────
 

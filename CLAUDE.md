@@ -24,6 +24,8 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **Bigger bottom-nav touch targets (2026-06-30)**: Enlarged the 6-tab bottom nav for comfortable mobile tapping. `.nav-item` now `min-height:52px` + `justify-content:center` (whole icon+label block is a ≥44×44px touch target), padding `8px`→`12px`, icons `20px`→`25px`, label font `9px`→`10.5px`, gap `2px`→`4px`; `#bottom-nav` padding-bottom `var(--safe-bottom)`→`calc(var(--safe-bottom) + 6px)` (more clearance above the iOS home indicator). To keep the taller bar from overlapping content, the reserve was bumped `80px`→`96px` in both `.page` bottom padding and the `#toast` offset. CSS-only, no JS/markup change (single shared nav → applies to every page). No migration. SW cache `myasset-v87`.
 
+> **Benchmark comparison on the Analysis page (2026-07-02)**: The Analysis page now has **two tabs** — **จัดการพอร์ต** (the existing news-brief history + Tools hub) and **เปรียบเทียบ Benchmark** (yellow `#eab308` active-tab style). The benchmark tab plots your portfolio's growth against **NASDAQ (`^IXIC`)** and **S&P 500 (`^GSPC`)**, all **normalized to 100 at the first date** (index comparison, so % return is directly comparable regardless of scale). Controls: a **portfolio pill selector** (multi-select — `Total` + one pill per portfolio, auto-emoji via `_bmEmoji`: 🤖 AI / 🌍 ETF / 🚀 Growth / 💰 Dividend; selecting specifics combines their holdings into one cyan line), a **Timescale** segment (minute `1m` / hour `1h` / **day `1d` default**), and a **Timeframe** segment (1M/3M/6M/**6M default**/1Y/YTD). Chart.js line chart, 3 dashed lines — NASDAQ yellow `#eab308`, S&P teal `#14b8a6`, portfolio cyan `#22d3ee` — index-mode tooltip showing `value (±%)` for all lines, custom bottom legend. **Portfolio line** = Σ(shares × historical close) per date across selected portfolios, from `holdings` × Yahoo daily closes. **New GAS action `benchmarkHistory`** (`_yahooChart(symbol, range, interval)`) returns `{ SYMBOL: {t:[unixSec],c:[close]} }` for a comma-sep symbol list — a thin, never-throwing Yahoo `/v8/chart` proxy. Frontend aligns series by UTC-date bucket (daily) / raw ts (intraday), forward/back-fills gaps, normalizes. `1m` interval is clamped to a `5d` range (Yahoo's minute-data limit). Benchmark tab **lazy-inits** on first open; `loadAnalysis()` always resets to the จัดการพอร์ต tab. No migration. SW cache `myasset-v88`. **⚠️ Paste `gas/Code.gs` into the Apps Script IDE and redeploy the Web App**, else the chart returns "โหลดข้อมูลไม่สำเร็จ". See the **Benchmark** rows in GAS actions + Analysis Key functions.
+
 ## Live URL
 
 **https://chanikacptk.github.io/asset-tracker/** (GitHub Pages, auto-deploys from `main`)
@@ -40,7 +42,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v87`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v88`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -231,6 +233,7 @@ Called from frontend via `callGAS(action, params)`:
 | `searchTicker` | Yahoo Finance search |
 | `testTelegram` | send test message |
 | `sendNewsBrief` | NotificationAgent.sendDailyNewsBrief() — generates + sends the daily holdings-aware Tech-News brief now (manual trigger for testing) |
+| `benchmarkHistory` | `_yahooChart` per symbol — params `symbols` (comma-sep, e.g. `^GSPC,^IXIC,NVDA`), `range` (6mo/1y/ytd/5d…), `interval` (1d/1h/1m). Returns `result.series = { SYMBOL: {t:[unixSec],c:[close]} }`; thin never-throwing Yahoo `/v8/chart` proxy. Backs the Analysis **Benchmark** tab |
 | `scrapeBondInfo` | DataAgent.scrapeBondInfo(bondCode) — scrapes ThaiBMA, caches in bond_master |
 | `refreshMFNav` | DataAgent.refreshMFNav() — daily NAV refresh for MF holdings with an auto source. **Tiered**: Tier 1 Finnomena by `fund_code` (`_fetchFinnomenaNav`) → Tier 2 SEC by `sec_proj_id` (`_secNavForHolding`) → Tier 3 manual (untouched). Stores `current_nav_thb`, `nav_date` (source valuation date), `nav_updated_at`; returns `{checked, updated, skipped}`; never throws/overwrites manual NAV. Holdings query: `or=(sec_proj_id.not.is.null,fund_code.not.is.null)` |
 | `mfLookupClasses` | DataAgent.lookupMFClasses(projId) — returns `[{fund_class_name, last_val, nav_date}]` for the "Find classes" picker |
@@ -339,7 +342,7 @@ insurance     Insurance — INFORMATIONAL ONLY (excluded from net worth). Summar
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
 loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist: per-row **Record Payment** (partial or full — amount added to a running tally), inline **editable due date**, and reset (↺). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
-analysis      Analysis — daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) on top, then a "Tools" hub (DCA/Monthly/Weekly/All Portfolio). Reads daily_news + daily_news_impact directly via Supabase.
+analysis      Analysis — two tabs. **จัดการพอร์ต**: daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) + "Tools" hub (DCA/Monthly/Weekly/All Portfolio); reads daily_news + daily_news_impact via Supabase. **เปรียบเทียบ Benchmark**: normalized-to-100 line chart of your portfolio vs NASDAQ + S&P 500 (portfolio/timescale/timeframe selectors); portfolio series = Σ shares×historical close via GAS `benchmarkHistory` (Yahoo).
 dca           DCA plan approval
 monthly       Monthly Review — trigger generateDCA
 weekly        Weekly Review — trigger analyzeAll
@@ -440,6 +443,15 @@ Nav highlight logic:
 - `_anCard(r)` — sentiment-colored card (`_anSentClass`: positive=green / negative=red / neutral=blue left border): emoji + clickable `$ticker` badge + headline + impact box (holdings only) + `ที่มา:` sources.
 - Date nav: `anSelectDate(d)` (dropdown), `anStepDate(±1)` (‹/›). Ticker filter (nice-to-have): `anFilterTicker(t)` / `anClearFilter()` filter the loaded date's rows to one ticker.
 - Helpers: `_anEsc` (HTML escape), `_bkkToday`, `_anDateLabel` (Today / Yesterday / date). Reads Supabase directly (anon read); no GAS call. The page is data-only — all writes come from `sendDailyNewsBrief()`.
+- **Tabs**: `anSwitchTab('manage'|'benchmark')` toggles `#an-tab-manage` / `#an-tab-benchmark` + the yellow active-tab class. `loadAnalysis()` calls `anSwitchTab('manage')` first, so every visit lands on the news tab; the benchmark tab **lazy-inits** (`initBenchmark`) on first open only.
+
+### Analysis — Benchmark tab
+- `initBenchmark()` — fetches this user's `portfolios`, builds `_bmPorts` (`{id,name,emoji}` via `_bmEmoji`), defaults `_bmSel='total'`, renders pills, `renderBenchmark()`.
+- `renderBenchmark()` — the pipeline: aggregate `shares` per ticker across the selected portfolios (`_bmSelectedIds`) → `symbols = ['^GSPC','^IXIC',...tickers]` → `callGAS('benchmarkHistory', {symbols, range:_bmRange(), interval:_bmScale})` → build master date axis from `^GSPC` → `_bmAlignSeries` (align each symbol to master keys, forward/back-fill) → portfolio series `Σ shares×close` per date (`_bmFfill`) → `_bmNorm` (÷base×100) → `_bmRenderChart`. A `_bmReqSeq` counter drops out-of-order async results.
+- Selectors: `bmTogglePort(id)` (`'total'` = all; picking specifics starts a `Set`, never leaves nothing selected), `bmSetScale`/`bmSetTf` (update `_bmScale`/`_bmTf`, re-render). `_bmRange()` clamps `1m` interval → `5d` (Yahoo minute-data limit).
+- Keying/labels: `_bmKey(t)` buckets by UTC date for daily (aligns index vs stock timestamps) / raw ts for intraday; `_bmLabel(t)` for x-axis.
+- `_bmRenderChart(d)` — destroys/rebuilds the `bm-chart` Chart.js line (3 dashed datasets: NASDAQ `_BM_NASDAQ` #eab308, S&P `_BM_SP` #14b8a6, portfolio `_BM_PORT` #22d3ee), index-mode tooltip `value (±%)`, custom `#bm-legend`.
+- Globals: `_bmScale`, `_bmTf`, `_bmPorts`, `_bmSel` (`'total'` | `Set<id>`), `_bmInited`, `_bmReqSeq`. CSS: `.an-tabs`/`.an-tab`, `.bm-title`/`.bm-sub`/`.bm-lbl`/`.bm-pill`/`.bm-seg-btn`/`.bm-chart-*`/`.bm-legend`. Only reader of `benchmarkHistory`.
 
 ### Thai Bonds
 - `loadBonds()` — fetches holdings, renders KPI cards → donut dashboard → 90d alert → bond list
@@ -556,7 +568,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v87`**. Bump on every `index.html` change.
+Cache name: **`myasset-v88`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

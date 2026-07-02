@@ -114,6 +114,18 @@ function doGet(e) {
     } else if (action === 'sendNewsBrief') {
       NotificationAgent.sendDailyNewsBrief();
       result.sent = true;
+    } else if (action === 'benchmarkHistory') {
+      // symbols: comma-separated (e.g. "^GSPC,^IXIC,NVDA,AAPL"); range (e.g. 6mo/1y/ytd/5d); interval (1d/1h/1m)
+      const symbols  = (e?.parameter?.symbols  || '').split(',').map(function(s){ return s.trim(); }).filter(String);
+      const range    = (e?.parameter?.range    || '6mo').trim();
+      const interval = (e?.parameter?.interval || '1d').trim();
+      if (!symbols.length) throw new Error('symbols required');
+      const series = {};
+      symbols.forEach(function(sym) {
+        const s = _yahooChart(sym, range, interval);   // {t:[],c:[]} or null
+        if (s) series[sym] = s;
+      });
+      result.series = series;
     } else if (action === 'ping') {
       result.message = 'MyAsset+ GAS is alive';
     } else {
@@ -258,6 +270,33 @@ function _yahooHistory(symbol) {
     return out;
   } catch (e) {
     Logger.log('[getHistory] failed for ' + symbol + ': ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * Lightweight timestamped OHLC-close series for the Benchmark comparison chart.
+ * Returns { t:[unixSec,...], c:[close,...] } (chronological, raw — nulls kept so
+ * the frontend can align by timestamp and forward-fill), or null on any failure.
+ * Never throws. `range` = 1mo|3mo|6mo|1y|ytd|5d…, `interval` = 1d|1h|1m.
+ */
+function _yahooChart(symbol, range, interval) {
+  try {
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' +
+      encodeURIComponent(symbol) +
+      '?interval=' + encodeURIComponent(interval || '1d') +
+      '&range='    + encodeURIComponent(range || '6mo');
+    const resp = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    if (resp.getResponseCode() !== 200) return null;
+    const r = JSON.parse(resp.getContentText())?.chart?.result?.[0];
+    if (!r || !r.timestamp) return null;
+    const closes = r.indicators?.quote?.[0]?.close || [];
+    return { t: r.timestamp, c: closes };
+  } catch (e) {
+    Logger.log('[benchmarkHistory] failed for ' + symbol + ': ' + e.message);
     return null;
   }
 }
