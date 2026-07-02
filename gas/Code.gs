@@ -60,6 +60,10 @@ function doGet(e) {
       const hist = _yahooHistory(symbol);
       if (!hist) throw new Error('History not found: ' + symbol);
       result.history = hist;
+    } else if (action === 'getOverview') {
+      const symbol = (e?.parameter?.symbol || '').toUpperCase().trim();
+      if (!symbol) throw new Error('symbol required');
+      result.overview = _yahooOverview(symbol);   // null-safe; fields degrade to null
     } else if (action === 'searchTicker') {
       const q = e?.parameter?.q || '';
       if (!q) throw new Error('q required');
@@ -299,6 +303,109 @@ function _yahooChart(symbol, range, interval) {
     Logger.log('[benchmarkHistory] failed for ' + symbol + ': ' + e.message);
     return null;
   }
+}
+
+/**
+ * Yahoo needs a cookie + crumb pair for the v10 quoteSummary / v7 quote endpoints.
+ * Fetch fc.yahoo.com for a session cookie, then /v1/test/getcrumb. Cached ~30 min
+ * in the script cache. Returns { crumb, cookie } — crumb may be '' if the challenge
+ * fails (we still try the request; some IPs are ungated). Never throws.
+ */
+function _yahooCrumb() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('yh_crumb');
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  try {
+    var r1 = UrlFetchApp.fetch('https://fc.yahoo.com/', {
+      muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    var hdrs = r1.getAllHeaders();
+    var sc = hdrs['Set-Cookie'] || hdrs['set-cookie'] || [];
+    if (!Array.isArray(sc)) sc = [sc];
+    var cookie = sc.map(function (c) { return String(c).split(';')[0]; }).filter(String).join('; ');
+    var r2 = UrlFetchApp.fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0', 'Cookie': cookie }
+    });
+    var crumb = (r2.getContentText() || '').trim();
+    if (r2.getResponseCode() !== 200 || !crumb || crumb.length > 128 || crumb.indexOf('<') >= 0) {
+      return { crumb: '', cookie: cookie };
+    }
+    var out = { crumb: crumb, cookie: cookie };
+    cache.put('yh_crumb', JSON.stringify(out), 1800);
+    return out;
+  } catch (e) {
+    return { crumb: '', cookie: '' };
+  }
+}
+
+/** v10 quoteSummary for `modules`; returns result[0] or null. Tries both query hosts. */
+function _yahooQuoteSummary(symbol, modules) {
+  var c = _yahooCrumb();
+  var bases = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
+  for (var i = 0; i < bases.length; i++) {
+    try {
+      var url = bases[i] + '/v10/finance/quoteSummary/' + encodeURIComponent(symbol) +
+        '?modules=' + encodeURIComponent(modules) +
+        (c && c.crumb ? '&crumb=' + encodeURIComponent(c.crumb) : '');
+      var resp = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Cookie': c ? c.cookie : '' }
+      });
+      if (resp.getResponseCode() === 200) {
+        var res = JSON.parse(resp.getContentText());
+        var out = res && res.quoteSummary && res.quoteSummary.result && res.quoteSummary.result[0];
+        if (out) return out;
+      }
+    } catch (e) { /* try next host */ }
+  }
+  return null;
+}
+
+/**
+ * Overview key-stats for the Ticker Detail modal's Overview tab.
+ * Pulls summaryDetail / defaultKeyStatistics / financialData / price from Yahoo.
+ * Yahoo wraps numbers as { raw, fmt }; we return the raw numbers. Never throws.
+ */
+function _yahooOverview(symbol) {
+  try {
+    var r = _yahooQuoteSummary(symbol, 'summaryDetail,defaultKeyStatistics,financialData,price');
+    if (!r) return null;
+    var ks = r.defaultKeyStatistics || {}, fd = r.financialData || {},
+        sd = r.summaryDetail || {}, pr = r.price || {};
+    var raw = function (o) {
+      if (o == null) return null;
+      if (typeof o === 'number') return o;
+      return (typeof o === 'object' && 'raw' in o) ? o.raw : null;
+    };
+    var pick = function () {
+      for (var i = 0; i < arguments.length; i++) { var v = raw(arguments[i]); if (v != null) return v; }
+      return null;
+    };
+    return {
+      name:          pr.longName || pr.shortName || symbol,
+      price:         pick(pr.regularMarketPrice),
+      volume:        pick(sd.volume, pr.regularMarketVolume),
+      avgVolume:     pick(sd.averageVolume, sd.averageDailyVolume3Month),
+      marketCap:     pick(pr.marketCap, sd.marketCap),
+      dividendYield: pick(sd.dividendYield, sd.trailingAnnualDividendYield),
+      peRatio:       pick(sd.trailingPE),
+      eps:           pick(ks.trailingEps),
+      netIncome:     pick(ks.netIncomeToCommon),
+      revenue:       pick(fd.totalRevenue),
+      floatShares:   pick(ks.floatShares),
+      beta:          pick(ks.beta, sd.beta)
+    };
+  } catch (e) {
+    Logger.log('[getOverview] failed for ' + symbol + ': ' + e.message);
+    return null;
+  }
+}
+
+/** Standalone test — run from the GAS IDE to confirm Overview data is reachable. */
+function testOverview() {
+  ['O', 'AAPL'].forEach(function (sym) {
+    Logger.log(sym + ' → ' + JSON.stringify(_yahooOverview(sym)));
+  });
 }
 
 function _yahooSearch(query) {

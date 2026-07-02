@@ -2251,6 +2251,22 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-spin { width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--accent);
   border-radius:50%;animation:tdspin .7s linear infinite;margin:0 auto 12px; }
 @keyframes tdspin { to { transform:rotate(360deg); } }
+/* Tab bar (Ticker Detail modal — horizontal scrollable pills) */
+.td-tabbar { display:flex;gap:7px;overflow-x:auto;margin:18px 0 4px;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none; }
+.td-tabbar::-webkit-scrollbar { display:none; }
+.td-tab {
+  flex:0 0 auto;padding:8px 15px;border-radius:999px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:12.5px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+.td-tab.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.td-tabpane { padding-top:14px; }
+/* Overview key-stats list (TradingView style) */
+.td-ov-row { display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 2px;border-bottom:1px solid var(--border); }
+.td-ov-row:last-child { border-bottom:none; }
+.td-ov-lbl { font-size:13px;color:var(--text-muted);line-height:1.35; }
+.td-ov-val { font-family:'Instrument Sans',sans-serif;font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap; }
+.td-pane-msg { text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.55;padding:26px 8px; }
 /* DCA Simulator (Ticker Detail modal) */
 .td-dca-input-wrap { display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:0 12px;margin-bottom:10px; }
 .td-dca-input-wrap:focus-within { border-color:var(--accent); }
@@ -3674,6 +3690,12 @@ async function openTickerDetail(ticker) {
   _tdRender(ticker, hist);
 }
 
+// Shared context for the open modal's tabs; per-tab async data is lazy-loaded.
+let _tdCtx = null;               // { ticker, hist, g, price }
+let _tdTab = 'overview';         // active tab id
+let _tdOverview = null;          // cached getOverview result (or {_error:true})
+let _tdOverviewToken = 0;        // guards against out-of-order overview fetches
+
 function _tdRender(ticker, hist) {
   const g = _techGauge(hist.closes);
   const price = hist.price || g.price;
@@ -3684,16 +3706,6 @@ function _tdRender(ticker, hist) {
   const chgStr = chg == null ? '' :
     `${chg >= 0 ? '+' : ''}${fmtUSD(chg)} (${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`;
 
-  // Indicator tags
-  const rsiTag = g.rsi == null ? '—' : g.rsi >= 70 ? 'Overbought' : g.rsi <= 30 ? 'Oversold' : 'Neutral';
-  const rsiClr = g.rsi == null ? 'var(--text-muted)' : g.rsi >= 70 ? 'var(--danger)' : g.rsi <= 30 ? 'var(--success)' : 'var(--text-muted)';
-  const maBull = g.comp.ma > 0.1, maBear = g.comp.ma < -0.1;
-  const maTag = maBull ? 'Bullish' : maBear ? 'Bearish' : 'Mixed';
-  const maClr = maBull ? 'var(--success)' : maBear ? 'var(--danger)' : 'var(--text-muted)';
-  const macdBull = g.macd && g.macd.hist > 0;
-  const macdTag = !g.macd ? '—' : macdBull ? 'Bullish' : 'Bearish';
-  const macdClr = !g.macd ? 'var(--text-muted)' : macdBull ? 'var(--success)' : 'var(--danger)';
-
   // DCA Simulator — only when the user actually holds this ticker (look up current tab's rows).
   // Match case-insensitively: openTickerDetail upper-cases `ticker`, but stored tickers may differ.
   const hold = (Array.isArray(_portTableData) ? _portTableData : [])
@@ -3701,25 +3713,15 @@ function _tdRender(ticker, hist) {
   _tdDca = hold && price > 0
     ? { ticker, price, shares: hold.shares || 0, avgCost: hold.avg_cost_usd || 0 }
     : null;
-  const dcaSection = _tdDca ? `
-    <div class="card2" style="margin-top:16px">
-      <div class="td-sec-lbl">จำลองซื้อเพิ่ม · DCA Simulator</div>
-      <div class="td-dca-input-wrap">
-        <span class="td-dca-sign">$</span>
-        <input id="td-dca-input" class="td-dca-input" type="text" inputmode="decimal"
-               placeholder="100" autocomplete="off" oninput="_tdDcaCalc()">
-      </div>
-      <div class="td-dca-presets">
-        ${[50,100,200,500].map(a => `<button class="td-dca-preset" onclick="_tdDcaSet(${a})">$${a}</button>`).join('')}
-      </div>
-      <div class="td-dca-head">
-        <div></div>
-        <div class="td-dca-col-lbl">Current</div>
-        <div></div>
-        <div class="td-dca-col-lbl" id="td-dca-after-lbl">After</div>
-      </div>
-      <div id="td-dca-result"></div>
-    </div>` : '';
+
+  _tdCtx = { ticker, hist, g, price };
+  _tdOverview = null;            // reset per ticker; overview tab lazy-fetches
+  _tdTab = 'overview';
+
+  const tabs = [
+    ['overview', 'Overview'], ['technicals', 'Technicals'],
+    ['news', 'News'], ['earnings', 'Earnings'], ['simulator', 'Simulator']
+  ];
 
   document.getElementById('td-body').innerHTML = `
     <div class="td-head">
@@ -3739,7 +3741,104 @@ function _tdRender(ticker, hist) {
       </div>
     </div>
 
-    <div class="card2" style="margin-bottom:16px">
+    <div class="td-tabbar">
+      ${tabs.map(([id, lbl]) => `<button class="td-tab" data-tdtab="${id}" onclick="_tdShowTab('${id}')">${lbl}</button>`).join('')}
+    </div>
+    <div id="td-tab-content"></div>`;
+
+  _tdShowTab('overview');
+}
+
+// Switch the visible tab; only the active tab's content is rendered.
+function _tdShowTab(tab) {
+  if (!_tdCtx) return;
+  _tdTab = tab;
+  document.querySelectorAll('#td-modal .td-tab').forEach(b => b.classList.toggle('active', b.dataset.tdtab === tab));
+  const c = document.getElementById('td-tab-content');
+  if (!c) return;
+  if (tab === 'overview') {
+    c.innerHTML = `<div class="td-tabpane">${_tdOverviewHtml()}</div>`;
+    if (!_tdOverview) _tdFetchOverview();
+  } else if (tab === 'technicals') {
+    c.innerHTML = `<div class="td-tabpane">${_tdTechnicalsHtml()}</div>`;
+  } else if (tab === 'news') {
+    c.innerHTML = `<div class="td-tabpane"><div class="card2" id="td-news"><div class="td-sec-lbl">Latest News</div><div class="td-news-load">กำลังโหลดข่าว…</div></div></div>`;
+    _tdLoadNews(_tdCtx.ticker);
+  } else if (tab === 'earnings') {
+    c.innerHTML = `<div class="td-tabpane">${_tdEarningsHtml()}</div>`;
+  } else if (tab === 'simulator') {
+    c.innerHTML = `<div class="td-tabpane">${_tdSimulatorHtml()}</div>`;
+    if (_tdDca) _tdDcaCalc();
+  }
+}
+
+// ── Tab: Overview (key stats from Yahoo quoteSummary via GAS getOverview) ──
+function _tdFmtBig(v, cur) {
+  if (v == null || isNaN(v)) return '—';
+  const neg = v < 0, a = Math.abs(v);
+  let s;
+  if (a >= 1e12) s = (a / 1e12).toFixed(2) + 'T';
+  else if (a >= 1e9) s = (a / 1e9).toFixed(2) + 'B';
+  else if (a >= 1e6) s = (a / 1e6).toFixed(2) + 'M';
+  else if (a >= 1e3) s = (a / 1e3).toFixed(1) + 'K';
+  else s = a.toFixed(0);
+  return (neg ? '-' : '') + (cur ? '$' : '') + s;
+}
+
+function _tdOverviewHtml() {
+  if (!_tdOverview) return `<div class="td-loading"><div class="td-spin"></div>Loading overview…</div>`;
+  if (_tdOverview._error) return `<div class="td-pane-msg">ไม่สามารถโหลดข้อมูลภาพรวมได้ในขณะนี้<br>Overview data is temporarily unavailable.</div>`;
+  const o = _tdOverview, h = _tdCtx.hist;
+  const rows = [];
+  const add = (lbl, val) => rows.push([lbl, val]);
+  add('Volume', _tdFmtBig(o.volume, false));
+  add('Average volume (30D)', _tdFmtBig(o.avgVolume, false));
+  add('Market capitalization', _tdFmtBig(o.marketCap, true));
+  if (o.dividendYield != null && o.dividendYield > 0) {
+    const dy = o.dividendYield <= 1 ? o.dividendYield * 100 : o.dividendYield;   // Yahoo gives a fraction
+    add('Dividend yield (indicated)', dy.toFixed(2) + '%');
+  }
+  add('Price to earnings ratio (TTM)', o.peRatio != null ? o.peRatio.toFixed(2) : '—');
+  add('Basic EPS (TTM)', o.eps != null ? fmtUSD(o.eps) : '—');
+  add('Net income (FY)', _tdFmtBig(o.netIncome, true));
+  add('Revenue (FY)', _tdFmtBig(o.revenue, true));
+  add('Shares float', _tdFmtBig(o.floatShares, false));
+  add('Beta (1Y)', o.beta != null ? o.beta.toFixed(2) : '—');
+  add('52-week high', h && h.week52High != null ? fmtUSD(h.week52High) : '—');
+  add('52-week low', h && h.week52Low != null ? fmtUSD(h.week52Low) : '—');
+  return `<div class="card2">${rows.map(([l, v]) =>
+    `<div class="td-ov-row"><div class="td-ov-lbl">${l}</div><div class="td-ov-val">${v}</div></div>`).join('')}</div>`;
+}
+
+async function _tdFetchOverview() {
+  const token = ++_tdOverviewToken;
+  const ticker = _tdCtx.ticker;
+  let ov = { _error: true };
+  try {
+    const r = await callGAS('getOverview', { symbol: ticker });
+    if (r?.ok && r.overview) ov = r.overview;
+  } catch (_) {}
+  if (token !== _tdOverviewToken) return;                 // superseded by a newer open
+  _tdOverview = ov;
+  if (_tdTab === 'overview' && _tdCtx && _tdCtx.ticker === ticker) {
+    const c = document.getElementById('td-tab-content');
+    if (c) c.innerHTML = `<div class="td-tabpane">${_tdOverviewHtml()}</div>`;
+  }
+}
+
+// ── Tab: Technicals (unchanged gauge, just relocated under the tab) ──
+function _tdTechnicalsHtml() {
+  const g = _tdCtx.g, price = _tdCtx.price;
+  const rsiTag = g.rsi == null ? '—' : g.rsi >= 70 ? 'Overbought' : g.rsi <= 30 ? 'Oversold' : 'Neutral';
+  const rsiClr = g.rsi == null ? 'var(--text-muted)' : g.rsi >= 70 ? 'var(--danger)' : g.rsi <= 30 ? 'var(--success)' : 'var(--text-muted)';
+  const maBull = g.comp.ma > 0.1, maBear = g.comp.ma < -0.1;
+  const maTag = maBull ? 'Bullish' : maBear ? 'Bearish' : 'Mixed';
+  const maClr = maBull ? 'var(--success)' : maBear ? 'var(--danger)' : 'var(--text-muted)';
+  const macdBull = g.macd && g.macd.hist > 0;
+  const macdTag = !g.macd ? '—' : macdBull ? 'Bullish' : 'Bearish';
+  const macdClr = !g.macd ? 'var(--text-muted)' : macdBull ? 'var(--success)' : 'var(--danger)';
+  return `
+    <div class="card2">
       <div class="td-sec-lbl">Technicals · Daily</div>
       <div class="td-gauge-wrap">
         ${_tdGaugeSVG(g.score)}
@@ -3751,24 +3850,36 @@ function _tdRender(ticker, hist) {
         ${_tdIndCard('MA 20/50', g.sma20 != null ? (price >= g.sma20 ? '▲' : '▼') + ' ' + g.sma20.toFixed(1) : '—', maTag, maClr)}
         ${_tdIndCard('MACD', g.macd ? (g.macd.hist >= 0 ? '+' : '') + g.macd.hist.toFixed(2) : '—', macdTag, macdClr)}
       </div>
-    </div>
+    </div>`;
+}
 
-    <div class="card2" style="margin-bottom:16px" id="td-news">
-      <div class="td-sec-lbl">Latest News</div>
-      <div class="td-news-load">กำลังโหลดข่าว…</div>
-    </div>
+// ── Tab: Earnings (built next — placeholder for now) ──
+function _tdEarningsHtml() {
+  return `<div class="td-pane-msg">📊 Earnings — coming next.<br>วันประกาศงบถัดไป และผล EPS/รายได้ 4 ไตรมาสล่าสุด (จริง vs คาดการณ์) จะแสดงที่นี่</div>`;
+}
 
-    <div class="td-sec-lbl">Quick Stats</div>
-    <div class="td-stats">
-      <div class="td-stat"><div class="td-stat-lbl">52-Week High</div><div class="td-stat-val">${hist.week52High != null ? fmtUSD(hist.week52High) : '—'}</div></div>
-      <div class="td-stat"><div class="td-stat-lbl">52-Week Low</div><div class="td-stat-val">${hist.week52Low != null ? fmtUSD(hist.week52Low) : '—'}</div></div>
-      <div class="td-stat"><div class="td-stat-lbl">P/E Ratio</div><div class="td-stat-val">${hist.peRatio != null ? hist.peRatio.toFixed(1) : '—'}</div></div>
-      <div class="td-stat"><div class="td-stat-lbl">Market Cap</div><div class="td-stat-val">${_tdFmtCap(hist.marketCap)}</div></div>
-    </div>
-    ${dcaSection}`;
-
-  if (_tdDca) _tdDcaCalc(); // seed the comparison rows with the current (no-buy) state
-  _tdLoadNews(ticker); // fire-and-forget; fills #td-news when ready
+// ── Tab: Simulator (unchanged DCA calc, just relocated under the tab) ──
+function _tdSimulatorHtml() {
+  if (!_tdDca) return `<div class="td-pane-msg">คุณยังไม่ได้ถือ ${_anEsc(_tdCtx.ticker)} — DCA Simulator จะแสดงเมื่อมีสถานะการถือครองในพอร์ต</div>`;
+  return `
+    <div class="card2">
+      <div class="td-sec-lbl">จำลองซื้อเพิ่ม · DCA Simulator</div>
+      <div class="td-dca-input-wrap">
+        <span class="td-dca-sign">$</span>
+        <input id="td-dca-input" class="td-dca-input" type="text" inputmode="decimal"
+               placeholder="100" autocomplete="off" oninput="_tdDcaCalc()">
+      </div>
+      <div class="td-dca-presets">
+        ${[50, 100, 200, 500].map(a => `<button class="td-dca-preset" onclick="_tdDcaSet(${a})">$${a}</button>`).join('')}
+      </div>
+      <div class="td-dca-head">
+        <div></div>
+        <div class="td-dca-col-lbl">Current</div>
+        <div></div>
+        <div class="td-dca-col-lbl" id="td-dca-after-lbl">After</div>
+      </div>
+      <div id="td-dca-result"></div>
+    </div>`;
 }
 
 // DCA Simulator state for the open Ticker Detail modal: { ticker, price, shares, avgCost }
@@ -3905,6 +4016,7 @@ function closeTickerDetail() {
   document.getElementById('td-modal-overlay').style.display = 'none';
   document.getElementById('td-modal').style.display = 'none';
   _tdDca = null; // clear simulator state so a stale ticker can't be recalculated
+  _tdCtx = null; _tdOverview = null; _tdOverviewToken++; // drop per-ticker tab state
 }
 
 function _srCell(a) {
