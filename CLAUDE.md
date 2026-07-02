@@ -57,6 +57,8 @@ git push origin main   # GitHub Pages auto-deploys in ~60s
 **Always bump `sw.js` cache version** (`myasset-vN`) when `index.html` changes.  
 `index.html` is served **network-first** by the SW — a normal refresh picks up changes after deploy.
 
+**If a deploy doesn't appear** (seen 2026-07-02): the `pages build and deployment` Action can build the artifact fine but then **hang in the deploy step** (`Current status: deployment_queued` → `Timeout reached, aborting!`), leaving the live site on the previous version — even while [githubstatus.com](https://www.githubstatus.com/) shows Pages "operational" (it lags real incidents). A `gh run rerun <id>` may re-hit the same stuck queue; the reliable fix is to **push a fresh (empty) commit** — `git commit --allow-empty -m "chore: re-trigger Pages deploy" && git push` — which starts a new build that usually gets a clean deploy slot. Verify with `curl -s <live>/sw.js | head -1` (expect the new `myasset-vN`) and `gh run list`. Only one Pages deployment runs at a time, so a stuck run blocks new ones. Remember the app is a PWA: after the deploy lands, a home-screen icon still needs the app **fully closed & reopened twice** (1st launch installs the new SW, 2nd serves it) to drop the old cached shell.
+
 ## Project structure
 
 ```
