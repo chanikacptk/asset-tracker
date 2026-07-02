@@ -756,70 +756,30 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     </div>
     <div style="height:12px"></div>
 
-    <!-- tabs: จัดการพอร์ต | เปรียบเทียบ Benchmark -->
-    <div class="an-tabs">
-      <button id="an-tab-btn-manage"    class="an-tab active" onclick="anSwitchTab('manage')">จัดการพอร์ต</button>
-      <button id="an-tab-btn-benchmark" class="an-tab"        onclick="anSwitchTab('benchmark')">เปรียบเทียบ Benchmark</button>
+    <!-- date selector / history -->
+    <div class="an-datebar">
+      <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
+      <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
+      <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
     </div>
 
-    <!-- ── TAB 1: manage (news brief history + tools) ── -->
-    <div id="an-tab-manage">
-      <!-- date selector / history -->
-      <div class="an-datebar">
-        <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
-        <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
-        <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+    <!-- news content -->
+    <div id="analysis-news"></div>
+
+    <!-- tools hub -->
+    <div class="an-tools-head">Tools</div>
+    <div>
+      <div class="more-row" onclick="navigate('dca')">
+        <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
       </div>
-
-      <!-- news content -->
-      <div id="analysis-news"></div>
-
-      <!-- tools hub -->
-      <div class="an-tools-head">Tools</div>
-      <div>
-        <div class="more-row" onclick="navigate('dca')">
-          <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
-        </div>
-        <div class="more-row" onclick="navigate('monthly')">
-          <span class="more-icon">🗓️</span><div><div class="more-label">Monthly Review</div><div class="more-sub">Regenerate DCA plan & summary</div></div><span class="more-arrow">›</span>
-        </div>
-        <div class="more-row" onclick="navigate('weekly')">
-          <span class="more-icon">📆</span><div><div class="more-label">Weekly Review</div><div class="more-sub">AI signals across all portfolios</div></div><span class="more-arrow">›</span>
-        </div>
-        <div class="more-row" onclick="navigate('allportfolio')">
-          <span class="more-icon">📊</span><div><div class="more-label">All Portfolio</div><div class="more-sub">Latest signals for every holding</div></div><span class="more-arrow">›</span>
-        </div>
+      <div class="more-row" onclick="navigate('monthly')">
+        <span class="more-icon">🗓️</span><div><div class="more-label">Monthly Review</div><div class="more-sub">Regenerate DCA plan & summary</div></div><span class="more-arrow">›</span>
       </div>
-    </div>
-
-    <!-- ── TAB 2: benchmark comparison ── -->
-    <div id="an-tab-benchmark" style="display:none">
-      <div class="bm-title">Benchmarks</div>
-      <div class="bm-sub">เปรียบเทียบการเติบโตของพอร์ตคุณกับดัชนีตลาดหุ้นสหรัฐฯ (NASDAQ · S&amp;P 500) — ทุกเส้นถูกปรับฐานเป็น <b>100</b> ณ วันเริ่มต้น จึงเทียบผลตอบแทนแบบ % ได้ตรงกันไม่ว่ามูลค่าจริงจะต่างกันแค่ไหน</div>
-
-      <div class="bm-lbl">พอร์ตโฟลิโอ</div>
-      <div id="bm-port-pills" class="bm-pills"></div>
-
-      <div class="bm-lbl">Timescale</div>
-      <div class="bm-pills">
-        <button class="bm-seg-btn"        data-scale="1m" onclick="bmSetScale('1m',this)">minute</button>
-        <button class="bm-seg-btn"        data-scale="1h" onclick="bmSetScale('1h',this)">hour</button>
-        <button class="bm-seg-btn active"  data-scale="1d" onclick="bmSetScale('1d',this)">day</button>
+      <div class="more-row" onclick="navigate('weekly')">
+        <span class="more-icon">📆</span><div><div class="more-label">Weekly Review</div><div class="more-sub">AI signals across all portfolios</div></div><span class="more-arrow">›</span>
       </div>
-
-      <div class="bm-lbl">Timeframe</div>
-      <div class="bm-pills">
-        <button class="bm-seg-btn"        data-tf="1mo" onclick="bmSetTf('1mo',this)">1M</button>
-        <button class="bm-seg-btn"        data-tf="3mo" onclick="bmSetTf('3mo',this)">3M</button>
-        <button class="bm-seg-btn active"  data-tf="6mo" onclick="bmSetTf('6mo',this)">6M</button>
-        <button class="bm-seg-btn"        data-tf="1y"  onclick="bmSetTf('1y',this)">1Y</button>
-        <button class="bm-seg-btn"        data-tf="ytd" onclick="bmSetTf('ytd',this)">YTD</button>
-      </div>
-
-      <div class="bm-chart-card card">
-        <div id="bm-chart-status" class="bm-status"></div>
-        <div class="bm-chart-wrap"><canvas id="bm-chart"></canvas></div>
-        <div id="bm-legend" class="bm-legend"></div>
+      <div class="more-row" onclick="navigate('allportfolio')">
+        <span class="more-icon">📊</span><div><div class="more-label">All Portfolio</div><div class="more-sub">Latest signals for every holding</div></div><span class="more-arrow">›</span>
       </div>
     </div>
   </div>
@@ -1976,16 +1936,7 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .an-sources { margin-top:9px;font-size:11px;color:var(--text-muted); }
 .an-tools-head { font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:24px 2px 10px; }
 
-/* Analysis tabs (จัดการพอร์ต | เปรียบเทียบ Benchmark) */
-.an-tabs { display:flex;gap:8px;margin-bottom:18px; }
-.an-tab {
-  flex:1;padding:11px 12px;border-radius:11px;border:1px solid var(--border);
-  background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:700;cursor:pointer;
-  transition:background .15s,color .15s;
-}
-.an-tab.active { background:#eab308;border-color:#eab308;color:#1a1205; }
-
-/* Benchmark comparison */
+/* Benchmark comparison (last tab on the US Portfolio page) */
 .bm-title { font-size:21px;font-weight:800;margin:2px 2px 5px; }
 .bm-sub   { font-size:12.5px;line-height:1.6;color:var(--text-muted);margin:0 2px 6px; }
 .bm-lbl   { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 2px 8px; }
@@ -3184,13 +3135,14 @@ async function loadUSPortfolio() {
     return;
   }
 
-  // Build tabs
+  // Build tabs (portfolios + a trailing Benchmark comparison tab)
   const tabsEl = document.getElementById('portfolio-tabs');
   tabsEl.innerHTML = portfolios.map((p, i) => `
     <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" data-portfolio-name="${p.name.replace(/"/g,'&quot;')}" onclick="loadPortfolioTab('${p.id}', this)">
       ${p.name}
     </button>
-  `).join('');
+  `).join('') +
+    `<button class="tab-btn" id="us-benchmark-tab" onclick="showBenchmarkTab(this)">📊 Benchmark</button>`;
 
   // Show metrics wrap with placeholders, then compute combined totals in parallel with first tab
   const mWrap = document.getElementById('us-metrics-wrap');
@@ -5445,7 +5397,6 @@ let _bmScale     = '1d';     // '1m' | '1h' | '1d' (Yahoo interval)
 let _bmTf        = '6mo';    // '1mo' | '3mo' | '6mo' | '1y' | 'ytd'
 let _bmPorts     = [];       // [{id, name, emoji}] for this user's portfolios
 let _bmSel       = 'total';  // 'total' | Set<portfolioId>
-let _bmInited    = false;
 let _bmReqSeq    = 0;        // guards against out-of-order async renders
 const _BM_NASDAQ = '#eab308', _BM_SP = '#14b8a6', _BM_PORT = '#22d3ee';
 
@@ -5463,7 +5414,6 @@ function _anDateLabel(d) {
 }
 
 async function loadAnalysis() {
-  anSwitchTab('manage');   // always land on the news/tools tab
   const uid = state.userId;
   const box = document.getElementById('analysis-news');
   const sel = document.getElementById('an-date-select');
@@ -5574,15 +5524,48 @@ function _anCard(r) {
 function anFilterTicker(t) { _anTickerFilter = (t || '').toUpperCase(); _anPaint(); }
 function anClearFilter()   { _anTickerFilter = null; _anPaint(); }
 
-// ── Benchmark comparison ──────────────────────────────────────────────────────
-// Tabs. Manage tab is the existing news+tools; benchmark lazy-inits on first open.
-function anSwitchTab(tab) {
-  const isBm = tab === 'benchmark';
-  document.getElementById('an-tab-manage').style.display    = isBm ? 'none' : '';
-  document.getElementById('an-tab-benchmark').style.display = isBm ? '' : 'none';
-  document.getElementById('an-tab-btn-manage').classList.toggle('active', !isBm);
-  document.getElementById('an-tab-btn-benchmark').classList.toggle('active', isBm);
-  if (isBm && !_bmInited) initBenchmark();
+// ── Benchmark comparison (last tab on the US Portfolio page) ───────────────────
+// Rendered into #portfolio-content, replacing whatever portfolio tab was shown.
+function _bmMarkup() {
+  const scaleBtn = (v, lbl, on) =>
+    `<button class="bm-seg-btn${on ? ' active' : ''}" data-scale="${v}" onclick="bmSetScale('${v}',this)">${lbl}</button>`;
+  const tfBtn = (v, lbl, on) =>
+    `<button class="bm-seg-btn${on ? ' active' : ''}" data-tf="${v}" onclick="bmSetTf('${v}',this)">${lbl}</button>`;
+  return `
+    <div class="bm-title">Benchmark Comparison</div>
+    <div class="bm-sub">เปรียบเทียบการเติบโตของพอร์ตคุณกับดัชนีตลาดหุ้นสหรัฐฯ (NASDAQ · S&amp;P 500) — ทุกเส้นถูกปรับฐานเป็น <b>100</b> ณ วันเริ่มต้น จึงเทียบผลตอบแทนเป็น % ได้ตรงกัน ไม่ว่ามูลค่าจริงจะต่างกันแค่ไหน</div>
+
+    <div class="bm-lbl">พอร์ตโฟลิโอ</div>
+    <div id="bm-port-pills" class="bm-pills"></div>
+
+    <div class="bm-lbl">Timescale</div>
+    <div class="bm-pills">
+      ${scaleBtn('1m', 'minute', _bmScale === '1m')}
+      ${scaleBtn('1h', 'hour',   _bmScale === '1h')}
+      ${scaleBtn('1d', 'day',    _bmScale === '1d')}
+    </div>
+
+    <div class="bm-lbl">Timeframe</div>
+    <div class="bm-pills">
+      ${tfBtn('1mo', '1M',  _bmTf === '1mo')}
+      ${tfBtn('3mo', '3M',  _bmTf === '3mo')}
+      ${tfBtn('6mo', '6M',  _bmTf === '6mo')}
+      ${tfBtn('1y',  '1Y',  _bmTf === '1y')}
+      ${tfBtn('ytd', 'YTD', _bmTf === 'ytd')}
+    </div>
+
+    <div class="bm-chart-card card">
+      <div id="bm-chart-status" class="bm-status"></div>
+      <div class="bm-chart-wrap"><canvas id="bm-chart"></canvas></div>
+      <div id="bm-legend" class="bm-legend"></div>
+    </div>`;
+}
+
+function showBenchmarkTab(btn) {
+  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('portfolio-content').innerHTML = _bmMarkup();
+  initBenchmark();
 }
 
 function _bmEmoji(p) {
@@ -5595,11 +5578,13 @@ function _bmEmoji(p) {
 }
 
 async function initBenchmark() {
-  _bmInited = true;
-  const { data: ports } = await sb.from('portfolios')
-    .select('id, name, type').eq('user_id', state.userId).order('created_at');
-  _bmPorts = (ports || []).map(p => ({ id: p.id, name: p.name, emoji: _bmEmoji(p) }));
-  _bmSel = 'total';
+  if (!_bmPorts.length) {
+    const { data: ports } = await sb.from('portfolios')
+      .select('id, name, type').eq('user_id', state.userId).order('created_at');
+    _bmPorts = (ports || []).map(p => ({ id: p.id, name: p.name, emoji: _bmEmoji(p) }));
+  }
+  // Drop any stale ids from a previous selection; keep the choice across tab switches.
+  if (_bmSel !== 'total' && ![..._bmSel].every(id => _bmPorts.some(p => p.id === id))) _bmSel = 'total';
   _bmRenderPills();
   renderBenchmark();
 }
