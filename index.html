@@ -316,7 +316,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
 
     <!-- Net worth hero -->
     <div style="text-align:center;padding:20px 0 14px">
-      <div class="m-lbl" style="margin-bottom:10px">Combined Net Worth</div>
+      <div class="m-lbl" style="margin-bottom:10px" data-i18n="db.networth">Combined Net Worth</div>
       <div id="db-total" style="font-size:36px;font-weight:800;letter-spacing:-1px;line-height:1">—</div>
       <div id="db-pnl" style="font-size:13px;margin-top:10px;min-height:18px"></div>
     </div>
@@ -327,8 +327,8 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <!-- Me / Combined toggle -->
     <div style="display:flex;justify-content:center;margin-bottom:14px">
       <div style="display:flex;background:var(--surface2);border-radius:20px;padding:3px;gap:2px">
-        <button id="donut-mode-me"       onclick="switchDonutMode('me')"       style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s">Me</button>
-        <button id="donut-mode-combined" onclick="switchDonutMode('combined')" style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s">Combined</button>
+        <button id="donut-mode-me"       onclick="switchDonutMode('me')"       style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s" data-i18n="db.me">Me</button>
+        <button id="donut-mode-combined" onclick="switchDonutMode('combined')" style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s" data-i18n="db.combined">Combined</button>
       </div>
     </div>
 
@@ -348,7 +348,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- US PORTFOLIO -->
   <div id="page-us" class="page">
     <div class="top-bar">
-      <div class="page-title">US Portfolio</div>
+      <div class="page-title" data-i18n="title.us">US Portfolio</div>
       <div style="display:flex;gap:8px;align-items:center">
         <div class="currency-toggle">
           <button class="currency-btn active" onclick="setCurrency('USD')" id="us-usd-btn">USD</button>
@@ -373,7 +373,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
 
   <!-- ASSET (hub for gold, cash, insurance, private, funds, partner) -->
   <div id="page-more" class="page">
-    <div class="top-bar"><div class="page-title">Asset</div></div>
+    <div class="top-bar"><div class="page-title" data-i18n="title.asset">Asset</div></div>
     <div style="height:12px"></div>
     <div id="more-content">
       <div class="more-row" onclick="navigate('gold')">
@@ -418,7 +418,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- GOLD -->
   <div id="page-gold" class="page">
     <div class="top-bar">
-      <div class="page-title">Gold</div>
+      <div class="page-title" data-i18n="title.gold">Gold</div>
       <div style="display:flex;gap:8px;align-items:center">
         <div class="currency-toggle">
           <button class="currency-btn active" onclick="setCurrency('USD')" id="gold-usd-btn">USD</button>
@@ -444,7 +444,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- MUTUAL FUNDS -->
   <div id="page-mf" class="page">
     <div class="top-bar">
-      <div class="page-title">Mutual Funds</div>
+      <div class="page-title" data-i18n="title.mf">Mutual Funds</div>
       <div style="display:flex;gap:8px;align-items:center">
         <button id="mf-refresh-btn" onclick="refreshMFNav()" title="Refresh NAV from SEC"
           style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
@@ -663,7 +663,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- CASH -->
   <div id="page-cash" class="page">
     <div class="top-bar">
-      <div class="page-title">Cash</div>
+      <div class="page-title" data-i18n="title.cash">Cash</div>
       <button onclick="openAddCash()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
@@ -673,7 +673,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- INSURANCE -->
   <div id="page-insurance" class="page">
     <div class="top-bar">
-      <div class="page-title">Insurance</div>
+      <div class="page-title" data-i18n="title.insurance">Insurance</div>
       <button onclick="openAddIns()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
@@ -683,7 +683,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- PRIVATE INVESTMENTS -->
   <div id="page-private" class="page">
     <div class="top-bar">
-      <div class="page-title">Private Investment</div>
+      <div class="page-title" data-i18n="title.private">Private Investment</div>
       <button onclick="openAddPriv()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
@@ -693,7 +693,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- LOANS (receivables) -->
   <div id="page-loans" class="page">
     <div class="top-bar">
-      <div class="page-title" id="loans-title">Loan</div>
+      <div class="page-title" id="loans-title" data-i18n="title.loans">Loan</div>
       <button id="loans-add-btn" onclick="openAddLoan()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
@@ -704,7 +704,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- THAI BONDS -->
   <div id="page-bonds" class="page">
     <div class="top-bar">
-      <div class="page-title">Bond</div>
+      <div class="page-title" data-i18n="title.bonds">Bond</div>
       <button onclick="openAddBond()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
@@ -734,7 +734,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
 
   <!-- DCA PLAN -->
   <div id="page-dca" class="page">
-    <div class="top-bar"><div class="page-title">DCA Plan</div></div>
+    <div class="top-bar"><div class="page-title" data-i18n="title.dca">DCA Plan</div></div>
     <div style="height:12px"></div>
     <div id="dca-content"></div>
   </div>
@@ -742,7 +742,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- PARTNER VIEW -->
   <div id="page-partner" class="page">
     <div class="top-bar">
-      <div class="page-title">Partner <span class="partner-badge">Read Only</span></div>
+      <div class="page-title"><span data-i18n="title.partner">Partner</span> <span class="partner-badge" data-i18n="badge.readonly">Read Only</span></div>
     </div>
     <div style="height:12px"></div>
     <div id="partner-content"></div>
@@ -751,7 +751,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- ANALYSIS (daily Tech-News brief history + hub for DCA/reviews) -->
   <div id="page-analysis" class="page">
     <div class="top-bar">
-      <div class="page-title">Analysis</div>
+      <div class="page-title" data-i18n="title.analysis">Analysis</div>
       <button onclick="loadAnalysis()" title="Refresh" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:0 4px">↻</button>
     </div>
     <div style="height:12px"></div>
@@ -787,7 +787,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- MONTHLY REVIEW -->
   <div id="page-monthly" class="page">
     <div class="top-bar">
-      <div class="page-title">Monthly Review</div>
+      <div class="page-title" data-i18n="title.monthly">Monthly Review</div>
       <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
     </div>
     <div style="height:12px"></div>
@@ -802,7 +802,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- WEEKLY REVIEW -->
   <div id="page-weekly" class="page">
     <div class="top-bar">
-      <div class="page-title">Weekly Review</div>
+      <div class="page-title" data-i18n="title.weekly">Weekly Review</div>
       <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
     </div>
     <div style="height:12px"></div>
@@ -817,7 +817,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <!-- ALL PORTFOLIO -->
   <div id="page-allportfolio" class="page">
     <div class="top-bar">
-      <div class="page-title">All Portfolio</div>
+      <div class="page-title" data-i18n="title.allportfolio">All Portfolio</div>
       <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
     </div>
     <div style="height:12px"></div>
@@ -826,13 +826,13 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
 
   <!-- SETTINGS -->
   <div id="page-settings" class="page">
-    <div class="top-bar"><div class="page-title">Settings</div></div>
+    <div class="top-bar"><div class="page-title" data-i18n="title.settings">Settings</div></div>
     <div style="height:16px"></div>
 
     <!-- Theme toggle -->
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div>
-        <div style="font-size:15px;font-weight:600">Appearance</div>
+        <div style="font-size:15px;font-weight:600" data-i18n="set.appearance">Appearance</div>
         <div style="font-size:12px;color:var(--text-muted)" id="theme-label">Dark mode</div>
       </div>
       <div class="theme-toggle-track" onclick="toggleTheme()">
@@ -840,15 +840,27 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
       </div>
     </div>
 
+    <!-- Language toggle -->
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:15px;font-weight:600" data-i18n="set.language">Language</div>
+        <div style="font-size:12px;color:var(--text-muted)" data-i18n="set.language.sub">App display language</div>
+      </div>
+      <div style="display:flex;background:var(--surface2);border-radius:20px;padding:3px;gap:2px">
+        <button class="lang-btn" data-lang="en" onclick="setLang('en')" style="padding:6px 16px;border-radius:16px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s">EN</button>
+        <button class="lang-btn" data-lang="th" onclick="setLang('th')" style="padding:6px 16px;border-radius:16px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s">ไทย</button>
+      </div>
+    </div>
+
     <!-- Profile: avatar + editable name -->
     <div class="card" style="display:flex;align-items:center;gap:16px">
       <button class="avatar-btn" id="settings-avatar-btn" onclick="toggleEmojiPicker()" title="Change avatar">😊</button>
       <div style="flex:1">
-        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Display Name</div>
-        <input id="settings-name-input" type="text" maxlength="20" placeholder="Your name"
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px" data-i18n="set.displayname">Display Name</div>
+        <input id="settings-name-input" type="text" maxlength="20" placeholder="Your name" data-i18n-ph="set.namePh"
           style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-weight:600">
       </div>
-      <button onclick="saveProfile()" style="padding:8px 14px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;flex-shrink:0">Save</button>
+      <button onclick="saveProfile()" style="padding:8px 14px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;flex-shrink:0" data-i18n="common.save">Save</button>
     </div>
     <!-- Emoji picker (hidden by default) -->
     <div id="emoji-picker" style="display:none" class="card">
@@ -856,9 +868,9 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     </div>
     <div id="settings-profile-status" style="font-size:12px;color:var(--text-muted);margin:-8px 0 8px;min-height:16px;padding:0 4px"></div>
 
-    <button class="btn btn-danger" onclick="logout()" style="margin-bottom:16px">Log Out</button>
+    <button class="btn btn-danger" onclick="logout()" style="margin-bottom:16px" data-i18n="set.logout">Log Out</button>
 
-    <div class="section-header">Google Apps Script</div>
+    <div class="section-header" data-i18n="set.gas">Google Apps Script</div>
     <div class="card">
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
         Web App URL — used to trigger agents from the app.<br>
@@ -871,41 +883,41 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
         style="width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;margin-bottom:10px"
         oninput="document.getElementById('settings-gas-url').style.borderColor='var(--border)'"
       >
-      <button class="btn btn-primary" onclick="saveGasUrl()">Save URL</button>
+      <button class="btn btn-primary" onclick="saveGasUrl()" data-i18n="set.saveUrl">Save URL</button>
       <div id="settings-gas-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
     </div>
 
-    <div class="section-header">Telegram Notifications</div>
+    <div class="section-header" data-i18n="set.telegram">Telegram Notifications</div>
     <div class="card">
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
         Your Chat ID — get it by messaging <em>@userinfobot</em> on Telegram.
       </div>
 
-      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">My Chat ID</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" data-i18n="set.myChatId">My Chat ID</div>
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input id="settings-my-chat-id" type="text" placeholder="e.g. 7639152790"
           style="flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
-        <button onclick="saveChatId('my')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap">Save</button>
+        <button onclick="saveChatId('my')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
       </div>
       <div id="settings-my-chat-status" style="font-size:12px;color:var(--text-muted);margin-bottom:14px;min-height:16px"></div>
 
-      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Partner Chat ID</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px" data-i18n="set.partnerChatId">Partner Chat ID</div>
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input id="settings-partner-chat-id" type="text" placeholder="e.g. 8450768699"
           style="flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
-        <button onclick="saveChatId('partner')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap">Save</button>
+        <button onclick="saveChatId('partner')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
       </div>
       <div id="settings-partner-chat-status" style="font-size:12px;color:var(--text-muted);margin-bottom:16px;min-height:16px"></div>
 
-      <button class="btn btn-primary" onclick="testTelegram()" id="settings-test-tg-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
+      <button class="btn btn-primary" onclick="testTelegram()" id="settings-test-tg-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)" data-i18n="set.testNotif">
         🤖 Send Test Notification
       </button>
       <div id="settings-tg-test-status" style="font-size:12px;margin-top:8px;min-height:16px"></div>
     </div>
 
-    <div class="section-header">Market Data</div>
+    <div class="section-header" data-i18n="set.market">Market Data</div>
     <div class="card">
-      <div class="section-header" style="margin-top:0">Exchange Rate</div>
+      <div class="section-header" style="margin-top:0" data-i18n="set.exRate">Exchange Rate</div>
       <div id="settings-rate" class="text-muted" style="font-size:14px">Loading...</div>
     </div>
   </div>
@@ -914,27 +926,27 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <nav id="bottom-nav">
     <button class="nav-item active" onclick="navigate('dashboard')" id="nav-dashboard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Home
+      <span data-i18n="nav.home">Home</span>
     </button>
     <button class="nav-item" onclick="navigate('us')" id="nav-us">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-      US
+      <span data-i18n="nav.us">US</span>
     </button>
     <button class="nav-item" onclick="navigate('cash')" id="nav-cash">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 12h.01M18 12h.01"/></svg>
-      Cash
+      <span data-i18n="nav.cash">Cash</span>
     </button>
     <button class="nav-item" onclick="navigate('more')" id="nav-more">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-      Asset
+      <span data-i18n="nav.asset">Asset</span>
     </button>
     <button class="nav-item" onclick="navigate('analysis')" id="nav-analysis">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-      Analysis
+      <span data-i18n="nav.analysis">Analysis</span>
     </button>
     <button class="nav-item" onclick="navigate('settings')" id="nav-settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Setting
+      <span data-i18n="nav.settings">Setting</span>
     </button>
   </nav>
 
@@ -2026,6 +2038,7 @@ html.dark .theme-toggle-track { background:var(--accent); border-color:var(--acc
   background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:transform 0.2s;
 }
 html.dark .theme-toggle-thumb { transform:translateX(20px); }
+.lang-btn.active { background:var(--accent); color:#fff; }
 
 /* ── Dashboard top bar ────────────────────────────────────────────────────── */
 .db-totals { flex:1;min-width:0; }
@@ -2477,6 +2490,7 @@ const state = {
   userAvatar: '😊',
   partnerId: null,
   currency: 'USD',
+  lang: 'en',
   usdThb: 33.5,
   currentPage: 'dashboard',
   mfCategory: 'all',
@@ -2598,6 +2612,99 @@ function fmtPct(v) { const s = v >= 0 ? '+' : ''; return s + (v || 0).toFixed(2)
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
+// ── i18n (Thai / English) ──────────────────────────────────────────────────────
+// Core-UI translations: bottom nav, page titles, Settings, Home dashboard, common
+// buttons. Static text carries a `data-i18n` (textContent) or `data-i18n-ph`
+// (placeholder) attribute; JS-rendered strings call t(). setLang() re-sweeps the
+// static DOM and re-renders the current page so dynamic strings pick up the change.
+const I18N = {
+  en: {
+    // bottom nav
+    'nav.home':'Home','nav.us':'US','nav.cash':'Cash','nav.asset':'Asset','nav.analysis':'Analysis','nav.settings':'Setting',
+    // page titles
+    'title.us':'US Portfolio','title.asset':'Asset','title.gold':'Gold','title.mf':'Mutual Funds',
+    'title.cash':'Cash','title.insurance':'Insurance','title.private':'Private Investment','title.loans':'Loan',
+    'title.bonds':'Bond','title.dca':'DCA Plan','title.partner':'Partner','title.analysis':'Analysis',
+    'title.monthly':'Monthly Review','title.weekly':'Weekly Review','title.allportfolio':'All Portfolio','title.settings':'Settings',
+    'badge.readonly':'Read Only',
+    // dashboard
+    'db.networth':'Combined Net Worth','db.me':'Me','db.combined':'Combined','common.loading':'Loading…',
+    // settings
+    'set.appearance':'Appearance','set.darkmode':'Dark mode','set.lightmode':'Light mode',
+    'set.language':'Language','set.language.sub':'App display language',
+    'set.displayname':'Display Name','set.namePh':'Your name','common.save':'Save','set.logout':'Log Out',
+    'set.gas':'Google Apps Script','set.gas.desc':'Web App URL — used to trigger agents from the app.',
+    'set.saveUrl':'Save URL','set.telegram':'Telegram Notifications',
+    'set.tg.desc':'Your Chat ID — get it by messaging @userinfobot on Telegram.',
+    'set.myChatId':'My Chat ID','set.partnerChatId':'Partner Chat ID','set.testNotif':'🤖 Send Test Notification',
+    'set.market':'Market Data','set.exRate':'Exchange Rate',
+    // benchmark (US Portfolio → Benchmark tab)
+    'bm.title':'Benchmark Comparison',
+    'bm.sub':'Compare your portfolio growth against US market indices (NASDAQ · S&amp;P 500) — every line is rebased to <b>100</b> at the start date, so % returns line up regardless of how different the actual values are.',
+    'bm.portfolio':'Portfolio','bm.timescale':'Timescale','bm.timeframe':'Timeframe',
+    'bm.minute':'minute','bm.hour':'hour','bm.day':'day','bm.total':'Total','bm.portfoliosSuffix':'portfolios',
+    'bm.loading':'Loading data…','bm.loadFail':'Failed to load — please try again',
+  },
+  th: {
+    'nav.home':'หน้าหลัก','nav.us':'หุ้น US','nav.cash':'เงินสด','nav.asset':'สินทรัพย์','nav.analysis':'วิเคราะห์','nav.settings':'ตั้งค่า',
+    'title.us':'พอร์ตหุ้น US','title.asset':'สินทรัพย์','title.gold':'ทองคำ','title.mf':'กองทุนรวม',
+    'title.cash':'เงินสด','title.insurance':'ประกัน','title.private':'เงินลงทุนส่วนตัว','title.loans':'เงินให้กู้',
+    'title.bonds':'พันธบัตร','title.dca':'แผน DCA','title.partner':'พาร์ทเนอร์','title.analysis':'วิเคราะห์',
+    'title.monthly':'รีวิวรายเดือน','title.weekly':'รีวิวรายสัปดาห์','title.allportfolio':'ทุกพอร์ต','title.settings':'ตั้งค่า',
+    'badge.readonly':'อ่านอย่างเดียว',
+    'db.networth':'มูลค่าสุทธิรวม','db.me':'ของฉัน','db.combined':'รวม','common.loading':'กำลังโหลด…',
+    'set.appearance':'การแสดงผล','set.darkmode':'โหมดมืด','set.lightmode':'โหมดสว่าง',
+    'set.language':'ภาษา','set.language.sub':'ภาษาที่แสดงในแอป',
+    'set.displayname':'ชื่อที่แสดง','set.namePh':'ชื่อของคุณ','common.save':'บันทึก','set.logout':'ออกจากระบบ',
+    'set.gas':'Google Apps Script','set.gas.desc':'Web App URL — ใช้เรียกใช้งานเอเจนต์จากแอป',
+    'set.saveUrl':'บันทึก URL','set.telegram':'การแจ้งเตือน Telegram',
+    'set.tg.desc':'Chat ID ของคุณ — ทักหา @userinfobot ใน Telegram เพื่อรับ',
+    'set.myChatId':'Chat ID ของฉัน','set.partnerChatId':'Chat ID พาร์ทเนอร์','set.testNotif':'🤖 ส่งการแจ้งเตือนทดสอบ',
+    'set.market':'ข้อมูลตลาด','set.exRate':'อัตราแลกเปลี่ยน',
+    'bm.title':'เปรียบเทียบกับดัชนีตลาด',
+    'bm.sub':'เปรียบเทียบการเติบโตของพอร์ตคุณกับดัชนีตลาดหุ้นสหรัฐฯ (NASDAQ · S&amp;P 500) — ทุกเส้นถูกปรับฐานเป็น <b>100</b> ณ วันเริ่มต้น จึงเทียบผลตอบแทนเป็น % ได้ตรงกัน ไม่ว่ามูลค่าจริงจะต่างกันแค่ไหน',
+    'bm.portfolio':'พอร์ตโฟลิโอ','bm.timescale':'ช่วงเวลา','bm.timeframe':'กรอบเวลา',
+    'bm.minute':'นาที','bm.hour':'ชั่วโมง','bm.day':'วัน','bm.total':'ทั้งหมด','bm.portfoliosSuffix':'พอร์ต',
+    'bm.loading':'กำลังโหลดข้อมูล…','bm.loadFail':'โหลดข้อมูลไม่สำเร็จ — ลองใหม่อีกครั้ง',
+  }
+};
+
+function t(key) {
+  const L = I18N[state.lang] || I18N.en;
+  return (key in L) ? L[key] : (I18N.en[key] ?? key);
+}
+
+function applyStaticLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  document.documentElement.lang = state.lang;
+}
+
+function initLang() {
+  state.lang = localStorage.getItem('lang') || 'en';
+  applyStaticLang();
+  _syncLangUI();
+}
+
+function setLang(lang) {
+  if (lang !== 'th' && lang !== 'en') return;
+  state.lang = lang;
+  localStorage.setItem('lang', lang);
+  applyStaticLang();
+  _syncLangUI();
+  _syncThemeUI();               // theme label is translated
+  loadPage(state.currentPage);  // re-render dynamic strings in the new language
+}
+
+function _syncLangUI() {
+  document.querySelectorAll('.lang-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.lang === state.lang));
+}
+
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   document.documentElement.classList.toggle('dark', saved === 'dark');
@@ -2614,7 +2721,7 @@ function _syncThemeUI() {
   const isDark = document.documentElement.classList.contains('dark');
   document.querySelectorAll('.theme-btn').forEach(b => b.textContent = isDark ? '☀️' : '🌙');
   const lbl = document.getElementById('theme-label');
-  if (lbl) lbl.textContent = isDark ? 'Dark mode' : 'Light mode';
+  if (lbl) lbl.textContent = isDark ? t('set.darkmode') : t('set.lightmode');
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -2650,7 +2757,7 @@ async function loadDashboard() {
   document.getElementById('db-avatar').textContent   = state.userAvatar || '😊';
   document.getElementById('db-username').textContent = state.userName || 'Me';
   document.getElementById('db-rate-val').textContent = state.usdThb.toFixed(2);
-  document.getElementById('db-total').textContent    = 'Loading…';
+  document.getElementById('db-total').textContent    = t('common.loading');
 
   // Fetch both users in parallel
   const empty = { totalUSD: 0, costBasisUSD: 0, gainLossUSD: 0, portfolios: [],
@@ -5746,20 +5853,20 @@ function _bmMarkup() {
   const tfBtn = (v, lbl, on) =>
     `<button class="bm-seg-btn${on ? ' active' : ''}" data-tf="${v}" onclick="bmSetTf('${v}',this)">${lbl}</button>`;
   return `
-    <div class="bm-title">Benchmark Comparison</div>
-    <div class="bm-sub">เปรียบเทียบการเติบโตของพอร์ตคุณกับดัชนีตลาดหุ้นสหรัฐฯ (NASDAQ · S&amp;P 500) — ทุกเส้นถูกปรับฐานเป็น <b>100</b> ณ วันเริ่มต้น จึงเทียบผลตอบแทนเป็น % ได้ตรงกัน ไม่ว่ามูลค่าจริงจะต่างกันแค่ไหน</div>
+    <div class="bm-title">${t('bm.title')}</div>
+    <div class="bm-sub">${t('bm.sub')}</div>
 
-    <div class="bm-lbl">พอร์ตโฟลิโอ</div>
+    <div class="bm-lbl">${t('bm.portfolio')}</div>
     <div id="bm-port-pills" class="bm-pills"></div>
 
-    <div class="bm-lbl">Timescale</div>
+    <div class="bm-lbl">${t('bm.timescale')}</div>
     <div class="bm-pills">
-      ${scaleBtn('1m', 'minute', _bmScale === '1m')}
-      ${scaleBtn('1h', 'hour',   _bmScale === '1h')}
-      ${scaleBtn('1d', 'day',    _bmScale === '1d')}
+      ${scaleBtn('1m', t('bm.minute'), _bmScale === '1m')}
+      ${scaleBtn('1h', t('bm.hour'),   _bmScale === '1h')}
+      ${scaleBtn('1d', t('bm.day'),    _bmScale === '1d')}
     </div>
 
-    <div class="bm-lbl">Timeframe</div>
+    <div class="bm-lbl">${t('bm.timeframe')}</div>
     <div class="bm-pills">
       ${tfBtn('1mo', '1M',  _bmTf === '1mo')}
       ${tfBtn('3mo', '3M',  _bmTf === '3mo')}
@@ -5806,7 +5913,7 @@ async function initBenchmark() {
 function _bmRenderPills() {
   const el = document.getElementById('bm-port-pills');
   const isTotal = _bmSel === 'total';
-  let html = `<button class="bm-pill ${isTotal ? 'active' : ''}" onclick="bmTogglePort('total')">Total</button>`;
+  let html = `<button class="bm-pill ${isTotal ? 'active' : ''}" onclick="bmTogglePort('total')">${t('bm.total')}</button>`;
   html += _bmPorts.map(p => {
     const on = !isTotal && _bmSel.has(p.id);
     return `<button class="bm-pill ${on ? 'active' : ''}" onclick="bmTogglePort('${p.id}')">${p.emoji} ${_anEsc(p.name)}</button>`;
@@ -5849,9 +5956,9 @@ function _bmSelectedIds() {
   return _bmSel === 'total' ? _bmPorts.map(p => p.id) : [..._bmSel];
 }
 function _bmSelLabel() {
-  if (_bmSel === 'total') return 'Total';
+  if (_bmSel === 'total') return t('bm.total');
   const names = _bmPorts.filter(p => _bmSel.has(p.id)).map(p => p.name);
-  return names.length <= 2 ? names.join(' + ') : `${names.length} portfolios`;
+  return names.length <= 2 ? names.join(' + ') : `${names.length} ${t('bm.portfoliosSuffix')}`;
 }
 
 function _bmStatus(msg) {
@@ -5861,7 +5968,7 @@ function _bmStatus(msg) {
 
 async function renderBenchmark() {
   const seq = ++_bmReqSeq;
-  _bmStatus('กำลังโหลดข้อมูล…');
+  _bmStatus(t('bm.loading'));
   _bmRenderChart(null);   // clear while loading
 
   // 1) aggregate shares per ticker across the selected portfolios
@@ -5884,7 +5991,7 @@ async function renderBenchmark() {
     symbols: symbols.join(','), range: _bmRange(), interval: _bmScale
   });
   if (seq !== _bmReqSeq) return;   // a newer request superseded this one
-  if (!resp || !resp.ok || !resp.series) { _bmStatus('โหลดข้อมูลไม่สำเร็จ — ลองใหม่อีกครั้ง'); return; }
+  if (!resp || !resp.ok || !resp.series) { _bmStatus(t('bm.loadFail')); return; }
   const series = resp.series;
   if (!series['^GSPC'] && !series['^IXIC']) { _bmStatus('ไม่มีข้อมูลดัชนีในช่วงเวลานี้'); return; }
 
@@ -6688,7 +6795,7 @@ async function loadLoans() {
   document.getElementById('loans-list-panel').style.display = 'block';
   document.getElementById('loans-detail-panel').style.display = 'none';
   document.getElementById('loans-add-btn').style.display = 'flex';
-  document.getElementById('loans-title').textContent = 'Loan';
+  document.getElementById('loans-title').textContent = t('title.loans');
   _selectedLoanId = null;
 
   const { data: loans } = await sb.from('loans')
@@ -8247,6 +8354,7 @@ function showToast(msg) {
 
 (function init() {
   initTheme();
+  initLang();
   // Check for existing session
   const saved = localStorage.getItem('session');
   if (saved) {
