@@ -8062,13 +8062,16 @@ async function _dcaRefresh() {
   await sb.from('dca_plans').update({ total_budget_usd: budget }).eq('id', plan.id);
 
   const generated = await _dcaGenerate(_dcaPortId, budget);
-  if (!generated.length) { showToast('No underweight tickers to suggest'); }
   await _dcaSyncItems(plan.id, generated);
-  showToast('Suggestions refreshed');
+  if (!generated.length) showToast('No holdings in this portfolio');
+  else if (!generated.some(g => g.suggested > 0)) showToast('Refreshed — no underweight tickers to suggest');
+  else showToast('Suggestions refreshed');
   await _dcaRenderActive();
 }
 
-// Gap-based allocation: underweight tickers share the budget by gap size
+// Returns ALL holdings; only underweight tickers share the budget (∝ gap).
+// Overweight / no-target tickers are listed too (suggested 0) so the user can
+// still plan/buy them manually — they just get no auto-suggestion.
 async function _dcaGenerate(portId, budget) {
   const { data: holdings } = await sb.from('holdings')
     .select('ticker, target_pct, shares, avg_cost_usd').eq('portfolio_id', portId);
@@ -8078,21 +8081,23 @@ async function _dcaGenerate(portId, budget) {
   for (const h of holdings) priceMap[h.ticker] = (await getLatestPrice(h.ticker)) || h.avg_cost_usd || 0;
   const totalValue = holdings.reduce((s, h) => s + h.shares * priceMap[h.ticker], 0);
 
-  const gaps = holdings
-    .filter(h => h.target_pct != null)
-    .map(h => {
-      const currentPct = totalValue > 0 ? (h.shares * priceMap[h.ticker] / totalValue) * 100 : 0;
-      return { ticker: h.ticker, target: h.target_pct, gap: h.target_pct - currentPct };
-    })
-    .filter(g => g.gap > 0)
-    .sort((a, b) => b.gap - a.gap);
+  const rows = holdings.map(h => {
+    const currentPct = totalValue > 0 ? (h.shares * priceMap[h.ticker] / totalValue) * 100 : 0;
+    const hasTarget = h.target_pct != null;
+    return { ticker: h.ticker, target: h.target_pct, hasTarget, gap: hasTarget ? h.target_pct - currentPct : null };
+  });
 
-  const sumGap = gaps.reduce((s, g) => s + g.gap, 0);
-  return gaps.map(g => ({
-    ticker: g.ticker,
-    suggested: (budget > 0 && sumGap > 0) ? Math.round(budget * g.gap / sumGap) : 0,
-    reasoning: `Underweight vs ${g.target}% target. Gap -${g.gap.toFixed(2)}%`
-  }));
+  const sumGap = rows.filter(r => r.hasTarget && r.gap > 0).reduce((s, r) => s + r.gap, 0);
+
+  return rows.map(r => {
+    if (!r.hasTarget) return { ticker: r.ticker, suggested: 0, reasoning: 'No target % set' };
+    if (r.gap > 0) return {
+      ticker: r.ticker,
+      suggested: (budget > 0 && sumGap > 0) ? Math.round(budget * r.gap / sumGap) : 0,
+      reasoning: `Underweight vs ${r.target}% target. Gap -${r.gap.toFixed(2)}%`
+    };
+    return { ticker: r.ticker, suggested: 0, reasoning: `At/above ${r.target}% target (+${(-r.gap).toFixed(2)}%)` };
+  }).sort((a, b) => b.suggested - a.suggested);  // underweight (with $) first, others below
 }
 
 // Rebuild suggested/reasoning while preserving planned/actual/is_done per ticker
