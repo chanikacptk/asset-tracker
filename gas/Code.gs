@@ -122,6 +122,10 @@ function doGet(e) {
     } else if (action === 'sendNewsBrief') {
       NotificationAgent.sendDailyNewsBrief();
       result.sent = true;
+    } else if (action === 'dcaEmailSummary') {
+      const userId = (e?.parameter?.userId || '').trim();
+      const month  = (e?.parameter?.month  || '').trim();   // 'YYYY-MM'
+      result.summary = DCAAgent.emailMonthSummary(userId, month);
     } else if (action === 'benchmarkHistory') {
       // symbols: comma-separated (e.g. "^GSPC,^IXIC,NVDA,AAPL"); range (e.g. 6mo/1y/ytd/5d); interval (1d/1h/1m)
       const symbols  = (e?.parameter?.symbols  || '').split(',').map(function(s){ return s.trim(); }).filter(String);

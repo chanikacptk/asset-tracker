@@ -229,5 +229,100 @@ Sum of all "amount" values must equal ${budget}.`;
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  return { generatePlans, checkMidMonthRevision };
+  // ── Month-completion email summary ──────────────────────────────────────────
+  // Called from the web app (action=dcaEmailSummary) when the user ticks every
+  // ticker across all portfolios and hits "Complete Month". Builds a plain-text
+  // per-portfolio summary from dca_plans + dca_plan_items and emails the owner
+  // via MailApp (no OAuth — GAS runs as the account owner).
+
+  const _SUMMARY_EMAIL = 'chanika.cptk@gmail.com';
+
+  function emailMonthSummary(userId, monthYear) {
+    if (!userId)    throw new Error('userId required');
+    if (!monthYear) throw new Error('monthYear required');
+
+    const plans = supabaseRequest('GET',
+      `dca_plans?user_id=eq.${userId}&month_year=eq.${monthYear}` +
+      `&select=id,total_budget_usd,portfolio_id&order=created_at`);
+    if (!plans || plans.length === 0) throw new Error('No DCA plans for ' + monthYear);
+
+    // Portfolio names
+    const portIds = plans.map(p => p.portfolio_id).filter(Boolean);
+    const portMap = {};
+    if (portIds.length) {
+      const ports = supabaseRequest('GET',
+        `portfolios?id=in.(${portIds.join(',')})&select=id,name`);
+      (ports || []).forEach(p => { portMap[p.id] = p.name; });
+    }
+
+    let grandPlanned = 0, grandActual = 0, grandDone = 0, grandTotal = 0;
+    const sections = [];
+
+    plans.forEach(plan => {
+      const items = supabaseRequest('GET',
+        `dca_plan_items?plan_id=eq.${plan.id}` +
+        `&select=ticker,planned_amount_usd,actual_amount_usd,is_done`) || [];
+      if (items.length === 0) return;
+
+      const portName = portMap[plan.portfolio_id] || 'Portfolio';
+      let secPlanned = 0, secActual = 0;
+      const lines = items.map(it => {
+        const planned = Number(it.planned_amount_usd) || 0;
+        const actual  = Number(it.actual_amount_usd)  || 0;
+        secPlanned += planned; secActual += actual;
+        grandTotal += 1;
+        if (it.is_done) grandDone += 1;
+        let tag = '';
+        if (it.is_done) tag = ' ✓';
+        else if (actual > 0 && actual < planned) tag = ' (partial)';
+        else if (actual > 0) tag = '';
+        return `${it.ticker}: Planned ${_usd(planned)} · Actual ${_usd(actual)}${tag}`;
+      });
+      grandPlanned += secPlanned; grandActual += secActual;
+
+      sections.push(
+        `${portName} Portfolio\n` +
+        lines.map(l => '  ' + l).join('\n') +
+        `\n  Total ${portName}: Planned ${_usd(secPlanned)} · Actual ${_usd(secActual)}`
+      );
+    });
+
+    if (sections.length === 0) throw new Error('No plan items to summarise');
+
+    const label   = _monthLabel(monthYear);
+    const subject = `MyAsset+ DCA Summary — ${label}`;
+    const body =
+      `DCA Summary — ${label}\n\n` +
+      sections.join('\n\n') +
+      `\n\n─────────────────────\n` +
+      `Grand Total: Planned ${_usd(grandPlanned)} · Actual ${_usd(grandActual)}\n` +
+      `Completion: ${grandDone}/${grandTotal} tickers fully done\n\n` +
+      `Sent from MyAsset+`;
+
+    MailApp.sendEmail(_SUMMARY_EMAIL, subject, body);
+    Logger.log(`[DCAAgent] Sent DCA month summary for ${monthYear} to ${_SUMMARY_EMAIL}`);
+
+    // Flag every plan for the month as completed
+    plans.forEach(plan => {
+      supabaseRequest('PATCH', `dca_plans?id=eq.${plan.id}`, { status: 'completed' });
+    });
+
+    return { sent: true, month: monthYear, portfolios: sections.length };
+  }
+
+  function _usd(v) {
+    return '$' + (Number(v) || 0).toLocaleString('en-US',
+      { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function _monthLabel(monthYear) {
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+    const parts = (monthYear || '').split('-');
+    const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    if (!y || !m) return monthYear;
+    return `${MONTHS[m - 1]} ${y}`;
+  }
+
+  return { generatePlans, checkMidMonthRevision, emailMonthSummary };
 })();

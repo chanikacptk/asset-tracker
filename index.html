@@ -221,6 +221,79 @@ body {
 }
 .dca-amount-input:focus { border-color: var(--accent); outline: none; }
 
+/* ── DCA multi-portfolio planner ─────────────────────────────────────────── */
+.dca-monthbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.dca-month-select {
+  flex: 1; padding: 9px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 13px; font-weight: 600;
+}
+.dca-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; -webkit-overflow-scrolling: touch; }
+.dca-tabs::-webkit-scrollbar { display: none; }
+.dca-tab {
+  flex-shrink: 0; padding: 7px 13px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text-muted); font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+.dca-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dca-tab .dca-tab-dot { font-size: 10px; margin-left: 4px; opacity: .9; }
+
+.dca-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.dca-head-month { font-weight: 800; font-size: 15px; }
+.dca-budget-wrap { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.dca-budget-wrap .dca-sign { color: var(--text-muted); font-weight: 700; }
+.dca-budget-input {
+  width: 96px; padding: 7px 9px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 14px; text-align: right; font-weight: 700;
+}
+.dca-budget-input:focus { border-color: var(--accent); outline: none; }
+.dca-refresh-btn {
+  padding: 7px 11px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 12px; font-weight: 600;
+}
+.dca-refresh-btn:active { transform: scale(.97); }
+
+.dca-status-pill { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.dca-summary-line { font-size: 12px; color: var(--text-muted); margin: 4px 0 12px; }
+
+.dca-table { width: 100%; border-collapse: collapse; }
+.dca-table th {
+  font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .3px; text-align: right; padding: 4px 4px 8px; border-bottom: 1px solid var(--border);
+}
+.dca-table th.l { text-align: left; }
+.dca-table td { padding: 8px 4px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.dca-table tr:last-child td { border-bottom: none; }
+.dca-table tr.done td { opacity: .55; }
+.dca-cell-tk { display: flex; align-items: center; gap: 6px; }
+.dca-cell-tk .dca-tk-name { font-weight: 700; font-size: 13px; }
+.dca-cell-reason { font-size: 11px; color: var(--text-muted); line-height: 1.35; min-width: 120px; max-width: 190px; }
+.dca-cell-sugg { text-align: right; font-weight: 600; font-size: 13px; white-space: nowrap; color: var(--text-muted); }
+.dca-io {
+  width: 74px; padding: 6px 7px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 13px; text-align: right;
+}
+.dca-io:focus { border-color: var(--accent); outline: none; }
+.dca-io.plan { border-color: rgba(79,158,255,.35); }
+.dca-io.act  { border-color: rgba(34,197,94,.30); }
+.dca-check { width: 20px; height: 20px; accent-color: var(--success); cursor: pointer; }
+
+.dca-progress { margin-top: 14px; }
+.dca-progress-bar-track { height: 8px; border-radius: 6px; background: var(--surface2); overflow: hidden; margin: 6px 0; }
+.dca-progress-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); transition: width .3s; }
+.dca-progress-txt { font-size: 12px; color: var(--text-muted); }
+.dca-progress-txt b { color: var(--text); }
+
+.dca-complete-btn {
+  margin-top: 16px; width: 100%; padding: 14px; border-radius: var(--radius);
+  border: none; background: var(--success); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.dca-complete-btn:disabled { opacity: .5; cursor: default; }
+.dca-complete-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn {
   display: block; width: 100%; padding: 14px; border-radius: var(--radius);
@@ -7782,86 +7855,363 @@ async function deleteBond(id) {
   await loadBonds();
 }
 
-// ── DCA Plan ──────────────────────────────────────────────────────────────────
+// ── DCA Plan (multi-portfolio + manual execution tracking) ──────────────────────
 
-async function loadDCA() {
-  const monthYear = new Date().toISOString().slice(0, 7);
-  const { data: plans } = await sb.from('dca_plans')
-    .select('*').eq('user_id', state.userId).eq('month_year', monthYear);
+let _dcaMonth  = null;   // 'YYYY-MM' currently shown
+let _dcaPortId = null;   // active portfolio id
+let _dcaPorts  = [];     // [{id,name,emoji,type,dca_budget_usd}]
+let _dcaMonths = [];     // available months, desc
 
-  const el = document.getElementById('dca-content');
+const _DCA_STATUS = {
+  draft:       { lbl: 'DRAFT',       clr: 'var(--warning)' },
+  in_progress: { lbl: 'IN PROGRESS', clr: 'var(--accent)'  },
+  completed:   { lbl: 'COMPLETED',   clr: 'var(--success)' },
+};
 
-  if (!plans || plans.length === 0) {
-    el.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">📅</div>
-        <div class="empty-text">No DCA plan for ${monthYear}</div>
-        <div style="font-size:12px;margin-top:8px">Plans are generated automatically on the 1st of each month</div>
-      </div>`;
-    return;
-  }
-
-  const plan = plans[0];
-  const { data: items } = await sb.from('dca_plan_items')
-    .select('*').eq('plan_id', plan.id);
-
-  const statusColor = { draft: 'var(--warning)', approved: 'var(--success)', executed: 'var(--accent)' };
-  const isEditable = plan.status === 'draft';
-
-  let html = `
-    <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-weight:700">${monthYear} DCA Plan</div>
-          <div style="font-size:13px;color:var(--text-muted)">Budget: ${fmtUSD(plan.total_budget_usd)}</div>
-        </div>
-        <span style="background:${statusColor[plan.status]}22;color:${statusColor[plan.status]};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700">
-          ${plan.status.toUpperCase()}
-        </span>
-      </div>
-    </div>
-    <div class="card">
-      ${(items || []).map(item => `
-        <div class="dca-row">
-          <span class="dca-ticker">${item.ticker}</span>
-          <span class="dca-reasoning">${item.reasoning || ''}</span>
-          ${isEditable
-            ? `<input class="dca-amount-input" type="number" inputmode="decimal" id="dca-${item.id}" value="${item.adjusted_amount_usd || item.suggested_amount_usd}" step="5">`
-            : `<span style="font-weight:700">${fmtUSD(item.adjusted_amount_usd || item.suggested_amount_usd)}</span>`
-          }
-        </div>
-      `).join('')}
-    </div>
-  `;
-
-  if (isEditable) {
-    html += `
-      <div style="margin-top:12px">
-        <button class="btn btn-success" onclick="approveDCA('${plan.id}')">Approve Plan</button>
-      </div>
-    `;
-  }
-
-  el.innerHTML = html;
+function _dcaThisMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function _dcaMonthLabel(my) {
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [y, m] = (my || '').split('-').map(Number);
+  return (m && y) ? `${M[m - 1]} ${y}` : (my || '');
 }
 
-async function approveDCA(planId) {
-  const { data: items } = await sb.from('dca_plan_items').select('id').eq('plan_id', planId);
-  if (!items) return;
+async function loadDCA() {
+  const el = document.getElementById('dca-content');
 
-  for (const item of items) {
-    const input = document.getElementById(`dca-${item.id}`);
-    if (input) {
-      await sb.from('dca_plan_items').update({
-        adjusted_amount_usd: parseFloat(input.value),
-        is_approved: true
-      }).eq('id', item.id);
+  // Portfolios (month-independent) → tabs
+  const { data: portfolios } = await sb.from('portfolios')
+    .select('id, name, type, dca_budget_usd')
+    .eq('user_id', state.userId).order('created_at');
+
+  if (!portfolios || portfolios.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📂</div>
+      <div class="empty-text">No portfolios yet</div>
+      <div style="font-size:12px;margin-top:8px">Add a US portfolio first.</div></div>`;
+    return;
+  }
+  _dcaPorts = portfolios.map(p => ({ ...p, emoji: _bmEmoji(p) }));
+  if (!_dcaPorts.some(p => p.id === _dcaPortId)) _dcaPortId = _dcaPorts[0].id;
+
+  // Available months (always include the current month)
+  const { data: mrows } = await sb.from('dca_plans')
+    .select('month_year').eq('user_id', state.userId).order('month_year', { ascending: false });
+  const cur = _dcaThisMonth();
+  _dcaMonths = [...new Set([cur, ...(mrows || []).map(r => r.month_year)])].sort().reverse();
+  if (!_dcaMonths.includes(_dcaMonth)) _dcaMonth = cur;
+
+  el.innerHTML = `
+    <div class="dca-monthbar">
+      <select class="dca-month-select" onchange="_dcaSelectMonth(this.value)">
+        ${_dcaMonths.map(m => `<option value="${m}" ${m === _dcaMonth ? 'selected' : ''}>${_dcaMonthLabel(m)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="dca-tabs" id="dca-tabs"></div>
+    <div id="dca-tab-content"></div>
+    <div id="dca-complete-wrap"></div>
+  `;
+  _dcaRenderTabs();
+  await _dcaRenderActive();
+}
+
+function _dcaRenderTabs() {
+  const wrap = document.getElementById('dca-tabs');
+  if (!wrap) return;
+  wrap.innerHTML = _dcaPorts.map(p => `
+    <div class="dca-tab ${p.id === _dcaPortId ? 'active' : ''}" onclick="_dcaSelectPort('${p.id}')">
+      ${p.emoji} ${_esc(p.name)}
+    </div>`).join('');
+}
+
+function _dcaSelectMonth(m) { _dcaMonth = m; _dcaRenderActive(); }
+function _dcaSelectPort(id) { _dcaPortId = id; _dcaRenderTabs(); _dcaRenderActive(); }
+
+async function _dcaRenderActive() {
+  const el = document.getElementById('dca-tab-content');
+  if (!el) return;
+  const port = _dcaPorts.find(p => p.id === _dcaPortId);
+  if (!port) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card"><div class="empty" style="padding:24px"><div class="empty-icon">⏳</div><div class="empty-text">Loading…</div></div></div>`;
+
+  // Plan for (port, month)
+  const { data: plans } = await sb.from('dca_plans')
+    .select('*').eq('user_id', state.userId).eq('portfolio_id', _dcaPortId).eq('month_year', _dcaMonth);
+  const plan = plans && plans[0];
+
+  let items = [];
+  if (plan) {
+    const { data: it } = await sb.from('dca_plan_items')
+      .select('*').eq('plan_id', plan.id).order('suggested_amount_usd', { ascending: false });
+    items = it || [];
+  }
+
+  // Budget: plan value, else prior month's plan, else portfolio default
+  let budget = plan ? Number(plan.total_budget_usd) || 0 : 0;
+  if (!plan) budget = await _dcaPriorBudget(_dcaPortId, _dcaMonth, port);
+
+  // Keep the DB status in sync with the derived lifecycle
+  const derived = _dcaDeriveStatus(items);
+  if (plan && plan.status !== derived && ['draft','in_progress','completed'].includes(plan.status)) {
+    sb.from('dca_plans').update({ status: derived }).eq('id', plan.id).then(() => {});
+  }
+  const st = _DCA_STATUS[derived] || _DCA_STATUS.draft;
+
+  const plannedSum = items.reduce((s, i) => s + (Number(i.planned_amount_usd) || 0), 0);
+  const actualSum  = items.reduce((s, i) => s + (Number(i.actual_amount_usd)  || 0), 0);
+  const doneCount  = items.filter(i => i.is_done).length;
+  const total      = items.length;
+  const fillPct    = budget > 0 ? Math.min(100, (plannedSum / budget) * 100) : 0;
+
+  const rowsHtml = total === 0
+    ? `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:22px 4px;font-size:13px">
+         No tickers yet. Set a budget and tap <b>🔄 Refresh</b> to generate suggested allocations.</td></tr>`
+    : items.map(i => {
+        const planned = i.planned_amount_usd != null ? _dcaFmtInput(i.planned_amount_usd) : '';
+        const actual  = i.actual_amount_usd  != null ? _dcaFmtInput(i.actual_amount_usd)  : '';
+        return `
+        <tr class="${i.is_done ? 'done' : ''}">
+          <td><div class="dca-cell-tk">${_assetLogoImg(i.ticker, 20)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div></td>
+          <td class="dca-cell-reason">${_esc(i.reasoning || '')}</td>
+          <td class="dca-cell-sugg">${i.suggested_amount_usd ? fmtUSD(i.suggested_amount_usd) : '—'}</td>
+          <td style="text-align:right"><input class="dca-io plan" inputmode="decimal" placeholder="—"
+                value="${planned}" oninput="_numInputFmt(this)"
+                onchange="_dcaEditItem('${i.id}','planned_amount_usd',this)"></td>
+          <td style="text-align:right"><input class="dca-io act" inputmode="decimal" placeholder="—"
+                value="${actual}" oninput="_numInputFmt(this)"
+                onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)"></td>
+          <td style="text-align:center"><input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+                onchange="_dcaToggleDone('${i.id}',this)"></td>
+        </tr>`;
+      }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="dca-head-row">
+        <span class="dca-head-month">${_dcaMonthLabel(_dcaMonth)}</span>
+        <span class="dca-status-pill" style="background:${st.clr}22;color:${st.clr}">${st.lbl}</span>
+        <div class="dca-budget-wrap">
+          <span class="dca-sign">$</span>
+          <input class="dca-budget-input" id="dca-budget" inputmode="decimal" placeholder="0"
+                 value="${budget ? _dcaFmtInput(budget) : ''}"
+                 oninput="_numInputFmt(this)" onchange="_dcaBudgetChange(this)">
+          <button class="dca-refresh-btn" onclick="_dcaRefresh()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div class="dca-summary-line">
+        ${port.emoji} ${_esc(port.name)}: <b style="color:var(--text)">${doneCount}/${total}</b> tickers completed ·
+        Planned ${fmtUSD(plannedSum)} · Actual ${fmtUSD(actualSum)} spent so far
+      </div>
+      <table class="dca-table">
+        <thead><tr>
+          <th class="l">Ticker</th><th class="l">Reasoning</th>
+          <th>Suggested</th><th>Planned</th><th>Actual</th><th>✓</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <div class="dca-progress">
+        <div class="dca-progress-bar-track"><div class="dca-progress-bar-fill" style="width:${fillPct}%"></div></div>
+        <div class="dca-progress-txt">
+          Planned: <b>${fmtUSD(plannedSum)}</b> / ${fmtUSD(budget)} ·
+          Actual: <b>${fmtUSD(actualSum)}</b> spent · <b>${doneCount}/${total}</b> done ✓
+        </div>
+      </div>
+    </div>`;
+
+  _dcaUpdateCompleteBtn();
+}
+
+// Budget from the latest prior plan, else the portfolio's default dca_budget_usd
+async function _dcaPriorBudget(portId, month, port) {
+  const { data } = await sb.from('dca_plans')
+    .select('total_budget_usd').eq('user_id', state.userId).eq('portfolio_id', portId)
+    .lt('month_year', month).order('month_year', { ascending: false }).limit(1);
+  if (data && data[0] && data[0].total_budget_usd) return Number(data[0].total_budget_usd);
+  return Number(port?.dca_budget_usd) || 0;
+}
+
+// Ensure a plan row exists for the active (port, month); returns the plan
+async function _dcaEnsurePlan() {
+  const { data: plans } = await sb.from('dca_plans')
+    .select('*').eq('user_id', state.userId).eq('portfolio_id', _dcaPortId).eq('month_year', _dcaMonth);
+  if (plans && plans[0]) return plans[0];
+  const budgetEl = document.getElementById('dca-budget');
+  const budget = budgetEl ? _parseNum(budgetEl.value) : 0;
+  const { data, error } = await sb.from('dca_plans').insert({
+    user_id: state.userId, portfolio_id: _dcaPortId, month_year: _dcaMonth,
+    status: 'draft', total_budget_usd: budget
+  }).select();
+  if (error) { showToast('Could not create plan: ' + error.message); return null; }
+  return data && data[0];
+}
+
+async function _dcaBudgetChange(el) {
+  const budget = _parseNum(el.value);
+  const plan = await _dcaEnsurePlan();
+  if (!plan) return;
+  await sb.from('dca_plans').update({ total_budget_usd: budget }).eq('id', plan.id);
+  _dcaRenderActive();
+}
+
+async function _dcaRefresh() {
+  const plan = await _dcaEnsurePlan();
+  if (!plan) return;
+  const budgetEl = document.getElementById('dca-budget');
+  const budget = budgetEl ? _parseNum(budgetEl.value) : Number(plan.total_budget_usd) || 0;
+  await sb.from('dca_plans').update({ total_budget_usd: budget }).eq('id', plan.id);
+
+  const generated = await _dcaGenerate(_dcaPortId, budget);
+  if (!generated.length) { showToast('No underweight tickers to suggest'); }
+  await _dcaSyncItems(plan.id, generated);
+  showToast('Suggestions refreshed');
+  await _dcaRenderActive();
+}
+
+// Gap-based allocation: underweight tickers share the budget by gap size
+async function _dcaGenerate(portId, budget) {
+  const { data: holdings } = await sb.from('holdings')
+    .select('ticker, target_pct, shares, avg_cost_usd').eq('portfolio_id', portId);
+  if (!holdings || !holdings.length) return [];
+
+  const priceMap = {};
+  for (const h of holdings) priceMap[h.ticker] = (await getLatestPrice(h.ticker)) || h.avg_cost_usd || 0;
+  const totalValue = holdings.reduce((s, h) => s + h.shares * priceMap[h.ticker], 0);
+
+  const gaps = holdings
+    .filter(h => h.target_pct != null)
+    .map(h => {
+      const currentPct = totalValue > 0 ? (h.shares * priceMap[h.ticker] / totalValue) * 100 : 0;
+      return { ticker: h.ticker, target: h.target_pct, gap: h.target_pct - currentPct };
+    })
+    .filter(g => g.gap > 0)
+    .sort((a, b) => b.gap - a.gap);
+
+  const sumGap = gaps.reduce((s, g) => s + g.gap, 0);
+  return gaps.map(g => ({
+    ticker: g.ticker,
+    suggested: (budget > 0 && sumGap > 0) ? Math.round(budget * g.gap / sumGap) : 0,
+    reasoning: `Underweight vs ${g.target}% target. Gap -${g.gap.toFixed(2)}%`
+  }));
+}
+
+// Rebuild suggested/reasoning while preserving planned/actual/is_done per ticker
+async function _dcaSyncItems(planId, generated) {
+  const genMap = new Map(generated.map(g => [g.ticker, g]));
+  const { data: existing } = await sb.from('dca_plan_items').select('*').eq('plan_id', planId);
+
+  for (const it of existing || []) {
+    const g = genMap.get(it.ticker);
+    if (g) {
+      await sb.from('dca_plan_items')
+        .update({ suggested_amount_usd: g.suggested, reasoning: g.reasoning }).eq('id', it.id);
+      genMap.delete(it.ticker);
+    } else if (it.planned_amount_usd || it.actual_amount_usd || it.is_done) {
+      // keep rows the user has already worked, but zero the suggestion
+      await sb.from('dca_plan_items')
+        .update({ suggested_amount_usd: 0, reasoning: 'At/above target' }).eq('id', it.id);
+    } else {
+      await sb.from('dca_plan_items').delete().eq('id', it.id);
     }
   }
 
-  await sb.from('dca_plans').update({ status: 'approved' }).eq('id', planId);
-  showToast('DCA plan approved!');
-  loadDCA();
+  const toInsert = [...genMap.values()].map(g => ({
+    plan_id: planId, ticker: g.ticker,
+    suggested_amount_usd: g.suggested, reasoning: g.reasoning, is_approved: false
+  }));
+  if (toInsert.length) await sb.from('dca_plan_items').insert(toInsert);
+}
+
+async function _dcaEditItem(itemId, field, el) {
+  const val = _parseNum(el.value);
+  await sb.from('dca_plan_items').update({ [field]: val }).eq('id', itemId);
+  _dcaRecalcSummary();
+}
+
+async function _dcaToggleDone(itemId, el) {
+  await sb.from('dca_plan_items').update({ is_done: el.checked }).eq('id', itemId);
+  el.closest('tr')?.classList.toggle('done', el.checked);
+  _dcaRecalcSummary();
+}
+
+// Recompute summary/progress/status from the DOM (no DB round-trip) after a cell edit
+function _dcaRecalcSummary() {
+  const el = document.getElementById('dca-tab-content');
+  if (!el) return;
+  const rows = [...el.querySelectorAll('tbody tr')].filter(r => r.querySelector('.dca-check'));
+  let planned = 0, actual = 0, done = 0;
+  const total = rows.length;
+  rows.forEach(r => {
+    planned += _parseNum(r.querySelector('.dca-io.plan')?.value || '');
+    actual  += _parseNum(r.querySelector('.dca-io.act')?.value  || '');
+    if (r.querySelector('.dca-check')?.checked) done++;
+  });
+  const budget = _parseNum(document.getElementById('dca-budget')?.value || '');
+
+  let status = 'draft';
+  if (total && done === total) status = 'completed';
+  else if (actual > 0 || done > 0) status = 'in_progress';
+  const st = _DCA_STATUS[status];
+  const pill = el.querySelector('.dca-status-pill');
+  if (pill) { pill.textContent = st.lbl; pill.style.background = st.clr + '22'; pill.style.color = st.clr; }
+
+  const port = _dcaPorts.find(p => p.id === _dcaPortId);
+  const sum = el.querySelector('.dca-summary-line');
+  if (sum && port) sum.innerHTML =
+    `${port.emoji} ${_esc(port.name)}: <b style="color:var(--text)">${done}/${total}</b> tickers completed · ` +
+    `Planned ${fmtUSD(planned)} · Actual ${fmtUSD(actual)} spent so far`;
+  const fill = el.querySelector('.dca-progress-bar-fill');
+  if (fill) fill.style.width = (budget > 0 ? Math.min(100, planned / budget * 100) : 0) + '%';
+  const ptxt = el.querySelector('.dca-progress-txt');
+  if (ptxt) ptxt.innerHTML =
+    `Planned: <b>${fmtUSD(planned)}</b> / ${fmtUSD(budget)} · ` +
+    `Actual: <b>${fmtUSD(actual)}</b> spent · <b>${done}/${total}</b> done ✓`;
+
+  _dcaUpdateCompleteBtn();
+}
+
+function _dcaDeriveStatus(items) {
+  if (!items.length) return 'draft';
+  if (items.every(i => i.is_done)) return 'completed';
+  if (items.some(i => (Number(i.actual_amount_usd) || 0) > 0 || i.is_done)) return 'in_progress';
+  return 'draft';
+}
+
+// "Complete Month" appears only when every ticker across ALL portfolios is ticked
+async function _dcaUpdateCompleteBtn() {
+  const wrap = document.getElementById('dca-complete-wrap');
+  if (!wrap) return;
+  const { data: plans } = await sb.from('dca_plans')
+    .select('id, status, dca_plan_items(is_done)')
+    .eq('user_id', state.userId).eq('month_year', _dcaMonth);
+
+  const allItems = (plans || []).flatMap(p => p.dca_plan_items || []);
+  const allDone = allItems.length > 0 && allItems.every(i => i.is_done);
+  const alreadyDone = (plans || []).length > 0 && (plans || []).every(p => p.status === 'completed');
+
+  if (!allDone) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <button class="dca-complete-btn" onclick="_dcaCompleteMonth()">
+      ${alreadyDone ? '✅ Re-send Month Summary' : '📧 Complete Month & Email Summary'}
+    </button>
+    <div class="dca-complete-note">All ${allItems.length} tickers ticked · sends a summary to your email</div>`;
+}
+
+async function _dcaCompleteMonth() {
+  if (!confirm(`Email the ${_dcaMonthLabel(_dcaMonth)} DCA summary and mark the month complete?`)) return;
+  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth });
+  if (res && res.ok) {
+    showToast('Summary emailed ✓');
+    await loadDCA();
+  } else {
+    showToast('Email failed: ' + (res?.error || 'unknown error'));
+  }
+}
+
+function _dcaFmtInput(v) {
+  const n = Number(v) || 0;
+  const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 // ── Monthly Review ────────────────────────────────────────────────────────────
