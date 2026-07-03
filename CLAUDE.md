@@ -359,7 +359,7 @@ insurance     Insurance — INFORMATIONAL ONLY (excluded from net worth). Summar
 private       Private Investment — summary (total principal, expected annual income, company/govbond split) + per-investment cards (company loans & govt bonds), add/edit/delete modal with type toggle
 bonds         Thai Bonds — KPI cards, 2 donut charts, master-detail list
 loans         Loan — receivables (money lent out). Summary (total remaining / principal lent / expected interest, active loans only) + per-loan cards (remaining, progress bar, next payment, status badge). Tap a card → detail view with the installment schedule checklist: per-row **Record Payment** (partial or full — amount added to a running tally), inline **editable due date**, and reset (↺). EXCLUDED from net worth. add/edit modal generates the schedule from frequency × count.
-analysis      Analysis — daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards) on top, then a "Tools" hub (DCA/Monthly/Weekly/All Portfolio). Reads daily_news + daily_news_impact directly via Supabase.
+analysis      Analysis — **two tabs `[📰 News] [🛠️ Tools]`** (`anShowTab`, News default). News tab = daily Tech-News brief history (date selector + 🎯 holdings news + 📊 market news, sentiment-colored cards). Tools tab = hub (DCA/Monthly/Weekly/All Portfolio). Split into tabs so News no longer pushes Tools far down the scroll. Reads daily_news + daily_news_impact directly via Supabase.
 dca           DCA Plan — multi-portfolio manual planner. Month selector (+ "+" to add next month) + portfolio tabs; per tab: budget input + 🔄 Refresh (gap-from-target suggestions), a TICKER/Reasoning/Suggested/Planned/Actual/✓ table, status pill (DRAFT→IN PROGRESS→COMPLETED) + progress bar. 📧 Submit & Email (always) + ✅ Complete Month (all ticked) email a summary via GAS `dcaEmailSummary`.
 monthly       Monthly Review — trigger generateDCA
 weekly        Weekly Review — trigger analyzeAll
@@ -456,6 +456,7 @@ Nav highlight logic:
 - Globals: `_loanEditId`, `_loanFreq`, `_selectedLoanId`, `_loanPayCtx` (`{paymentId, expected, already}`). Reuses `_numInputFmt` / `_parseNum` / `_fmtShortDate` / `_daysTo` / `fmtTHB` and the `.bond-back-btn` style.
 
 ### Analysis (News brief history)
+- `anShowTab('news'|'tools')` — toggles the `[📰 News] [🛠️ Tools]` tab bar (active button + `.an-tab-pane` visibility). News is the default; the tab choice persists across `loadAnalysis()` refreshes (only the panes' classes change, not re-created). News pane wraps the date bar + `#analysis-news`; Tools pane wraps the DCA/Monthly/Weekly/All-Portfolio rows.
 - `loadAnalysis()` — entry for the Analysis tab. Queries distinct `news_date` for `state.userId`, populates the date dropdown, defaults `_anDate` to **the most recent day that has news** (today if present, else latest; today is always kept selectable so an empty day shows "No news yet"), then `_anRenderDate()`.
 - `_anRenderDate()` — fetches `daily_news` for the user+date with embedded `daily_news_impact(impact)` (PostgREST FK embed), ordered by `sort_order`; sets the ‹ older / newer › button disabled states; calls `_anPaint()`.
 - `_anPaint()` — splits rows into 🎯 holdings (`is_holding_related`) + 📊 market sections, renders `_anCard()` for each. Honours the active `_anTickerFilter`.
@@ -539,7 +540,8 @@ Key classes:
 - `.mf-sort-select` — sort dropdown
 - `.mf-search-row` / `.mf-search-row-name` / `.mf-search-row-sub` / `.mf-search-row-pid` — SEC fund search **and** Finnomena code-guess result rows
 - `.an-datebar` / `.an-date-select` / `.an-date-nav` — Analysis page date selector + ‹/› nav
-- `.an-section-title` / `.an-tools-head` — Analysis section headers (🎯 / 📊) + "Tools" hub label
+- `.an-section-title` — Analysis section headers (🎯 / 📊)
+- `.an-tabbar` / `.an-tab` (`.active`) / `.an-tab-pane` (`.active`) — Analysis News/Tools tab bar + panes (`anShowTab('news'|'tools')`; `#an-pane-news` holds the date bar + `#analysis-news`, `#an-pane-tools` holds the tool rows)
 - `.an-card` (`.pos` / `.neg` / `.neu`) / `.an-card-head` / `.an-emoji` / `.an-ticker` / `.an-headline` / `.an-impact` / `.an-impact-lbl` / `.an-sources` — News brief cards (sentiment-colored left border)
 - `.an-filter-pill` — active ticker-filter chip (tap to clear)
 - `.td-head` / `.td-tk` / `.td-name` / `.td-price` / `.td-chg` — Ticker Detail modal header (Syne ticker + mono price)

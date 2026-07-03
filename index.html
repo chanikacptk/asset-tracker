@@ -837,19 +837,25 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     </div>
     <div style="height:12px"></div>
 
-    <!-- date selector / history -->
-    <div class="an-datebar">
-      <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
-      <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
-      <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+    <!-- tab bar -->
+    <div class="an-tabbar">
+      <button class="an-tab active" id="an-tab-news" onclick="anShowTab('news')">📰 News</button>
+      <button class="an-tab" id="an-tab-tools" onclick="anShowTab('tools')">🛠️ Tools</button>
     </div>
 
-    <!-- news content -->
-    <div id="analysis-news"></div>
+    <!-- NEWS pane -->
+    <div id="an-pane-news" class="an-tab-pane active">
+      <!-- date selector / history -->
+      <div class="an-datebar">
+        <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
+        <select id="an-date-select" class="an-date-select" onchange="anSelectDate(this.value)"></select>
+        <button class="an-date-nav" id="an-date-next" onclick="anStepDate(-1)" title="Newer">›</button>
+      </div>
+      <div id="analysis-news"></div>
+    </div>
 
-    <!-- tools hub -->
-    <div class="an-tools-head">Tools</div>
-    <div>
+    <!-- TOOLS pane -->
+    <div id="an-pane-tools" class="an-tab-pane">
       <div class="more-row" onclick="navigate('dca')">
         <span class="more-icon">📅</span><div><div class="more-label">DCA Plan</div><div class="more-sub">Monthly allocation & approval</div></div><span class="more-arrow">›</span>
       </div>
@@ -1983,6 +1989,14 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .more-val-pct  { font-size:11px;color:var(--text-muted);margin-top:1px; }
 
 /* Analysis — News page */
+.an-tabbar { display:flex;gap:8px;margin-bottom:14px; }
+.an-tab {
+  flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--surface2);color:var(--text-muted);font-size:13.5px;font-weight:700;cursor:pointer;
+}
+.an-tab.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.an-tab-pane { display:none; }
+.an-tab-pane.active { display:block; }
 .an-datebar { display:flex;align-items:center;gap:8px;margin-bottom:14px; }
 .an-date-nav {
   width:36px;height:36px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);
@@ -2027,7 +2041,6 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .an-card.neu .an-impact { background:rgba(79,158,255,.07);border-color:rgba(79,158,255,.15); }
 .an-impact-lbl { color:var(--text-muted);font-weight:600; }
 .an-sources { margin-top:9px;font-size:11px;color:var(--text-muted); }
-.an-tools-head { font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:24px 2px 10px; }
 
 /* Benchmark comparison (last tab on the US Portfolio page) */
 .bm-title { font-size:21px;font-weight:800;margin:2px 2px 5px; }
@@ -5813,6 +5826,14 @@ function _anDateLabel(d) {
   if (d === today)     return 'Today · ' + _fmtShortDate(d);
   if (d === yesterday) return 'Yesterday · ' + _fmtShortDate(d);
   return _fmtShortDate(d);
+}
+
+function anShowTab(tab) {
+  const isNews = tab === 'news';
+  document.getElementById('an-tab-news')?.classList.toggle('active', isNews);
+  document.getElementById('an-tab-tools')?.classList.toggle('active', !isNews);
+  document.getElementById('an-pane-news')?.classList.toggle('active', isNews);
+  document.getElementById('an-pane-tools')?.classList.toggle('active', !isNews);
 }
 
 async function loadAnalysis() {
