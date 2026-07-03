@@ -205,6 +205,8 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 
 Files are copy-pasted into Apps Script IDE — not auto-deployed from this repo.
 
+> **⚠️ Publishing a new GAS action requires redeploying the Web App — and the clicks matter** (bit us 2026-07-03 with `getOverview`/`getEarnings`): pasting/saving code in the IDE, or running a `testX()` function from the editor, does **NOT** update the live Web App. The frontend calls the *deployed* URL, which keeps serving the old version until you publish — so a new action returns `{ok:false, error:"Unknown action: …"}` and the feature silently shows its "unavailable" state. To publish: **Deploy ▸ Manage deployments ▸ ✏️ Edit the existing deployment ▸ Version: New version ▸ Deploy** (Edit, *not* "New deployment" — a new deployment mints a new URL the app doesn't know). URL is unchanged. Confirm with `‹exec-url›?action=getOverview&symbol=O` in a browser (expect JSON with `overview`, not "Unknown action").
+
 **Script Properties:**
 | Property | Value |
 |---|---|

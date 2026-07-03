@@ -86,5 +86,6 @@ Expected triggers after setup:
 | `Exception: Access denied` | Web app not deployed as "Anyone" | Redeploy with correct access setting |
 | `ReferenceError: X is not defined` | Copy-paste missed a file or a line | Re-copy the full file content |
 | Action returns `{"ok":false,...}` | `doGet` switch doesn't have the action | Add the `else if` branch in `Code.gs` |
+| `{"ok":false,"error":"Unknown action: X"}` for a **new** action (tab shows "unavailable" even though `testX()` works in the IDE) | Code is pasted/saved in the IDE but the **Web App wasn't redeployed** — the live URL still serves the old version. Running a test function in the editor does NOT publish. | **Deploy ▸ Manage deployments ▸ ✏️ Edit existing ▸ New version ▸ Deploy.** Confirm: `‹exec-url›?action=X&symbol=O` returns the data, not "Unknown action". |
 | Old behavior persists | Browser cached the GAS response | GAS responses aren't browser-cached; check if you deployed a new version vs. editing an old one |
 | `ScriptError: Property not found` | Script Property missing | Add the property in Project Settings |
