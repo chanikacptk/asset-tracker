@@ -237,7 +237,11 @@ Sum of all "amount" values must equal ${budget}.`;
 
   const _SUMMARY_EMAIL = 'chanika.cptk@gmail.com';
 
-  function emailMonthSummary(userId, monthYear) {
+  // mode: 'submit' (progress snapshot — does NOT complete) | 'complete' (also
+  // flags every plan for the month as completed). Per-ticker status icon:
+  // ✅ done · 🔄 actual entered but not done · ⬜ not started.
+  function emailMonthSummary(userId, monthYear, mode) {
+    mode = mode || 'submit';
     if (!userId)    throw new Error('userId required');
     if (!monthYear) throw new Error('monthYear required');
 
@@ -271,12 +275,11 @@ Sum of all "amount" values must equal ${budget}.`;
         const actual  = Number(it.actual_amount_usd)  || 0;
         secPlanned += planned; secActual += actual;
         grandTotal += 1;
-        if (it.is_done) grandDone += 1;
-        let tag = '';
-        if (it.is_done) tag = ' ✓';
-        else if (actual > 0 && actual < planned) tag = ' (partial)';
-        else if (actual > 0) tag = '';
-        return `${it.ticker}: Planned ${_usd(planned)} · Actual ${_usd(actual)}${tag}`;
+        let icon;
+        if (it.is_done)     { icon = '✅'; grandDone += 1; }
+        else if (actual > 0)  icon = '🔄';
+        else                  icon = '⬜';
+        return `${icon} ${it.ticker}: Planned ${_usd(planned)} · Actual ${_usd(actual)}`;
       });
       grandPlanned += secPlanned; grandActual += secActual;
 
@@ -290,9 +293,10 @@ Sum of all "amount" values must equal ${budget}.`;
     if (sections.length === 0) throw new Error('No plan items to summarise');
 
     const label   = _monthLabel(monthYear);
-    const subject = `MyAsset+ DCA Summary — ${label}`;
+    const subject = `MyAsset+ DCA Summary — ${label} (${grandDone}/${grandTotal} completed)`;
     const body =
-      `DCA Summary — ${label}\n\n` +
+      `DCA Summary — ${label}\n` +
+      `Legend: ✅ completed · 🔄 in progress · ⬜ not started\n\n` +
       sections.join('\n\n') +
       `\n\n─────────────────────\n` +
       `Grand Total: Planned ${_usd(grandPlanned)} · Actual ${_usd(grandActual)}\n` +
@@ -300,14 +304,16 @@ Sum of all "amount" values must equal ${budget}.`;
       `Sent from MyAsset+`;
 
     MailApp.sendEmail(_SUMMARY_EMAIL, subject, body);
-    Logger.log(`[DCAAgent] Sent DCA month summary for ${monthYear} to ${_SUMMARY_EMAIL}`);
+    Logger.log(`[DCAAgent] Sent DCA ${mode} summary for ${monthYear} to ${_SUMMARY_EMAIL}`);
 
-    // Flag every plan for the month as completed
-    plans.forEach(plan => {
-      supabaseRequest('PATCH', `dca_plans?id=eq.${plan.id}`, { status: 'completed' });
-    });
+    // Only "complete" flags the month's plans as completed
+    if (mode === 'complete') {
+      plans.forEach(plan => {
+        supabaseRequest('PATCH', `dca_plans?id=eq.${plan.id}`, { status: 'completed' });
+      });
+    }
 
-    return { sent: true, month: monthYear, portfolios: sections.length };
+    return { sent: true, month: monthYear, mode: mode, done: grandDone, total: grandTotal, portfolios: sections.length };
   }
 
   function _usd(v) {

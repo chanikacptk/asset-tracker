@@ -228,6 +228,12 @@ body {
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); font-size: 13px; font-weight: 600;
 }
+.dca-add-btn {
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: var(--radius-sm);
+  border: 1px solid rgba(34,197,94,.4); background: rgba(34,197,94,.06);
+  color: var(--success); font-size: 20px; font-weight: 700; cursor: pointer; line-height: 1;
+}
+.dca-add-btn:active { transform: scale(.95); }
 .dca-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; -webkit-overflow-scrolling: touch; }
 .dca-tabs::-webkit-scrollbar { display: none; }
 .dca-tab {
@@ -292,6 +298,8 @@ body {
   border: none; background: var(--success); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .dca-complete-btn:disabled { opacity: .5; cursor: default; }
+.dca-complete-btn.submit { background: var(--accent); }
+.dca-complete-btn + .dca-complete-btn { margin-top: 10px; }
 .dca-complete-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -7877,6 +7885,11 @@ function _dcaMonthLabel(my) {
   const [y, m] = (my || '').split('-').map(Number);
   return (m && y) ? `${M[m - 1]} ${y}` : (my || '');
 }
+function _dcaMonthAdd(my, n) {
+  const [y, m] = (my || '').split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 async function loadDCA() {
   const el = document.getElementById('dca-content');
@@ -7907,6 +7920,7 @@ async function loadDCA() {
       <select class="dca-month-select" onchange="_dcaSelectMonth(this.value)">
         ${_dcaMonths.map(m => `<option value="${m}" ${m === _dcaMonth ? 'selected' : ''}>${_dcaMonthLabel(m)}</option>`).join('')}
       </select>
+      <button class="dca-add-btn" onclick="_dcaAddNextMonth()" title="Create next month's plan">+</button>
     </div>
     <div class="dca-tabs" id="dca-tabs"></div>
     <div id="dca-tab-content"></div>
@@ -7927,6 +7941,29 @@ function _dcaRenderTabs() {
 
 function _dcaSelectMonth(m) { _dcaMonth = m; _dcaRenderActive(); }
 function _dcaSelectPort(id) { _dcaPortId = id; _dcaRenderTabs(); _dcaRenderActive(); }
+
+// "+" — create a blank plan for the month AFTER the newest one, then jump to it
+async function _dcaAddNextMonth() {
+  const newest = [_dcaThisMonth(), ...(_dcaMonths || [])].sort().pop();
+  const next = _dcaMonthAdd(newest, 1);
+  const port = _dcaPorts.find(p => p.id === _dcaPortId);
+
+  // A month appears in the selector only once ≥1 plan row exists for it → seed the
+  // active portfolio's plan (blank: budget carried from prior month, no tickers).
+  const { data: existing } = await sb.from('dca_plans').select('id')
+    .eq('user_id', state.userId).eq('portfolio_id', _dcaPortId).eq('month_year', next);
+  if (!existing || !existing.length) {
+    const budget = await _dcaPriorBudget(_dcaPortId, next, port);
+    const { error } = await sb.from('dca_plans').insert({
+      user_id: state.userId, portfolio_id: _dcaPortId, month_year: next,
+      status: 'draft', total_budget_usd: budget
+    });
+    if (error) { showToast('Could not create plan: ' + error.message); return; }
+  }
+  _dcaMonth = next;
+  showToast(`Created ${_dcaMonthLabel(next)} plan`);
+  await loadDCA();
+}
 
 async function _dcaRenderActive() {
   const el = document.getElementById('dca-tab-content');
@@ -8182,7 +8219,8 @@ function _dcaDeriveStatus(items) {
   return 'draft';
 }
 
-// "Complete Month" appears only when every ticker across ALL portfolios is ticked
+// Submit & Email — always shown (any month with items); Complete Month — only
+// when every ticker across ALL portfolios is ticked.
 async function _dcaUpdateCompleteBtn() {
   const wrap = document.getElementById('dca-complete-wrap');
   if (!wrap) return;
@@ -8191,22 +8229,33 @@ async function _dcaUpdateCompleteBtn() {
     .eq('user_id', state.userId).eq('month_year', _dcaMonth);
 
   const allItems = (plans || []).flatMap(p => p.dca_plan_items || []);
-  const allDone = allItems.length > 0 && allItems.every(i => i.is_done);
-  const alreadyDone = (plans || []).length > 0 && (plans || []).every(p => p.status === 'completed');
+  const total = allItems.length;
+  if (total === 0) { wrap.innerHTML = ''; return; }   // nothing to email
+  const done = allItems.filter(i => i.is_done).length;
+  const allDone = done === total;
 
-  if (!allDone) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = `
-    <button class="dca-complete-btn" onclick="_dcaCompleteMonth()">
-      ${alreadyDone ? '✅ Re-send Month Summary' : '📧 Complete Month & Email Summary'}
-    </button>
-    <div class="dca-complete-note">All ${allItems.length} tickers ticked · sends a summary to your email</div>`;
+  let html = `
+    <button class="dca-complete-btn submit" onclick="_dcaSubmitEmail()">📧 Submit & Email Summary</button>
+    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · emails a snapshot now</div>`;
+  if (allDone) {
+    html += `<button class="dca-complete-btn" onclick="_dcaCompleteMonth()">✅ Complete Month</button>`;
+  }
+  wrap.innerHTML = html;
 }
 
+// Send a progress snapshot email — does NOT mark the month complete
+async function _dcaSubmitEmail() {
+  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'submit' });
+  if (res && res.ok) showToast('Email sent to chanika.cptk@gmail.com ✓');
+  else showToast('Email failed: ' + (res?.error || 'unknown error'));
+}
+
+// Email the summary AND flag every plan for the month completed
 async function _dcaCompleteMonth() {
   if (!confirm(`Email the ${_dcaMonthLabel(_dcaMonth)} DCA summary and mark the month complete?`)) return;
-  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth });
+  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'complete' });
   if (res && res.ok) {
-    showToast('Summary emailed ✓');
+    showToast('Email sent to chanika.cptk@gmail.com ✓');
     await loadDCA();
   } else {
     showToast('Email failed: ' + (res?.error || 'unknown error'));
