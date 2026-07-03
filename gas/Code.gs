@@ -64,6 +64,10 @@ function doGet(e) {
       const symbol = (e?.parameter?.symbol || '').toUpperCase().trim();
       if (!symbol) throw new Error('symbol required');
       result.overview = _yahooOverview(symbol);   // null-safe; fields degrade to null
+    } else if (action === 'getEarnings') {
+      const symbol = (e?.parameter?.symbol || '').toUpperCase().trim();
+      if (!symbol) throw new Error('symbol required');
+      result.earnings = _yahooEarnings(symbol);   // Yahoo primary → Claude web-search fallback; null-safe
     } else if (action === 'searchTicker') {
       const q = e?.parameter?.q || '';
       if (!q) throw new Error('q required');
@@ -405,6 +409,123 @@ function _yahooOverview(symbol) {
 function testOverview() {
   ['O', 'AAPL'].forEach(function (sym) {
     Logger.log(sym + ' → ' + JSON.stringify(_yahooOverview(sym)));
+  });
+}
+
+/**
+ * Earnings for the Ticker Detail modal's Earnings tab: next earnings date +
+ * last-4-quarters EPS actual/estimate and revenue actual. Yahoo v10 quoteSummary
+ * (earnings + earningsHistory + calendarEvents) is primary; if Yahoo returns
+ * nothing usable, falls back to Claude web search. Never throws.
+ * Shape: { nextDate:<unixSec|null>, nextDateIsRange:bool, currency, quarters:[
+ *   { label, endDate:<unixSec|null>, epsActual, epsEstimate, revenue, revenueEstimate } ], source }
+ */
+function _yahooEarnings(symbol) {
+  try {
+    var r = _yahooQuoteSummary(symbol, 'earnings,earningsHistory,calendarEvents');
+    var raw = function (o) { if (o == null) return null; if (typeof o === 'number') return o; return ('raw' in o) ? o.raw : null; };
+    var out = { nextDate: null, nextDateIsRange: false, currency: 'USD', quarters: [], source: 'yahoo' };
+
+    if (r) {
+      if (r.earnings && r.earnings.financialCurrency) out.currency = r.earnings.financialCurrency;
+      var ce = r.calendarEvents && r.calendarEvents.earnings;
+      if (ce && ce.earningsDate && ce.earningsDate.length) {
+        out.nextDate = raw(ce.earningsDate[0]);
+        out.nextDateIsRange = ce.earningsDate.length > 1;
+      }
+      var eh = (r.earningsHistory && r.earningsHistory.history) || [];
+      var fc = (r.earnings && r.earnings.financialsChart && r.earnings.financialsChart.quarterly) || [];
+      var ehS = eh.slice(-4), fcS = fc.slice(-4);
+      var n = Math.max(ehS.length, fcS.length);
+      for (var i = 0; i < n; i++) {
+        var eItem = ehS[i], fItem = fcS[i];
+        out.quarters.push({
+          label:       (fItem && fItem.date) || (eItem && eItem.quarter && eItem.quarter.fmt) || '',
+          endDate:     raw(eItem && eItem.quarter),
+          epsActual:   raw(eItem && eItem.epsActual),
+          epsEstimate: raw(eItem && eItem.epsEstimate),
+          revenue:     raw(fItem && fItem.revenue),
+          revenueEstimate: null           // Yahoo has no historical revenue estimate
+        });
+      }
+    }
+
+    if (out.quarters.length || out.nextDate != null) return out;
+    var fb = _claudeEarnings(symbol);      // Yahoo empty → Claude fallback
+    return fb || out;
+  } catch (e) {
+    Logger.log('[getEarnings] failed for ' + symbol + ': ' + e.message);
+    return null;
+  }
+}
+
+/**
+ * Claude web-search fallback for earnings when Yahoo has nothing. Returns the same
+ * shape as _yahooEarnings (dates as ISO strings the frontend parses) or null.
+ * Only fires on Yahoo miss, so it rarely runs. Never throws.
+ */
+function _claudeEarnings(symbol) {
+  try {
+    var key = Config.CLAUDE_API_KEY();
+    if (!key) return null;
+    var sys = 'You are a financial data assistant. Use web search to find the company\'s earnings. ' +
+      'Reply with ONLY a JSON object, no prose, no markdown fences.';
+    var prompt = 'For stock ticker ' + symbol + ', return JSON: ' +
+      '{"nextDateISO":"YYYY-MM-DD or null (next scheduled earnings date)",' +
+      '"currency":"USD",' +
+      '"quarters":[{"label":"e.g. 2Q 2024","epsActual":number,"epsEstimate":number,' +
+      '"revenue":number (in absolute dollars),"revenueEstimate":number or null}]} ' +
+      'for the LAST 4 reported quarters, oldest first. Use null for anything you cannot verify. ' +
+      'Every number must come from a search result — never guess.';
+    var payload = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system: sys,
+      messages: [{ role: 'user', content: prompt }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }]
+    };
+    var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) { Logger.log('[getEarnings] Claude ' + resp.getResponseCode()); return null; }
+    var body = JSON.parse(resp.getContentText());
+    var text = (body.content || []).filter(function (b) { return b.type === 'text'; })
+      .map(function (b) { return b.text; }).join('\n').trim();
+    if (!text) return null;
+    var data;
+    try { data = JSON.parse(text); }
+    catch (e1) { var m = text.match(/\{[\s\S]*\}/); if (!m) return null; data = JSON.parse(m[0]); }
+    var nd = null;
+    if (data.nextDateISO && /^\d{4}-\d{2}-\d{2}/.test(data.nextDateISO)) {
+      nd = Math.floor(new Date(data.nextDateISO + 'T00:00:00Z').getTime() / 1000);
+    }
+    return {
+      nextDate: nd, nextDateIsRange: false,
+      currency: data.currency || 'USD',
+      quarters: (data.quarters || []).slice(-4).map(function (q) {
+        return {
+          label: q.label || '', endDate: null,
+          epsActual: q.epsActual != null ? q.epsActual : null,
+          epsEstimate: q.epsEstimate != null ? q.epsEstimate : null,
+          revenue: q.revenue != null ? q.revenue : null,
+          revenueEstimate: q.revenueEstimate != null ? q.revenueEstimate : null
+        };
+      }),
+      source: 'claude'
+    };
+  } catch (e) {
+    Logger.log('[getEarnings] Claude fallback failed for ' + symbol + ': ' + e.message);
+    return null;
+  }
+}
+
+/** Standalone test — run from the GAS IDE to confirm Earnings data is reachable. */
+function testEarnings() {
+  ['O', 'AAPL'].forEach(function (sym) {
+    Logger.log(sym + ' → ' + JSON.stringify(_yahooEarnings(sym)));
   });
 }
 

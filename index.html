@@ -2267,6 +2267,24 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-ov-lbl { font-size:13px;color:var(--text-muted);line-height:1.35; }
 .td-ov-val { font-family:'Instrument Sans',sans-serif;font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap; }
 .td-pane-msg { text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.55;padding:26px 8px; }
+/* Earnings tab */
+.td-earn-next { display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px; }
+.td-earn-next-lbl { font-size:12px;color:var(--text-muted); }
+.td-earn-next-val { font-family:'Instrument Sans',sans-serif;font-size:14px;font-weight:700;text-align:right; }
+.td-earn-next-sub { font-size:11px;color:var(--text-muted);font-weight:500; }
+.td-earn-q { margin-bottom:10px;padding:13px 14px; }
+.td-earn-q:last-child { margin-bottom:0; }
+.td-earn-qhead { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px; }
+.td-earn-qlbl { font-size:13px;font-weight:700; }
+.td-earn-badge { font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap; }
+.td-earn-badge.beat { color:var(--success);background:rgba(22,163,74,.13); }
+.td-earn-badge.miss { color:var(--danger);background:rgba(220,38,38,.13); }
+.td-earn-badge.na   { color:var(--text-muted);background:var(--surface2); }
+.td-earn-grid { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
+.td-earn-cell { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 9px; }
+.td-earn-cell-lbl { font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted); }
+.td-earn-cell-val { font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:700;margin-top:3px; }
+.td-earn-cell-sub { font-size:10px;color:var(--text-muted);margin-top:1px; }
 /* DCA Simulator (Ticker Detail modal) */
 .td-dca-input-wrap { display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:0 12px;margin-bottom:10px; }
 .td-dca-input-wrap:focus-within { border-color:var(--accent); }
@@ -3695,6 +3713,8 @@ let _tdCtx = null;               // { ticker, hist, g, price }
 let _tdTab = 'overview';         // active tab id
 let _tdOverview = null;          // cached getOverview result (or {_error:true})
 let _tdOverviewToken = 0;        // guards against out-of-order overview fetches
+let _tdEarnings = null;          // cached getEarnings result (or {_error:true})
+let _tdEarningsToken = 0;        // guards against out-of-order earnings fetches
 
 function _tdRender(ticker, hist) {
   const g = _techGauge(hist.closes);
@@ -3715,7 +3735,8 @@ function _tdRender(ticker, hist) {
     : null;
 
   _tdCtx = { ticker, hist, g, price };
-  _tdOverview = null;            // reset per ticker; overview tab lazy-fetches
+  _tdOverview = null;            // reset per ticker; tabs lazy-fetch on first view
+  _tdEarnings = null;
   _tdTab = 'overview';
 
   const tabs = [
@@ -3766,6 +3787,7 @@ function _tdShowTab(tab) {
     _tdLoadNews(_tdCtx.ticker);
   } else if (tab === 'earnings') {
     c.innerHTML = `<div class="td-tabpane">${_tdEarningsHtml()}</div>`;
+    if (!_tdEarnings) _tdFetchEarnings();
   } else if (tab === 'simulator') {
     c.innerHTML = `<div class="td-tabpane">${_tdSimulatorHtml()}</div>`;
     if (_tdDca) _tdDcaCalc();
@@ -3853,9 +3875,85 @@ function _tdTechnicalsHtml() {
     </div>`;
 }
 
-// ── Tab: Earnings (built next — placeholder for now) ──
+// ── Tab: Earnings (next earnings date + last-4-quarters EPS/revenue vs estimate) ──
+function _tdEarnDateLabel(sec) {
+  if (sec == null) return null;
+  const d = new Date(sec * 1000);
+  if (isNaN(d)) return null;
+  const day = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  const diff = Math.round((d - new Date()) / 86400000);
+  const rel = diff === 0 ? 'today' : diff > 0 ? `in ${diff}d` : `${-diff}d ago`;
+  return { day, rel, future: diff >= 0 };
+}
+
+function _tdEarnQuarterCard(q, cur) {
+  const beat = (q.epsActual != null && q.epsEstimate != null) ? q.epsActual >= q.epsEstimate : null;
+  let surprise = '';
+  if (q.epsActual != null && q.epsEstimate != null && Math.abs(q.epsEstimate) > 1e-9) {
+    const s = ((q.epsActual - q.epsEstimate) / Math.abs(q.epsEstimate)) * 100;
+    surprise = `${s >= 0 ? '+' : ''}${s.toFixed(1)}%`;
+  }
+  const badge = beat == null
+    ? `<span class="td-earn-badge na">—</span>`
+    : `<span class="td-earn-badge ${beat ? 'beat' : 'miss'}">${beat ? 'Beat' : 'Miss'}${surprise ? ' ' + surprise : ''}</span>`;
+  const eps = v => v != null ? fmtUSD(v) : '—';
+  const revSub = q.revenueEstimate != null ? `est ${_tdFmtBig(q.revenueEstimate, true)}` : '';
+  return `
+    <div class="card2 td-earn-q">
+      <div class="td-earn-qhead">
+        <span class="td-earn-qlbl">${_anEsc(q.label || '—')}</span>
+        ${badge}
+      </div>
+      <div class="td-earn-grid">
+        <div class="td-earn-cell"><div class="td-earn-cell-lbl">EPS est</div><div class="td-earn-cell-val">${eps(q.epsEstimate)}</div></div>
+        <div class="td-earn-cell"><div class="td-earn-cell-lbl">EPS actual</div><div class="td-earn-cell-val">${eps(q.epsActual)}</div></div>
+        <div class="td-earn-cell"><div class="td-earn-cell-lbl">Revenue</div><div class="td-earn-cell-val">${_tdFmtBig(q.revenue, true)}</div>${revSub ? `<div class="td-earn-cell-sub">${revSub}</div>` : ''}</div>
+      </div>
+    </div>`;
+}
+
 function _tdEarningsHtml() {
-  return `<div class="td-pane-msg">📊 Earnings — coming next.<br>วันประกาศงบถัดไป และผล EPS/รายได้ 4 ไตรมาสล่าสุด (จริง vs คาดการณ์) จะแสดงที่นี่</div>`;
+  if (!_tdEarnings) return `<div class="td-loading"><div class="td-spin"></div>Loading earnings…</div>`;
+  if (_tdEarnings._error) return `<div class="td-pane-msg">ไม่สามารถโหลดข้อมูลงบ/ผลประกอบการได้ในขณะนี้<br>Earnings data is temporarily unavailable.</div>`;
+  const e = _tdEarnings;
+  const quarters = Array.isArray(e.quarters) ? e.quarters : [];
+  if (!quarters.length && e.nextDate == null) {
+    return `<div class="td-pane-msg">ไม่พบข้อมูลผลประกอบการสำหรับ ${_anEsc(_tdCtx.ticker)}<br>No earnings data available (common for ETFs / funds).</div>`;
+  }
+
+  let html = '';
+  const nd = _tdEarnDateLabel(e.nextDate);
+  if (nd) {
+    html += `<div class="card2" style="margin-bottom:14px">
+      <div class="td-earn-next">
+        <div class="td-earn-next-lbl">${nd.future ? 'Next earnings' : 'Last earnings'}${e.nextDateIsRange ? ' (est.)' : ''}</div>
+        <div><div class="td-earn-next-val">${nd.day}</div><div class="td-earn-next-sub">${nd.rel}</div></div>
+      </div>
+    </div>`;
+  }
+  if (quarters.length) {
+    html += `<div class="td-sec-lbl">Last ${quarters.length} quarters · EPS vs estimate</div>`;
+    // newest first
+    html += quarters.slice().reverse().map(q => _tdEarnQuarterCard(q, e.currency)).join('');
+    if (e.source === 'claude') html += `<div class="td-earn-cell-sub" style="text-align:center;margin-top:8px">ข้อมูลจาก web search</div>`;
+  }
+  return html;
+}
+
+async function _tdFetchEarnings() {
+  const token = ++_tdEarningsToken;
+  const ticker = _tdCtx.ticker;
+  let ea = { _error: true };
+  try {
+    const r = await callGAS('getEarnings', { symbol: ticker });
+    if (r?.ok && r.earnings) ea = r.earnings;
+  } catch (_) {}
+  if (token !== _tdEarningsToken) return;                 // superseded by a newer open
+  _tdEarnings = ea;
+  if (_tdTab === 'earnings' && _tdCtx && _tdCtx.ticker === ticker) {
+    const c = document.getElementById('td-tab-content');
+    if (c) c.innerHTML = `<div class="td-tabpane">${_tdEarningsHtml()}</div>`;
+  }
 }
 
 // ── Tab: Simulator (unchanged DCA calc, just relocated under the tab) ──
@@ -4017,6 +4115,7 @@ function closeTickerDetail() {
   document.getElementById('td-modal').style.display = 'none';
   _tdDca = null; // clear simulator state so a stale ticker can't be recalculated
   _tdCtx = null; _tdOverview = null; _tdOverviewToken++; // drop per-ticker tab state
+  _tdEarnings = null; _tdEarningsToken++;
 }
 
 function _srCell(a) {
