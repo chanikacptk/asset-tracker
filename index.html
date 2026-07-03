@@ -2285,6 +2285,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-earn-cell-lbl { font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted); }
 .td-earn-cell-val { font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:700;margin-top:3px; }
 .td-earn-cell-sub { font-size:10px;color:var(--text-muted);margin-top:1px; }
+.td-earn-src { font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:12px; }
 /* DCA Simulator (Ticker Detail modal) */
 .td-dca-input-wrap { display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:0 12px;margin-bottom:10px; }
 .td-dca-input-wrap:focus-within { border-color:var(--accent); }
@@ -3829,7 +3830,8 @@ function _tdOverviewHtml() {
   add('52-week high', h && h.week52High != null ? fmtUSD(h.week52High) : '—');
   add('52-week low', h && h.week52Low != null ? fmtUSD(h.week52Low) : '—');
   return `<div class="card2">${rows.map(([l, v]) =>
-    `<div class="td-ov-row"><div class="td-ov-lbl">${l}</div><div class="td-ov-val">${v}</div></div>`).join('')}</div>`;
+    `<div class="td-ov-row"><div class="td-ov-lbl">${l}</div><div class="td-ov-val">${v}</div></div>`).join('')}</div>
+    <div class="td-earn-src">ที่มา · Source: Yahoo Finance</div>`;
 }
 
 async function _tdFetchOverview() {
@@ -3935,8 +3937,9 @@ function _tdEarningsHtml() {
     html += `<div class="td-sec-lbl">Last ${quarters.length} quarters · EPS vs estimate</div>`;
     // newest first
     html += quarters.slice().reverse().map(q => _tdEarnQuarterCard(q, e.currency)).join('');
-    if (e.source === 'claude') html += `<div class="td-earn-cell-sub" style="text-align:center;margin-top:8px">ข้อมูลจาก web search</div>`;
   }
+  const src = e.source === 'claude' ? 'Web search (Claude)' : 'Yahoo Finance';
+  html += `<div class="td-earn-src">ที่มา · Source: ${src}</div>`;
   return html;
 }
 
