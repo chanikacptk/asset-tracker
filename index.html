@@ -302,6 +302,35 @@ body {
 .dca-complete-btn + .dca-complete-btn { margin-top: 10px; }
 .dca-complete-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
+/* ── DCA mobile card layout (replaces the table below 768px) ─────────────── */
+.dca-cards { display: none; }              /* desktop: hidden — table is shown */
+.dca-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; margin-bottom: 12px;
+}
+.dca-card.done { opacity: .6; }
+.dca-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dca-card-tk { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.dca-card-tk .dca-tk-name { font-weight: 700; font-size: 17px; }
+.dca-card-reason { font-size: 12px; color: var(--text-muted); line-height: 1.35; flex: 1; min-width: 120px; }
+.dca-card-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dca-card-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.dca-card-lbl { font-size: 13px; color: var(--text-muted); width: 78px; flex-shrink: 0; }
+.dca-card-sugg { font-weight: 600; font-size: 14px; }
+.dca-card-row .dca-io { flex: 1; width: auto; text-align: left; }
+.dca-card-done {
+  display: inline-flex; align-items: center; gap: 8px; margin-left: auto; margin-top: 2px;
+  min-height: 44px; min-width: 44px; padding: 0 6px; justify-content: flex-end;
+  cursor: pointer; font-size: 14px; font-weight: 600; float: right;
+}
+.dca-card-done .dca-check { width: 24px; height: 24px; }
+.dca-card-empty { text-align: center; color: var(--text-muted); padding: 22px 4px; font-size: 13px; }
+
+@media (max-width: 767px) {
+  .dca-table { display: none; }            /* mobile: hide the wide table … */
+  .dca-cards { display: block; }           /* … and show stacked cards instead */
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn {
   display: block; width: 100%; padding: 14px; border-radius: var(--radius);
@@ -8022,26 +8051,72 @@ async function _dcaRenderActive() {
   const total      = items.length;
   const fillPct    = budget > 0 ? Math.min(100, (plannedSum / budget) * 100) : 0;
 
+  const emptyNote = 'No tickers yet. Set a budget and tap <b>🔄 Refresh</b> to generate suggested allocations.';
+
   const rowsHtml = total === 0
     ? `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:22px 4px;font-size:13px">
-         No tickers yet. Set a budget and tap <b>🔄 Refresh</b> to generate suggested allocations.</td></tr>`
+         ${emptyNote}</td></tr>`
     : items.map(i => {
         const planned = i.planned_amount_usd != null ? _dcaFmtInput(i.planned_amount_usd) : '';
         const actual  = i.actual_amount_usd  != null ? _dcaFmtInput(i.actual_amount_usd)  : '';
         return `
-        <tr class="${i.is_done ? 'done' : ''}">
+        <tr class="${i.is_done ? 'done' : ''}" data-item="${i.id}">
           <td><div class="dca-cell-tk">${_assetLogoImg(i.ticker, 20)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div></td>
           <td class="dca-cell-reason">${_esc(i.reasoning || '')}</td>
           <td class="dca-cell-sugg">${i.suggested_amount_usd ? fmtUSD(i.suggested_amount_usd) : '—'}</td>
           <td style="text-align:right"><input class="dca-io plan" inputmode="decimal" placeholder="—"
+                data-item="${i.id}" data-field="planned_amount_usd"
                 value="${planned}" oninput="_numInputFmt(this)"
                 onchange="_dcaEditItem('${i.id}','planned_amount_usd',this)"></td>
           <td style="text-align:right"><input class="dca-io act" inputmode="decimal" placeholder="—"
+                data-item="${i.id}" data-field="actual_amount_usd"
                 value="${actual}" oninput="_numInputFmt(this)"
                 onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)"></td>
           <td style="text-align:center"><input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+                data-item="${i.id}" data-field="is_done"
                 onchange="_dcaToggleDone('${i.id}',this)"></td>
         </tr>`;
+      }).join('');
+
+  // Mobile: one card per ticker (the table above is display:none below 768px)
+  const cardsHtml = total === 0
+    ? `<div class="dca-card-empty">${emptyNote}</div>`
+    : items.map(i => {
+        const planned = i.planned_amount_usd != null ? _dcaFmtInput(i.planned_amount_usd) : '';
+        const actual  = i.actual_amount_usd  != null ? _dcaFmtInput(i.actual_amount_usd)  : '';
+        return `
+        <div class="dca-card ${i.is_done ? 'done' : ''}" data-item="${i.id}">
+          <div class="dca-card-head">
+            <div class="dca-card-tk">${_assetLogoImg(i.ticker, 22)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div>
+            <div class="dca-card-reason">${_esc(i.reasoning || '')}</div>
+          </div>
+          <div class="dca-card-body">
+            <div class="dca-card-row">
+              <span class="dca-card-lbl">Suggested</span>
+              <span class="dca-card-sugg">${i.suggested_amount_usd ? fmtUSD(i.suggested_amount_usd) : '—'}</span>
+            </div>
+            <div class="dca-card-row">
+              <span class="dca-card-lbl">Planned</span>
+              <input class="dca-io plan" inputmode="decimal" placeholder="—"
+                     data-item="${i.id}" data-field="planned_amount_usd"
+                     value="${planned}" oninput="_numInputFmt(this)"
+                     onchange="_dcaEditItem('${i.id}','planned_amount_usd',this)">
+            </div>
+            <div class="dca-card-row">
+              <span class="dca-card-lbl">Actual</span>
+              <input class="dca-io act" inputmode="decimal" placeholder="—"
+                     data-item="${i.id}" data-field="actual_amount_usd"
+                     value="${actual}" oninput="_numInputFmt(this)"
+                     onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)">
+            </div>
+            <label class="dca-card-done">
+              <input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+                     data-item="${i.id}" data-field="is_done"
+                     onchange="_dcaToggleDone('${i.id}',this)">
+              <span>Done</span>
+            </label>
+          </div>
+        </div>`;
       }).join('');
 
   el.innerHTML = `
@@ -8068,6 +8143,7 @@ async function _dcaRenderActive() {
         </tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
+      <div class="dca-cards">${cardsHtml}</div>
       <div class="dca-progress">
         <div class="dca-progress-bar-track"><div class="dca-progress-bar-fill" style="width:${fillPct}%"></div></div>
         <div class="dca-progress-txt">
@@ -8185,15 +8261,33 @@ async function _dcaSyncItems(planId, generated) {
   if (toInsert.length) await sb.from('dca_plan_items').insert(toInsert);
 }
 
+// Mirror an edit onto the ticker's other rendering (table row ↔ mobile card),
+// so the two stay consistent and _dcaRecalcSummary (which reads the table) is right.
+function _dcaSyncPair(itemId, field, el) {
+  document.querySelectorAll(
+    `#dca-tab-content [data-item="${itemId}"][data-field="${field}"]`
+  ).forEach(x => {
+    if (x === el) return;
+    if (x.type === 'checkbox') x.checked = el.checked;
+    else if (x.value !== el.value) x.value = el.value;
+  });
+  // keep the dimmed "done" styling in sync on both the <tr> and the card
+  if (field === 'is_done') {
+    document.querySelectorAll(`#dca-tab-content [data-item="${itemId}"]`)
+      .forEach(n => { if (n.matches('tr, .dca-card')) n.classList.toggle('done', el.checked); });
+  }
+}
+
 async function _dcaEditItem(itemId, field, el) {
   const val = _parseNum(el.value);
+  _dcaSyncPair(itemId, field, el);
   await sb.from('dca_plan_items').update({ [field]: val }).eq('id', itemId);
   _dcaRecalcSummary();
 }
 
 async function _dcaToggleDone(itemId, el) {
+  _dcaSyncPair(itemId, 'is_done', el);
   await sb.from('dca_plan_items').update({ is_done: el.checked }).eq('id', itemId);
-  el.closest('tr')?.classList.toggle('done', el.checked);
   _dcaRecalcSummary();
 }
 
