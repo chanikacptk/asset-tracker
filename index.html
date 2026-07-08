@@ -73,7 +73,7 @@ body {
   border-top: 1px solid var(--border);
   box-shadow: 0 -2px 12px rgba(0,0,0,0.07);
   display: flex;
-  padding-bottom: calc(var(--safe-bottom) + 6px);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 100;
 }
 .nav-item {
@@ -360,6 +360,10 @@ body {
 @media (max-width: 767px) {
   .dca-table { display: none; }            /* mobile: hide the wide table … */
   .dca-cards { display: block; }           /* … and show stacked cards instead */
+
+  /* Holdings: swap the wide scrolling table for stacked cards */
+  .pt-card .tbl-wrap { display: none; }
+  .pt-card .ph-cards { display: block; }
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -2291,6 +2295,22 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 
 .tbl-wrap { overflow-x:auto;-webkit-overflow-scrolling:touch; }
 .pt-table { width:100%;border-collapse:collapse;font-size:12px;min-width:760px; }
+
+/* ── Holdings: mobile card layout (replaces the wide table below 768px) ────── */
+.ph-cards { display:none; }
+.ph-card { padding:12px 16px;border-bottom:1px solid var(--border); }
+.ph-card:last-child { border-bottom:none; }
+.ph-card-top { display:flex;align-items:center;justify-content:space-between;gap:10px; }
+.ph-card-id { display:inline-flex;align-items:center;gap:8px;min-width:0;cursor:pointer; }
+.ph-card-tk { font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.ph-card-id:hover .ph-card-tk { text-decoration:underline;text-underline-offset:2px; }
+.ph-card-price { font-size:15px;font-weight:700;flex-shrink:0; }
+.ph-card-shares { font-size:12px;color:var(--text-muted);margin:3px 0 0 30px; }
+.ph-card-body { margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px; }
+.ph-card-row { display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:13px; }
+.ph-card-row .ph-lbl { color:var(--text-muted);flex-shrink:0; }
+.ph-card-row .ph-val { font-weight:600;text-align:right;min-width:0; }
+.ph-card-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:10px; }
 .pt-table thead th {
   font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
   color:var(--text-muted);padding:7px 10px;text-align:right;
@@ -3059,7 +3079,7 @@ function _renderAssetSummary(segments, totalUSD) {
   const cards = segments.map(s => {
     const pct  = totalUSD > 0 ? ((s.value / totalUSD) * 100).toFixed(1) : '0';
     const page = _segPage[s.label];
-    const clickAttr = page ? `onclick="navigate('${page}')" style="cursor:pointer;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px"` : `style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px"`;
+    const clickAttr = page ? `onclick="navigate('${page}')" style="cursor:pointer;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0"` : `style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0"`;
     return `<div class="card2" ${clickAttr}>
       <div style="display:flex;align-items:center;gap:7px;min-width:0">
         <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
@@ -3681,6 +3701,7 @@ async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
           <tbody id="pt-tbody"></tbody>
         </table>
       </div>
+      <div class="ph-cards" id="pt-cards"></div>
     </div>`;
 
   // Footer row for unallocated
@@ -3759,6 +3780,7 @@ function _renderPortTbody() {
     : _portTableData;
 
   let rows = '';
+  let cards = '';
   sorted.forEach(r => {
     const barFill = Math.min(r.weight / 20 * 100, 100);
     rows += `<tr>
@@ -3784,6 +3806,22 @@ function _renderPortTbody() {
         <button class="pt-act-btn pt-act-del" onclick="deleteHolding('${r.portfolioId}','${r.ticker}')">🗑</button>
       </td>
     </tr>`;
+    cards += `<div class="ph-card">
+      <div class="ph-card-top">
+        <span class="ph-card-id" onclick="openTickerDetail('${r.ticker}')">${_assetLogoImg(r.ticker, 22)}<span class="ph-card-tk">${r.ticker}</span></span>
+        <span class="ph-card-price">${r.price > 0 ? fmtUSD(r.price) : '—'}</span>
+      </div>
+      <div class="ph-card-shares">${parseFloat(r.shares.toPrecision(7))} shares</div>
+      <div class="ph-card-body">
+        <div class="ph-card-row"><span class="ph-lbl">Avg Cost</span><span class="ph-val">${fmtUSD(r.avg_cost_usd)}</span></div>
+        <div class="ph-card-row"><span class="ph-lbl">Value</span><span class="ph-val">${r.price > 0 ? fmtVal(r.value) : '—'}</span></div>
+        <div class="ph-card-row"><span class="ph-lbl">P/L</span><span class="ph-val ${r.pl >= 0 ? 'gc' : 'rc'}">${r.pl >= 0 ? '+' : ''}${fmtUSD(r.pl)} (${r.plPct >= 0 ? '+' : ''}${r.plPct.toFixed(1)}%)</span></div>
+      </div>
+      <div class="ph-card-actions">
+        <button class="pt-act-btn" onclick="openEditHolding('${r.portfolioId}','${r.ticker}',${r.shares},${r.avg_cost_usd},${r.target_pct || ''})">✏️</button>
+        <button class="pt-act-btn pt-act-del" onclick="deleteHolding('${r.portfolioId}','${r.ticker}')">🗑</button>
+      </div>
+    </div>`;
   });
 
   const unallocated = 100 - (_portTableData._allocatedTarget || 0);
@@ -3795,6 +3833,8 @@ function _renderPortTbody() {
   }
 
   tbody.innerHTML = rows;
+  const cardsEl = document.getElementById('pt-cards');
+  if (cardsEl) cardsEl.innerHTML = cards;
 }
 
 function _gapCell(gap, target) {
