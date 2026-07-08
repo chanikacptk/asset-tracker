@@ -1,5 +1,7 @@
 # MyAsset+ — Asset Tracker
 
+> **GAS URL now persists in Supabase, not just localStorage (2026-07-08)**: Fixes "the app keeps asking for the GAS Web App URL on mobile" — localStorage gets wiped (cache clear, PWA eviction, device switch), so the URL vanished. The URL already lived in `app_config` (key **`gas_web_app_url`** — *not* `gas_url`; that's the real stored key, referenced by GAS `getConfig`/`saveConfig` + the migration-009 write policies), but `_loadGasUrl()` read **localStorage first** and only hit the DB as a last resort. Now **Supabase is the source of truth**: `_loadGasUrl()` does a direct anon `SELECT value FROM app_config WHERE key='gas_web_app_url'` first, caches the result to localStorage, and falls back to the cached copy only when offline / the read fails. Settings bootstrap (`loadSettings`) reads the same way (dropped its extra `callGAS('getConfig')` round-trip). `saveGasUrl()` unchanged — still writes via GAS `saveConfig` (service_role) **and** caches to localStorage. **Migration 027** narrows app_config's blanket `anon_read_all USING(true)` SELECT (migration 009) to a key-scoped, read-only `anon_read_gas_url USING (key='gas_web_app_url')` — only the non-sensitive GAS URL is anon-readable; writes still go through GAS. SW cache `myasset-v105`. **⚠️ Run migration 027 in Supabase.**
+
 > **Full visual redesign — warm cream, light-theme-only (2026-07-08)**: Replaced the old blue/indigo + dark-mode system with a warm cream palette and a single bilingual font. **`DESIGN.md`** (repo root) is the design source of truth. New `:root` tokens: `--bg` #f6e9cf cream, `--primary` #558467 sage (buttons/active/CTA/positive P/L), `--accent` #b8684f terracotta (badges/alerts/negative P/L), `--s1` #eee0c5 cards, `--s2` #e5d4b0 inputs, `--muted` #7a6e5f, `--text` #1a1a1a, `--border` rgba(85,132,103,.2), + `--g`/`--r`/`--text-inv`; legacy tokens alias onto them (`--surface`→s1, `--surface2`→s2, `--success`→g, `--danger`→r, `--warning`→#c9922e gold). **Naming gotcha**: the old `--accent` (the *action* color) was globally renamed to `var(--primary)`; the new `--accent` is terracotta — so **buttons/active states use `--primary`, not `--accent`**. **Typography**: loads IBM Plex Sans Thai + Noto Sans Thai, applied everywhere via `--font`; Syne / Instrument Sans / JetBrains Mono removed (overrides the earlier "do not change fonts" note). **Charts** use a warm categorical palette (sage/terracotta/muted-gold/dusty-blue/warm-tan/olive). **Dark mode fully removed**: `html.dark` block, header 🌙 button, Settings→Appearance card gone; `toggleTheme`/`_syncThemeUI` are no-ops, `initTheme` just ensures light. Verified login + home live; SW cache `myasset-v101`.
 > **US Portfolio — 1D change merged into Total Value card (2026-07-08)**: The US Portfolio metric cards went from **3 → 2** (`#us-metrics-wrap` grid `1fr 1fr 1fr`→`1fr 1fr`, each now 50% width). The standalone **1-Day Change** card (`#us-metric-day`) was removed; `_renderUSMetricCards` now appends a small **12px "1D $x (x%)"** line under the Total Value figure — `1D` label in `--text-muted`, value+% in `--success`/`--danger` per sign (same color logic) — and **hides the line entirely when `!hasDayData`** (previously showed a `—` card). The loading-skeleton loop dropped `us-metric-day` too. `_computeUSCombinedMetrics` / `dayChangeUSD` math untouched. CSS-only + one render function; no migration, no GAS. SW cache `myasset-v104`.
 > **Mobile layout fixes (2026-07-08)**: (1) **US Portfolio holdings** — below 768px the wide table is swapped for a **card-per-holding** layout (`.ph-cards`/`.ph-card`: logo+ticker+price, shares, Avg Cost / Value / P/L, edit+delete); `_renderPortTbody` emits both the `<tbody>` and `#pt-cards`, CSS media query toggles them; desktop table unchanged. (2) **Home asset grid** — added `min-width:0` to the `1fr 1fr` cards so long values no longer overflow/clip on the right (grid item `min-width:auto` fix). (3) **Bottom nav** — `padding-bottom: max(12px, env(safe-area-inset-bottom))` for the iOS home-indicator safe area. SW cache `myasset-v102`.
@@ -54,7 +56,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v104`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v105`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -212,6 +214,7 @@ skills/
 024  insurance_policies: detailed policy columns (policy_type/number, insured_name, status, dates, premium_mode + amount, payment_method, next/last payment, notes, created_at) + anon write RLS. Insurance EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
 025  dca_plans + dca_plan_items: multi-portfolio DCA. Add dca_plans.portfolio_id (unique → user+portfolio+month; total_budget_usd relaxed; status widened to draft/in_progress/completed) + anon insert/update RLS. Add dca_plan_items.planned_amount_usd/actual_amount_usd/is_done (suggested relaxed) + anon insert/delete RLS  ⚠️ RUN IN SUPABASE
 026  users: Google OAuth link. Add users.email (unique lower()) + users.auth_uid (FK→auth.users, unique); seed Chelsea's email; add auth_link_users UPDATE RLS TO authenticated (claim unlinked/own row, WITH CHECK auth_uid=auth.uid()). Google identity attached to existing users.id — NO user_id migration  ⚠️ RUN IN SUPABASE  ✓ (run 2026-07-08)
+027  app_config: narrow the blanket anon_read_all USING(true) SELECT (from 009) to a key-scoped read-only anon_read_gas_url USING (key='gas_web_app_url') — only the non-sensitive GAS URL is anon-readable; writes still go through GAS (service_role). Makes the GAS URL DB the reliable source of truth so it persists across localStorage clears  ⚠️ RUN IN SUPABASE
 ```
 
 ---
@@ -623,7 +626,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v104`**. Bump on every `index.html` change.
+Cache name: **`myasset-v105`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)

@@ -2721,15 +2721,21 @@ async function enterApp() {
 }
 
 async function _loadGasUrl() {
-  // localStorage is the primary source — survives RLS lockdown on app_config
+  // Supabase is the source of truth — survives localStorage clears, cache wipes,
+  // and device switches (the "keeps asking for the URL on mobile" bug). anon
+  // SELECT is allowed for the gas_web_app_url key only (migration 027).
+  try {
+    const { data, error } = await sb.from('app_config')
+      .select('value').eq('key', 'gas_web_app_url').maybeSingle();
+    if (!error && data?.value) {
+      state.gasUrl = data.value;
+      localStorage.setItem('gasUrl', data.value);  // cache for offline / fast path
+      return;
+    }
+  } catch (_) { /* offline or RLS blocked — fall through to cached copy */ }
+  // Fallback: last-known URL cached in localStorage.
   const local = localStorage.getItem('gasUrl');
-  if (local) { state.gasUrl = local; return; }
-  // First-ever load fallback: try direct DB read (works if anon SELECT is allowed)
-  const { data } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
-  if (data?.value) {
-    state.gasUrl = data.value;
-    localStorage.setItem('gasUrl', data.value);
-  }
+  if (local) state.gasUrl = local;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -8749,15 +8755,9 @@ async function loadSettings() {
     `<div class="emoji-opt${e === state.userAvatar ? ' selected' : ''}" onclick="pickEmoji('${e}')">${e}</div>`
   ).join('');
 
-  // GAS URL — read via GAS if available, else direct Supabase SELECT (bootstrap: no URL yet)
-  let gasUrlValue = '';
-  if (state.gasUrl) {
-    const cfgResult = await callGAS('getConfig', { key: 'gas_web_app_url' });
-    gasUrlValue = cfgResult?.ok ? (cfgResult.value || '') : '';
-  } else {
-    const { data: cfg } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
-    gasUrlValue = cfg?.value || '';
-  }
+  // GAS URL — Supabase is the source of truth (anon SELECT allowed for this key)
+  const { data: cfg } = await sb.from('app_config').select('value').eq('key', 'gas_web_app_url').maybeSingle();
+  const gasUrlValue = cfg?.value || localStorage.getItem('gasUrl') || '';
   state.gasUrl = gasUrlValue || null;
   if (gasUrlValue) localStorage.setItem('gasUrl', gasUrlValue);
   document.getElementById('settings-gas-url').value = gasUrlValue;
