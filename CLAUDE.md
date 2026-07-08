@@ -1,5 +1,9 @@
 # MyAsset+ — Asset Tracker
 
+> **Full visual redesign — warm cream, light-theme-only (2026-07-08)**: Replaced the old blue/indigo + dark-mode system with a warm cream palette and a single bilingual font. **`DESIGN.md`** (repo root) is the design source of truth. New `:root` tokens: `--bg` #f6e9cf cream, `--primary` #558467 sage (buttons/active/CTA/positive P/L), `--accent` #b8684f terracotta (badges/alerts/negative P/L), `--s1` #eee0c5 cards, `--s2` #e5d4b0 inputs, `--muted` #7a6e5f, `--text` #1a1a1a, `--border` rgba(85,132,103,.2), + `--g`/`--r`/`--text-inv`; legacy tokens alias onto them (`--surface`→s1, `--surface2`→s2, `--success`→g, `--danger`→r, `--warning`→#c9922e gold). **Naming gotcha**: the old `--accent` (the *action* color) was globally renamed to `var(--primary)`; the new `--accent` is terracotta — so **buttons/active states use `--primary`, not `--accent`**. **Typography**: loads IBM Plex Sans Thai + Noto Sans Thai, applied everywhere via `--font`; Syne / Instrument Sans / JetBrains Mono removed (overrides the earlier "do not change fonts" note). **Charts** use a warm categorical palette (sage/terracotta/muted-gold/dusty-blue/warm-tan/olive). **Dark mode fully removed**: `html.dark` block, header 🌙 button, Settings→Appearance card gone; `toggleTheme`/`_syncThemeUI` are no-ops, `initTheme` just ensures light. Verified login + home live; SW cache `myasset-v101`.
+> **US Portfolio — 1D change merged into Total Value card (2026-07-08)**: The US Portfolio metric cards went from **3 → 2** (`#us-metrics-wrap` grid `1fr 1fr 1fr`→`1fr 1fr`, each now 50% width). The standalone **1-Day Change** card (`#us-metric-day`) was removed; `_renderUSMetricCards` now appends a small **12px "1D $x (x%)"** line under the Total Value figure — `1D` label in `--text-muted`, value+% in `--success`/`--danger` per sign (same color logic) — and **hides the line entirely when `!hasDayData`** (previously showed a `—` card). The loading-skeleton loop dropped `us-metric-day` too. `_computeUSCombinedMetrics` / `dayChangeUSD` math untouched. CSS-only + one render function; no migration, no GAS. SW cache `myasset-v104`.
+> **Mobile layout fixes (2026-07-08)**: (1) **US Portfolio holdings** — below 768px the wide table is swapped for a **card-per-holding** layout (`.ph-cards`/`.ph-card`: logo+ticker+price, shares, Avg Cost / Value / P/L, edit+delete); `_renderPortTbody` emits both the `<tbody>` and `#pt-cards`, CSS media query toggles them; desktop table unchanged. (2) **Home asset grid** — added `min-width:0` to the `1fr 1fr` cards so long values no longer overflow/clip on the right (grid item `min-width:auto` fix). (3) **Bottom nav** — `padding-bottom: max(12px, env(safe-area-inset-bottom))` for the iOS home-indicator safe area. SW cache `myasset-v102`.
+
 > **Renamed "Smart Me" → "MyAsset+" (2026-06-27)**: app name updated everywhere — `<title>`, login header, `apple-mobile-web-app-title`, `manifest.json` `name`/`short_name`, and GAS ping + Telegram test-alert strings (`gas/Code.gs`). New wallet app icon from `assets/icons/M+ V7.svg` — exported PNGs (favicon 16/32, `apple-touch-icon` 180, PWA 192/512) live in `assets/icons/`, 1024 master at `assets/icon-source.png`. The SVG rasterizes onto an **opaque white** background, so the white was **flood-filled to `#f6e9cf`** from the corners (leaving the off-white "M+" lettering intact) rather than alpha-flattened. App `theme_color`/`background_color` (manifest) + `<meta name="theme-color">` are also `#f6e9cf`. SW cache `myasset-v77`. See **"App icon"** section.
 
 ## What this is
@@ -28,6 +32,10 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 > **DCA Plan — multi-portfolio + manual execution tracking (2026-07-03)**: Rebuilt the DCA Plan page from a single Growth-only, GAS-generated approval list into a **per-portfolio planner the user drives by hand** (migration 025). **One plan per portfolio per month** (`dca_plans` gains `portfolio_id`; unique now `(user_id, portfolio_id, month_year)`; frontend now WRITES plans + items → anon insert/update RLS added). Page = a **month selector** dropdown (history, defaults to current month) + **portfolio tabs** (built from `portfolios`, auto-emoji via `_bmEmoji`), each tab independent. Per tab: header (month · **status pill** DRAFT→IN PROGRESS→COMPLETED · **DCA budget** input `$` comma-formatted · **🔄 Refresh**), a summary line (`N/M tickers completed · Planned $ · Actual $`), a table **TICKER · Reasoning · Suggested · Planned · Actual · ✓**, and a progress bar. **Refresh** runs the gap-from-target logic client-side (`_dcaGenerate`: lists **all holdings**, but only **underweight** tickers share the budget proportionally by gap — overweight ones show reasoning `At/above N% target (+x%)` and no-target ones `No target % set`, both with Suggested `—` yet still manually plannable; sorted so suggested rows lead; Suggested is non-editable, recalculates on Refresh) and **preserves** Planned/Actual/Done per ticker (`_dcaSyncItems`). **Planned/Actual** are editable inputs, **✓** a checkbox — all persist to `dca_plan_items` (new cols `planned_amount_usd`/`actual_amount_usd`/`is_done`; `suggested_amount_usd` relaxed to nullable/default 0). Status is **derived** from items (`_dcaDeriveStatus`) and mirrored to the DB. A **"+" button** next to the month selector (`_dcaAddNextMonth`) seeds a blank plan for the month after the newest (budget carried from prior month, no tickers) and jumps to it. **Two email buttons** (`#dca-complete-wrap`) → **GAS action `dcaEmailSummary`** → `DCAAgent.emailMonthSummary(userId, month, mode)` builds a per-portfolio plain-text summary (per-ticker **✅ done / 🔄 in progress / ⬜ not started**; subject `… (X/Total completed)`) and `MailApp.sendEmail`s it to **chanika.cptk@gmail.com** (no OAuth — GAS runs as owner): **📧 Submit & Email Summary** (`_dcaSubmitEmail`, `mode='submit'`) is **always shown** (any month with items) and does NOT change status; **✅ Complete Month** (`_dcaCompleteMonth`, `mode='complete'`) appears only when every ticker across ALL portfolios is ticked and additionally flags every plan `completed`. Globals `_dcaMonth`/`_dcaPortId`/`_dcaPorts`/`_dcaMonths`; helpers/CSS prefixed `_dca*`/`.dca-*`. SW cache `myasset-v96`. **⚠️ Run migration 025 in Supabase** + **paste `gas/DCAAgent.gs` + `gas/Code.gs` into the Apps Script IDE and redeploy the Web App** (else the email button returns "Unknown action"). `MailApp.sendEmail` adds a **new Gmail send OAuth scope** — the first save/deploy after pasting prompts the owner to **re-authorize**; run `emailMonthSummary(<userId>,'YYYY-MM')` once from the IDE to trigger the consent screen before relying on the button. See the **DCA Plan** rows in DB tables, Pages, Key functions, GAS actions, and migrations.
 
+> **DCA Plan — mobile card layout (2026-07-07)**: Below **767px** the wide `.dca-table` is `display:none` and a **one-card-per-ticker** layout (`.dca-cards`/`.dca-card`) is shown instead (desktop table unchanged above 768px — no markup swap by JS, pure CSS breakpoint). Each card: **bold 17px ticker** top-left with the **muted 12px reasoning** beside it, a divider, then `Suggested` as **plain non-editable text**, full-width **labeled Planned + Actual** inputs, and a right-aligned **✓ Done** checkbox with a **≥44×44px tap target** (`.dca-card-done` label wrapping a 24px box). `_dcaRenderActive` now emits **both** renderings (`rowsHtml` + `cardsHtml`) into one `#dca-tab-content`; every editable control carries `data-item`/`data-field` so `_dcaSyncPair(itemId, field, el)` **mirrors an edit onto the ticker's other copy** (table row ↔ card) — this keeps `_dcaRecalcSummary` correct (it still reads the always-present table `<tbody>`) and syncs the `.done` dimming on both. `_dcaEditItem`/`_dcaToggleDone` call `_dcaSyncPair` before the DB write. CSS-only breakpoint, no JS-driven view switch, no migration, no GAS change. SW cache `myasset-v98`.
+
+> **Google Sign-In alongside name-tap login (2026-07-08)**: Added "เข้าสู่ระบบด้วย Google" to the login screen next to the existing name-tap selector (migration 026). Design decision — **AUTO-LINK BY EMAIL, keep each user's existing `users.id` as the canonical `user_id` everywhere**, so the Google identity is just *attached* to the existing profile: **no migration of `user_id` across the ~12 asset tables** (the risky part of the original plan is avoided). Migration `026_users_google_auth.sql` adds `users.email` (unique, case-insensitive) + `users.auth_uid` (FK→`auth.users`, unique), seeds Chelsea (`…-0001`) = `chanika.cptk@gmail.com`, and adds an `auth_link_users` UPDATE RLS policy `TO authenticated` (a row is claimable when unlinked *or* already this caller's; `WITH CHECK (auth_uid = auth.uid())` so no one can point a profile at another identity). Partner's email intentionally **not** seeded — she hits the name-picker fallback on first login, which stamps her email. Frontend (`index.html`): `signInWithGoogle()` (`sb.auth.signInWithOAuth({provider:'google', options:{redirectTo}})`); `init()` is now async — `sb.auth.getSession()` → `handleGoogleSession(gUser)` (match by `auth_uid` then `email` → stamp link via `users` UPDATE → `_finishGoogleLogin` → `enterApp`; no match → `showGoogleLinkPicker`/`_renderLinkPicker`/`linkGoogleTo` name-picker fallback), falling back to the `localStorage` session when there's no Google session. `logout()` is now async + `await sb.auth.signOut()` (also removed a pre-existing dead `updatePinDots()` call → `initLoginScreen()`). Existing name-tap login untouched. **Auth infra**: Google OAuth is configured in Google Cloud (**Authorized redirect URIs = only the Supabase callback** `https://zchwqmykjjjtoaymuvwx.supabase.co/auth/v1/callback`; Google rejects wildcards) + Supabase **Auth → URL Configuration** (Site URL `https://chanikacptk.github.io/asset-tracker/` + Redirect URL `https://chanikacptk.github.io/asset-tracker/**` — Supabase *does* accept the `**` wildcard; this is where the post-callback app redirect lives). RLS note: all existing table policies are `USING(true)` with no `TO` clause → apply to `public` incl. `authenticated`, so the Google session keeps full read/write. Verified live 2026-07-08 (migration run): OAuth authenticates + app-side auto-link matched Chelsea by email and stamped `auth_uid`. SW cache `myasset-v100`. **⚠️ Run migration 026 in Supabase** + set the Supabase URL Configuration above (else the real button flow redirects to the default Site URL / a dead page). See the **Authentication** section + the `users` row in DB tables + migration 026.
+
 > **Ticker Detail modal → tabbed layout (2026-07-02)**: Rebuilt the Ticker Detail bottom-sheet from one long scroll into a **TradingView-style tab bar** below the price header — **Overview · Technicals · News · Earnings · Simulator** (horizontal scrollable pills, `.td-tabbar`/`.td-tab`, active = `--accent`). Only the active tab renders into `#td-tab-content` (`_tdShowTab`); shared state in `_tdCtx`, per-tab data **lazy-loaded**. **Overview (NEW)** — key-stats list (volume, avg volume 30D, market cap, dividend yield, P/E TTM, EPS TTM, net income FY, revenue FY, float, beta 1Y, 52wk H/L) from a **new GAS action `getOverview`** → `_yahooOverview` → Yahoo **v10 `quoteSummary`** (`_yahooQuoteSummary` + cookie/crumb via `_yahooCrumb`, cached in ScriptCache; every field null-safe). **Technicals / News / Simulator** are the existing widgets, unchanged, just relocated under their tabs. **Earnings (NEW, added 2026-07-03)** — next earnings date + last-4-quarters EPS actual/estimate + revenue with a Beat/Miss badge, from a **new GAS action `getEarnings`** → `_yahooEarnings` (Yahoo `quoteSummary`) with a **Claude web-search fallback** (`_claudeEarnings`) when Yahoo is empty. No migration. SW cache `myasset-v92`. **⚠️ Paste `gas/Code.gs` into the Apps Script IDE and redeploy the Web App** (run `testOverview()` / `testEarnings()` there to confirm Yahoo reachability), else the Overview/Earnings tabs show "ไม่สามารถโหลดข้อมูล…". See the **Ticker Detail modal** bullet in Key functions + the `getOverview` / `getEarnings` GAS actions.
 
 ## Live URL
@@ -39,14 +47,14 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Layer | Technology |
 |---|---|
 | Frontend | Single HTML file (`index.html`, ~7 925 lines) — vanilla JS, no build step |
-| Fonts | Instrument Sans (everything, incl. table numbers), Syne (tickers only) — **do not change**. JetBrains Mono fully removed 2026-06-29; `.mono`/`.pt-mono` now map to Instrument Sans — never reintroduce mono |
-| Styling | CSS variables, dark/light via `html.dark` (default: dark) |
+| Fonts | **IBM Plex Sans Thai + Noto Sans Thai** (bilingual Thai/Latin) via one global `--font` stack (set 2026-07-08 redesign). Instrument Sans / Syne / JetBrains Mono all removed; `.mono`/`.pt-mono` map to `var(--font)`. See **DESIGN.md** |
+| Styling | CSS variables (warm cream palette in `:root`). **Light theme only** — dark mode + `html.dark` removed 2026-07-08. See **DESIGN.md** |
 | Charts | Chart.js 4.4.0 (CDN) |
 | Database | Supabase (PostgreSQL + REST API) |
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v92`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v104`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -89,7 +97,7 @@ gas/
 supabase/
   schema.sql            Full schema (bootstrap once)
   seed.sql              Sample data
-  migrations/           017 migrations — 001–017 all applied ✓
+  migrations/           026 migrations — 001–026 (018–026 must be run in Supabase; see list)
 
 skills/
   add-asset-page.md     Pattern for adding new asset pages
@@ -100,7 +108,10 @@ skills/
 
 ## Authentication
 
-Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `salt`. Session in `localStorage` as `{ userId, userName, partnerId }`. Auto-restores on load.
+**Two ways in, one profile.**
+
+1. **Name-tap selector (original, default)** — despite the "PIN" naming, the live flow is a **tap-your-name selector** (`loginAs(userId,…)`, no PIN keypad is shown). `users.pin_hash` + `salt` exist but are unused; leftover `.pin-keypad` CSS remains. Session in `localStorage` as `{ userId, userName, partnerId }`, auto-restored on load. This is **not** Supabase Auth.
+2. **Google Sign-In (added 2026-07-08, migration 026)** — real Supabase Auth (`signInWithOAuth`). Design: **auto-link by email onto the existing profile** — `users.id` stays the canonical `user_id` everywhere; the Google identity is attached via `users.email` + `users.auth_uid` (no `user_id` migration across asset tables). `init()` is async: `sb.auth.getSession()` → `handleGoogleSession()` matches by `auth_uid` then `email`, stamps the link, `enterApp()`; unmatched → name-picker fallback (`showGoogleLinkPicker`) that stamps email on link. Falls back to the `localStorage` session when there's no Google session. `logout()` awaits `sb.auth.signOut()`. See the **Google Sign-In** changelog block up top for the full flow, RLS, and the Google Cloud / Supabase URL-config split.
 
 `SUPABASE_ANON_KEY` is intentionally hardcoded in `index.html` — it is the publishable key only. **Never put `SUPABASE_SERVICE_KEY` in index.html.**
 
@@ -111,7 +122,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 ### Auth
 | Table | Key columns |
 |---|---|
-| `users` | id, name, pin_hash, salt, avatar, telegram_chat_id |
+| `users` | id, name, pin_hash, salt, avatar, telegram_chat_id, **email** *(unique, case-insensitive — Google auto-link key; Chelsea seeded, partner not)*, **auth_uid** *(FK→`auth.users`, unique — stamped on first Google login)* |
 | `user_sessions` | id, user_id, token, expires_at |
 
 ### US Portfolios
@@ -172,7 +183,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 - `bond_master`, `daily_news`, `daily_news_impact` are read-only for anon; GAS writes them via service_role
 - GAS uses `service_role` key (bypasses RLS entirely)
 
-### Migrations applied (001–017 ✓)
+### Migrations applied (001–017 ✓; 018–026 marked ⚠️ = run in Supabase)
 ```
 001  app_config table
 002  users.avatar + name
@@ -200,6 +211,7 @@ Custom PIN auth — **not** Supabase Auth. `users` table stores `pin_hash` + `sa
 023  loan_payments.paid_at: timestamp a payment was recorded (partial-payment support reuses existing paid_amount as the cumulative tally)  ⚠️ RUN IN SUPABASE
 024  insurance_policies: detailed policy columns (policy_type/number, insured_name, status, dates, premium_mode + amount, payment_method, next/last payment, notes, created_at) + anon write RLS. Insurance EXCLUDED from net worth  ⚠️ RUN IN SUPABASE
 025  dca_plans + dca_plan_items: multi-portfolio DCA. Add dca_plans.portfolio_id (unique → user+portfolio+month; total_budget_usd relaxed; status widened to draft/in_progress/completed) + anon insert/update RLS. Add dca_plan_items.planned_amount_usd/actual_amount_usd/is_done (suggested relaxed) + anon insert/delete RLS  ⚠️ RUN IN SUPABASE
+026  users: Google OAuth link. Add users.email (unique lower()) + users.auth_uid (FK→auth.users, unique); seed Chelsea's email; add auth_link_users UPDATE RLS TO authenticated (claim unlinked/own row, WITH CHECK auth_uid=auth.uid()). Google identity attached to existing users.id — NO user_id migration  ⚠️ RUN IN SUPABASE  ✓ (run 2026-07-08)
 ```
 
 ---
@@ -364,7 +376,7 @@ dca           DCA Plan — multi-portfolio manual planner. Month selector (+ "+"
 monthly       Monthly Review — trigger generateDCA
 weekly        Weekly Review — trigger analyzeAll
 allportfolio  All Portfolio — read-only AI signals across all holdings
-settings      Theme, profile, Telegram, GAS URL
+settings      Profile, language, Telegram, GAS URL (theme toggle removed 2026-07-08 — light-only)
 partner       Partner view (no nav entry; navigate('partner') directly)
 ```
 
@@ -501,24 +513,31 @@ Nav highlight logic:
 
 ## CSS design system
 
+> **Warm cream, light-theme-only (redesigned 2026-07-08).** Full token spec, hexes, font justification, and component mapping live in **`DESIGN.md`** (repo root) — that is the source of truth. Summary below.
+
 ```css
-/* Dark theme (default via html.dark) */
---bg: #06070a
---surface: #0d0f14
---surface2: #13161e
---border: rgba(255,255,255,.07)
---text: #e2e6f0
---text-muted: #5a6278
---success: #16a34a   --danger: #dc2626   --warning: #d97706
---accent: #4f9eff (dark)
+/* :root — warm cream tokens (the only theme; dark mode removed) */
+--bg: #f6e9cf        /* cream page background */
+--primary: #558467   /* sage — buttons, active tab/nav, CTAs, positive P/L */
+--accent: #b8684f    /* terracotta — badges, alerts, negative P/L */
+--s1: #eee0c5        /* cards */   --s2: #e5d4b0  /* inputs, card interiors */
+--text: #1a1a1a      --muted: #7a6e5f   --text-inv: #ffffff
+--border: rgba(85,132,103,0.2)
+--g: #558467 (positive)   --r: #b8684f (negative)
+--font: 'IBM Plex Sans Thai','Noto Sans Thai',-apple-system,…
+/* legacy aliases kept: --surface→s1, --surface2→s2, --success→g, --danger→r,
+   --text-muted→muted, --warning→#c9922e gold. --accent2 removed. */
 ```
+
+- **Naming gotcha**: the old `--accent` (blue) was the *action* color → globally renamed to `var(--primary)` (sage). The new `--accent` is terracotta. So **buttons/active states use `--primary`, not `--accent`.**
+- **Charts**: warm categorical palette — sage / terracotta / muted-gold `#c9922e` / dusty-blue `#6b8cae` / warm-tan `#d9b382` / olive `#8a9a5b`; P/L sage/terracotta.
 
 Key classes:
 - `.card` / `.card2` — primary / secondary card
 - `.g2x` / `.g4x` — 2 or 4-column grid
 - `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font)
 - `.mono` — table numbers (now Instrument Sans; JetBrains Mono removed 2026-06-29)
-- `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells
+- `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells (desktop). Below 768px the table is hidden and a **card-per-holding** layout renders instead: `.ph-cards` / `.ph-card` (`.ph-card-top`/`-id`/`-tk`/`-price`/`-shares`/`-body`/`-row`/`-actions`) — logo+ticker+price, shares, Avg Cost / Value / P/L, edit+delete. `_renderPortTbody` emits both the `<tbody>` and `#pt-cards`; CSS `@media(max-width:767px)` toggles `.pt-card .tbl-wrap`↔`.pt-card .ph-cards`
 - `.pt-sr` / `.pt-sr-s` / `.pt-sr-r` — S/R level display
 - `.gc` / `.rc` / `.ac` — green/red/amber color utilities
 - `.b-buy` / `.b-sell` / `.b-hold` / `.b-trim` / `.b-dca` — signal badges
@@ -604,7 +623,7 @@ Background `#f6e9cf` matches the app `theme_color`/`background_color` (manifest)
 
 ## Service worker
 
-Cache name: **`myasset-v92`**. Bump on every `index.html` change.
+Cache name: **`myasset-v104`**. Bump on every `index.html` change.
 
 Strategy:
 - Network-first: Supabase API, `index.html` / app root (ensures updates always show)
