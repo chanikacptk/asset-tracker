@@ -12,7 +12,9 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- CDN Dependencies -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -21,18 +23,28 @@
 <style>
 /* ── CSS Variables (light theme) ─────────────────────────────────────────── */
 :root {
-  --bg: #f5f7fa;
-  --surface: #ffffff;
-  --surface2: #f0f2f5;
-  --border: #e1e4e8;
-  --accent: #2563eb;
-  --accent2: #7c3aed;
-  --text: #111827;
-  --text-muted: #6b7280;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --orange: #ea580c;
+  /* ── Warm cream design tokens ───────────────────────────────── */
+  --bg:        #f6e9cf;              /* warm cream background */
+  --primary:   #558467;             /* sage green — buttons, active states, CTAs */
+  --accent:    #b8684f;             /* terracotta — highlights, badges, alerts */
+  --text:      #1a1a1a;             /* near-black body text */
+  --text-inv:  #ffffff;             /* white text on primary/dark backgrounds */
+  --s1:        #eee0c5;             /* slightly darker cream — cards */
+  --s2:        #e5d4b0;             /* card interiors, inputs */
+  --border:    rgba(85,132,103,0.2);/* green-tinted border */
+  --g:         #558467;             /* green = positive P/L */
+  --r:         #b8684f;             /* terracotta = negative P/L */
+  --muted:     #7a6e5f;             /* warm gray — secondary text */
+  --font: 'IBM Plex Sans Thai','Noto Sans Thai',-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;
+
+  /* ── Legacy aliases → warm tokens (keeps existing rules working) ── */
+  --surface:     var(--s1);
+  --surface2:    var(--s2);
+  --text-muted:  var(--muted);
+  --success:     var(--g);
+  --danger:      var(--r);
+  --warning:     #c9922e;           /* muted gold */
+  --orange:      #b8684f;
   --radius: 12px;
   --radius-sm: 8px;
   --safe-bottom: env(safe-area-inset-bottom, 16px);
@@ -41,7 +53,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 body {
-  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font);
   background: var(--bg);
   color: var(--text);
   min-height: 100dvh;
@@ -71,7 +83,7 @@ body {
   color: var(--text-muted); cursor: pointer; font-size: 10.5px;
   transition: color 0.15s;
 }
-.nav-item.active { color: var(--accent); }
+.nav-item.active { color: var(--primary); }
 .nav-item svg { width: 25px; height: 25px; }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
@@ -130,7 +142,7 @@ body {
   padding: 4px 12px; border-radius: 16px; border: none; font-size: 12px; font-weight: 600;
   cursor: pointer; background: none; color: var(--text-muted); transition: all 0.15s;
 }
-.currency-btn.active { background: var(--accent); color: #fff; }
+.currency-btn.active { background: var(--primary); color: #fff; }
 
 /* ── Section header ──────────────────────────────────────────────────────── */
 .section-header {
@@ -149,7 +161,7 @@ body {
   background: var(--surface2); color: var(--text-muted); font-size: 13px;
   cursor: pointer; transition: all 0.15s; flex-shrink: 0;
 }
-.tab-btn.active { background: var(--accent); color: #fff; }
+.tab-btn.active { background: var(--primary); color: #fff; }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -191,13 +203,13 @@ body {
   background: var(--surface); color: var(--text); font-size: 15px; font-weight: 600;
   cursor: pointer; transition: all 0.15s; text-align: center;
 }
-.user-btn.selected { border-color: var(--accent); background: rgba(79,158,255,0.1); }
+.user-btn.selected { border-color: var(--primary); background: rgba(85,132,103,0.1); }
 .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 8px 0; }
 .pin-dot {
   width: 14px; height: 14px; border-radius: 50%;
   background: var(--border); transition: background 0.15s;
 }
-.pin-dot.filled { background: var(--accent); }
+.pin-dot.filled { background: var(--primary); }
 .pin-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 280px; }
 .pin-key {
   aspect-ratio: 1; border-radius: 50%; border: none;
@@ -238,7 +250,7 @@ body {
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); font-size: 14px; text-align: right;
 }
-.dca-amount-input:focus { border-color: var(--accent); outline: none; }
+.dca-amount-input:focus { border-color: var(--primary); outline: none; }
 
 /* ── DCA multi-portfolio planner ─────────────────────────────────────────── */
 .dca-monthbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -260,7 +272,7 @@ body {
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text-muted); font-size: 12.5px; font-weight: 600; white-space: nowrap;
 }
-.dca-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dca-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .dca-tab .dca-tab-dot { font-size: 10px; margin-left: 4px; opacity: .9; }
 
 .dca-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -272,7 +284,7 @@ body {
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); font-size: 14px; text-align: right; font-weight: 700;
 }
-.dca-budget-input:focus { border-color: var(--accent); outline: none; }
+.dca-budget-input:focus { border-color: var(--primary); outline: none; }
 .dca-refresh-btn {
   padding: 7px 11px; border-radius: var(--radius-sm); cursor: pointer;
   border: 1px solid var(--border); background: var(--surface2);
@@ -301,14 +313,14 @@ body {
   border: 1px solid var(--border); background: var(--surface2);
   color: var(--text); font-size: 13px; text-align: right;
 }
-.dca-io:focus { border-color: var(--accent); outline: none; }
-.dca-io.plan { border-color: rgba(79,158,255,.35); }
+.dca-io:focus { border-color: var(--primary); outline: none; }
+.dca-io.plan { border-color: rgba(85,132,103,.35); }
 .dca-io.act  { border-color: rgba(34,197,94,.30); }
 .dca-check { width: 20px; height: 20px; accent-color: var(--success); cursor: pointer; }
 
 .dca-progress { margin-top: 14px; }
 .dca-progress-bar-track { height: 8px; border-radius: 6px; background: var(--surface2); overflow: hidden; margin: 6px 0; }
-.dca-progress-bar-fill { height: 100%; border-radius: 6px; background: var(--accent); transition: width .3s; }
+.dca-progress-bar-fill { height: 100%; border-radius: 6px; background: var(--primary); transition: width .3s; }
 .dca-progress-txt { font-size: 12px; color: var(--text-muted); }
 .dca-progress-txt b { color: var(--text); }
 
@@ -317,7 +329,7 @@ body {
   border: none; background: var(--success); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .dca-complete-btn:disabled { opacity: .5; cursor: default; }
-.dca-complete-btn.submit { background: var(--accent); }
+.dca-complete-btn.submit { background: var(--primary); }
 .dca-complete-btn + .dca-complete-btn { margin-top: 10px; }
 .dca-complete-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
@@ -357,7 +369,7 @@ body {
   transition: opacity 0.15s;
 }
 .btn:active { opacity: 0.8; }
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--primary); color: #fff; }
 .btn-success { background: var(--success); color: #fff; }
 .btn-danger { background: var(--danger); color: #fff; }
 
@@ -380,7 +392,7 @@ body {
 /* ── Partner badge ───────────────────────────────────────────────────────── */
 .partner-badge {
   display: inline-flex; align-items: center; gap: 4px;
-  background: rgba(124,92,255,0.15); color: var(--accent2);
+  background: rgba(184,104,79,0.14); color: var(--accent);
   border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 600;
 }
 
@@ -401,7 +413,7 @@ body {
 .text-muted { color: var(--text-muted); }
 .font-mono { font-variant-numeric: tabular-nums; }
 /* <textarea> defaults to monospace in the UA stylesheet — force the app font. */
-textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
+textarea, input, select { font-family: var(--font); }
 </style>
 </head>
 <body>
@@ -451,7 +463,6 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
           <button class="currency-btn" onclick="setCurrency('USD')">USD</button>
           <button class="currency-btn active" onclick="setCurrency('THB')">THB</button>
         </div>
-        <button id="theme-toggle-btn" onclick="toggleTheme()" class="theme-btn">🌙</button>
       </div>
     </div>
 
@@ -468,7 +479,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <!-- Me / Combined toggle -->
     <div style="display:flex;justify-content:center;margin-bottom:14px">
       <div style="display:flex;background:var(--surface2);border-radius:20px;padding:3px;gap:2px">
-        <button id="donut-mode-me"       onclick="switchDonutMode('me')"       style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;transition:all .15s" data-i18n="db.me">Me</button>
+        <button id="donut-mode-me"       onclick="switchDonutMode('me')"       style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;transition:all .15s" data-i18n="db.me">Me</button>
         <button id="donut-mode-combined" onclick="switchDonutMode('combined')" style="padding:5px 20px;border-radius:16px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:none;color:var(--text-muted);transition:all .15s" data-i18n="db.combined">Combined</button>
       </div>
     </div>
@@ -496,7 +507,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
           <button class="currency-btn" onclick="setCurrency('THB')" id="us-thb-btn">THB</button>
         </div>
         <button id="us-refresh-btn" onclick="refreshUSPrices(this)" title="Refresh live prices" style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text-muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
-        <button onclick="openAddHolding()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+        <button onclick="openAddHolding()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
       </div>
     </div>
     <div style="height:12px"></div>
@@ -565,7 +576,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
           <button class="currency-btn active" onclick="setCurrency('USD')" id="gold-usd-btn">USD</button>
           <button class="currency-btn" onclick="setCurrency('THB')" id="gold-thb-btn">THB</button>
         </div>
-        <button onclick="openAddGold()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+        <button onclick="openAddGold()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
       </div>
     </div>
     <div style="height:12px"></div>
@@ -589,7 +600,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
       <div style="display:flex;gap:8px;align-items:center">
         <button id="mf-refresh-btn" onclick="refreshMFNav()" title="Refresh NAV from SEC"
           style="width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
-        <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+        <button onclick="openAddMF()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
       </div>
     </div>
     <div style="height:12px"></div>
@@ -658,7 +669,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <input id="mf-fund-name" type="text" list="mf-fund-name-list" autocomplete="off" autocapitalize="words" placeholder="Search or type, e.g. KKP CorePath Balanced"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px">
     <button id="mf-search-btn" onclick="searchMFFunds()"
-      style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px">🔍 Search SEC database</button>
+      style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--primary);background:transparent;color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px">🔍 Search SEC database</button>
     <div id="mf-search-status" style="font-size:11px;color:var(--text-muted);min-height:14px;margin-bottom:6px"></div>
     <div id="mf-search-results" style="display:none;margin-bottom:16px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
 
@@ -746,9 +757,9 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">SEC proj_id <span style="font-weight:400;text-transform:none">(optional — enables auto NAV refresh)</span></div>
     <div style="display:flex;gap:8px;margin-bottom:6px">
       <input id="mf-sec-proj-id" type="text" placeholder="e.g. M0209_2554"
-        style="flex:1;min-width:0;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'Instrument Sans',sans-serif">
+        style="flex:1;min-width:0;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--font)">
       <button id="mf-class-lookup-btn" onclick="lookupMFClasses()"
-        style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Find classes</button>
+        style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--primary);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">Find classes</button>
     </div>
     <div id="mf-class-status" style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Find it by searching the fund at secopendata.sec.or.th and copying the proj_id. Leave blank to keep NAV manual.</div>
 
@@ -761,16 +772,16 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <!-- Fund code (optional — Finnomena fallback for funds not in SEC, e.g. ES-FIXEDRMF) -->
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fund code <span style="font-weight:400;text-transform:none">(optional — auto NAV via Finnomena if not in SEC)</span></div>
     <input id="mf-fund-code" type="text" placeholder="e.g. ES-FIXEDRMF" autocapitalize="characters"
-      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:'Instrument Sans',sans-serif;margin-bottom:6px">
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--font);margin-bottom:6px">
     <button id="mf-guess-btn" onclick="guessFundCode()"
-      style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px">🔍 Guess code from fund name</button>
+      style="width:100%;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--primary);background:transparent;color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px">🔍 Guess code from fund name</button>
     <div id="mf-guess-status" style="font-size:11px;color:var(--text-muted);min-height:14px;margin-bottom:6px"></div>
     <div id="mf-guess-results" style="display:none;margin-bottom:8px;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Used only when there's no SEC proj_id. The exact code on finnomena.com/fund/&lt;code&gt;.</div>
 
     <!-- Notes (collapsible) -->
     <div style="margin-bottom:16px">
-      <a id="mf-notes-toggle" onclick="_toggleMFNotes()" style="font-size:13px;color:var(--accent);cursor:pointer;font-weight:600">+ Add note</a>
+      <a id="mf-notes-toggle" onclick="_toggleMFNotes()" style="font-size:13px;color:var(--primary);cursor:pointer;font-weight:600">+ Add note</a>
       <div id="mf-notes-wrap" style="display:none;margin-top:8px">
         <input id="mf-notes" type="text" placeholder="e.g. Monthly DCA"
           style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
@@ -805,7 +816,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div id="page-cash" class="page">
     <div class="top-bar">
       <div class="page-title" data-i18n="title.cash">Cash</div>
-      <button onclick="openAddCash()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <button onclick="openAddCash()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
     <div id="cash-content"></div>
@@ -815,7 +826,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div id="page-insurance" class="page">
     <div class="top-bar">
       <div class="page-title" data-i18n="title.insurance">Insurance</div>
-      <button onclick="openAddIns()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <button onclick="openAddIns()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
     <div id="insurance-content"></div>
@@ -825,7 +836,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div id="page-private" class="page">
     <div class="top-bar">
       <div class="page-title" data-i18n="title.private">Private Investment</div>
-      <button onclick="openAddPriv()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <button onclick="openAddPriv()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
     <div id="private-content"></div>
@@ -835,7 +846,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div id="page-loans" class="page">
     <div class="top-bar">
       <div class="page-title" id="loans-title" data-i18n="title.loans">Loan</div>
-      <button id="loans-add-btn" onclick="openAddLoan()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <button id="loans-add-btn" onclick="openAddLoan()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
     <div id="loans-list-panel"><div id="loans-content"></div></div>
@@ -846,7 +857,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div id="page-bonds" class="page">
     <div class="top-bar">
       <div class="page-title" data-i18n="title.bonds">Bond</div>
-      <button onclick="openAddBond()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
+      <button onclick="openAddBond()" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--primary);color:#fff;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">+</button>
     </div>
     <div style="height:12px"></div>
     <!-- KPI summary cards -->
@@ -976,17 +987,6 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <div class="top-bar"><div class="page-title" data-i18n="title.settings">Settings</div></div>
     <div style="height:16px"></div>
 
-    <!-- Theme toggle -->
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div>
-        <div style="font-size:15px;font-weight:600" data-i18n="set.appearance">Appearance</div>
-        <div style="font-size:12px;color:var(--text-muted)" id="theme-label">Dark mode</div>
-      </div>
-      <div class="theme-toggle-track" onclick="toggleTheme()">
-        <div class="theme-toggle-thumb"></div>
-      </div>
-    </div>
-
     <!-- Language toggle -->
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div>
@@ -1007,7 +1007,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
         <input id="settings-name-input" type="text" maxlength="20" placeholder="Your name" data-i18n-ph="set.namePh"
           style="width:100%;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-weight:600">
       </div>
-      <button onclick="saveProfile()" style="padding:8px 14px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;flex-shrink:0" data-i18n="common.save">Save</button>
+      <button onclick="saveProfile()" style="padding:8px 14px;border-radius:var(--radius-sm);border:none;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer;flex-shrink:0" data-i18n="common.save">Save</button>
     </div>
     <!-- Emoji picker (hidden by default) -->
     <div id="emoji-picker" style="display:none" class="card">
@@ -1044,7 +1044,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input id="settings-my-chat-id" type="text" placeholder="e.g. 7639152790"
           style="flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
-        <button onclick="saveChatId('my')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
+        <button onclick="saveChatId('my')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
       </div>
       <div id="settings-my-chat-status" style="font-size:12px;color:var(--text-muted);margin-bottom:14px;min-height:16px"></div>
 
@@ -1052,7 +1052,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input id="settings-partner-chat-id" type="text" placeholder="e.g. 8450768699"
           style="flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px">
-        <button onclick="saveChatId('partner')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
+        <button onclick="saveChatId('partner')" style="padding:10px 16px;border-radius:var(--radius-sm);border:none;background:var(--primary);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap" data-i18n="common.save">Save</button>
       </div>
       <div id="settings-partner-chat-status" style="font-size:12px;color:var(--text-muted);margin-bottom:16px;min-height:16px"></div>
 
@@ -1118,7 +1118,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   </select>
   <div id="modal-new-portfolio-wrap" style="display:none;margin-bottom:14px">
     <input id="modal-new-portfolio-name" type="text" placeholder="Portfolio name (e.g. Dividend 2, Core ETF…)"
-      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px">
+      style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--primary);background:var(--surface2);color:var(--text);font-size:15px;margin-bottom:8px">
     <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Type</div>
     <select id="modal-new-portfolio-type"
       style="width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;appearance:auto">
@@ -1685,9 +1685,9 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Bond Code</div>
   <div style="display:flex;gap:8px;margin-bottom:14px">
     <input id="bond-code" type="text" placeholder="e.g. SCB276A" oninput="this.value=this.value.toUpperCase()"
-      style="flex:1;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:'Instrument Sans',sans-serif;letter-spacing:1px">
+      style="flex:1;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;font-family:var(--font);letter-spacing:1px">
     <button onclick="lookupBond()" id="bond-lookup-btn"
-      style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">
+      style="padding:0 16px;border-radius:var(--radius-sm);border:none;background:var(--primary);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0">
       Lookup
     </button>
   </div>
@@ -1817,7 +1817,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;
   transition:all 0.15s;
 }
-.modal-type-btn.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.modal-type-btn.active { background:var(--primary);border-color:var(--primary);color:#fff; }
 
 /* ── Bond page ────────────────────────────────────────────────────────────── */
 
@@ -1868,7 +1868,7 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   color:var(--text);font-size:14px;outline:none;margin-bottom:12px;
   transition:border-color 0.15s;
 }
-.bond-search-input:focus { border-color:var(--accent); }
+.bond-search-input:focus { border-color:var(--primary); }
 .bond-search-input::placeholder { color:var(--text-muted); }
 
 /* Bond list items */
@@ -1879,8 +1879,8 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
   margin-bottom:8px;cursor:pointer;transition:border-color 0.15s,background 0.1s;
 }
 .bond-list-item:active { background:var(--surface2); }
-.bond-list-item.active { border-color:var(--accent);background:rgba(37,99,235,0.04); }
-html.dark .bond-list-item.active { background:rgba(37,99,235,0.08); }
+.bond-list-item.active { border-color:var(--primary);background:rgba(85,132,103,0.04); }
+html.dark .bond-list-item.active { background:rgba(85,132,103,0.08); }
 .bond-list-left { flex:1;min-width:0; }
 .bond-list-code { font-size:15px;font-weight:700;color:var(--text); }
 .bond-list-name { font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
@@ -1893,7 +1893,7 @@ html.dark .bond-list-item.active { background:rgba(37,99,235,0.08); }
 /* Back button (detail panel) */
 .bond-back-btn {
   display:inline-flex;align-items:center;gap:4px;background:none;border:none;
-  color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;
+  color:var(--primary);font-size:14px;font-weight:600;cursor:pointer;
   padding:0 0 14px;font-family:inherit;
 }
 
@@ -2000,14 +2000,14 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   background:transparent;cursor:pointer;font-family:inherit;
   transition:border-color 0.15s,color 0.15s;
 }
-.mf-nav-btn:hover { border-color:var(--accent);color:var(--accent); }
+.mf-nav-btn:hover { border-color:var(--primary);color:var(--primary); }
 
 .mf-cat-pill {
   padding:8px 14px;border-radius:20px;border:1px solid var(--border);
   background:var(--surface2);color:var(--text-muted);font-size:13px;font-weight:600;
   cursor:pointer;transition:all 0.15s;font-family:inherit;
 }
-.mf-cat-pill.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.mf-cat-pill.active { background:var(--primary);border-color:var(--primary);color:#fff; }
 
 /* NAV status badge on fund cards */
 .mf-nav-badge {
@@ -2030,7 +2030,7 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .mf-search-row:active, .mf-search-row:hover { background:var(--surface2); }
 .mf-search-row-name { font-size:13px;font-weight:600;color:var(--text);line-height:1.3; }
 .mf-search-row-sub  { font-size:11px;color:var(--text-muted);margin-top:2px; }
-.mf-search-row-pid  { font-family:'Instrument Sans',sans-serif;color:var(--accent); }
+.mf-search-row-pid  { font-family:var(--font);color:var(--primary); }
 
 /* More page rows */
 .more-row {
@@ -2054,7 +2054,7 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   flex:1;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);
   background:var(--surface2);color:var(--text-muted);font-size:13.5px;font-weight:700;cursor:pointer;
 }
-.an-tab.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.an-tab.active { background:var(--primary);border-color:var(--primary);color:#fff; }
 .an-tab-pane { display:none; }
 .an-tab-pane.active { display:block; }
 .an-datebar { display:flex;align-items:center;gap:8px;margin-bottom:14px; }
@@ -2074,31 +2074,31 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .an-section-title:first-child { margin-top:2px; }
 .an-filter-pill {
   display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;padding:5px 10px;border-radius:999px;
-  background:rgba(79,158,255,.12);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;
+  background:rgba(85,132,103,.12);color:var(--primary);font-size:12px;font-weight:600;cursor:pointer;
 }
 .an-card {
-  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+  background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--primary);
   border-radius:12px;padding:13px 14px;margin-bottom:10px;
 }
 .an-card.pos { border-left-color:var(--success); }
 .an-card.neg { border-left-color:var(--danger); }
-.an-card.neu { border-left-color:var(--accent); }
+.an-card.neu { border-left-color:var(--primary); }
 .an-card-head { display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap; }
 .an-emoji { font-size:17px;line-height:1; }
 .an-ticker {
-  font-family:'Syne',sans-serif;font-weight:700;font-size:12.5px;letter-spacing:.3px;
+  font-family:var(--font);font-weight:700;font-size:12.5px;letter-spacing:.3px;
   padding:2px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;
 }
 .an-ticker.pos { color:var(--success);background:rgba(22,163,74,.13); }
 .an-ticker.neg { color:var(--danger); background:rgba(220,38,38,.13); }
-.an-ticker.neu { color:var(--accent); background:rgba(79,158,255,.13); }
+.an-ticker.neu { color:var(--primary); background:rgba(85,132,103,.13); }
 .an-headline { font-size:14px;line-height:1.55;color:var(--text); }
 .an-impact {
   margin-top:9px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.5;
   background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.15);color:var(--text);
 }
 .an-card.neg .an-impact { background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.15); }
-.an-card.neu .an-impact { background:rgba(79,158,255,.07);border-color:rgba(79,158,255,.15); }
+.an-card.neu .an-impact { background:rgba(85,132,103,.07);border-color:rgba(85,132,103,.15); }
 .an-impact-lbl { color:var(--text-muted);font-weight:600; }
 .an-sources { margin-top:9px;font-size:11px;color:var(--text-muted); }
 
@@ -2112,12 +2112,12 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   background:var(--surface2);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;
   display:inline-flex;align-items:center;gap:5px;
 }
-.bm-pill.active { background:#eab308;border-color:#eab308;color:#1a1205; }
+.bm-pill.active { background:var(--primary);border-color:var(--primary);color:var(--text-inv); }
 .bm-seg-btn {
   padding:7px 15px;border-radius:9px;border:1px solid var(--border);
   background:var(--surface2);color:var(--text-muted);font-size:12.5px;font-weight:600;cursor:pointer;
 }
-.bm-seg-btn.active { background:#eab308;border-color:#eab308;color:#1a1205; }
+.bm-seg-btn.active { background:var(--primary);border-color:var(--primary);color:var(--text-inv); }
 .bm-chart-card { margin-top:18px;padding:16px 12px 14px; }
 .bm-chart-wrap { position:relative;height:300px; }
 .bm-status { font-size:12px;color:var(--text-muted);text-align:center;padding:8px 4px;line-height:1.5; }
@@ -2147,7 +2147,7 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   background:var(--surface2);font-size:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:border-color 0.15s;
 }
-.avatar-btn:active { border-color:var(--accent); }
+.avatar-btn:active { border-color:var(--primary); }
 .emoji-grid { display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:4px 0; }
 .emoji-opt  { font-size:24px;text-align:center;padding:6px;border-radius:var(--radius-sm);cursor:pointer;transition:background 0.1s; }
 .emoji-opt:active,.emoji-opt.selected { background:var(--surface2); }
@@ -2159,19 +2159,11 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
   background:var(--surface2);color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;
   transition:all 0.15s;
 }
-.holding-action-btn.edit:active  { border-color:var(--accent);color:var(--accent); }
+.holding-action-btn.edit:active  { border-color:var(--primary);color:var(--primary); }
 .holding-action-btn.del:active   { border-color:var(--danger);color:var(--danger); }
 
-/* ── Dark theme ───────────────────────────────────────────────────────────── */
-html.dark {
-  --bg: #06070a;
-  --surface: #0d0f14;
-  --surface2: #13161e;
-  --border: rgba(255,255,255,.07);
-  --text: #e2e6f0;
-  --text-muted: #5a6278;
-}
-html.dark .nw-card { background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%); }
+/* ── Warm cream is the only theme (dark mode removed) ─────────────────────── */
+.nw-card { background: linear-gradient(135deg, var(--s1) 0%, var(--s2) 100%); }
 
 /* ── Theme toggle button ──────────────────────────────────────────────────── */
 .theme-btn {
@@ -2186,13 +2178,13 @@ html.dark .nw-card { background: linear-gradient(135deg, var(--surface) 0%, var(
   width:44px;height:24px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);
   position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;
 }
-html.dark .theme-toggle-track { background:var(--accent); border-color:var(--accent); }
+html.dark .theme-toggle-track { background:var(--primary); border-color:var(--primary); }
 .theme-toggle-thumb {
   position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
   background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:transform 0.2s;
 }
 html.dark .theme-toggle-thumb { transform:translateX(20px); }
-.lang-btn.active { background:var(--accent); color:#fff; }
+.lang-btn.active { background:var(--primary); color:#fff; }
 
 /* ── Dashboard top bar ────────────────────────────────────────────────────── */
 .db-totals { flex:1;min-width:0; }
@@ -2264,7 +2256,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
   background:var(--surface2);color:var(--text-muted);font-size:10px;font-weight:600;
   cursor:pointer;flex-shrink:0;line-height:1.4;
 }
-.slice-edit-btn:active { border-color:var(--accent);color:var(--accent); }
+.slice-edit-btn:active { border-color:var(--primary);color:var(--primary); }
 
 /* Responsive: narrow mobile stacks donut above slices */
 @media (max-width: 400px) {
@@ -2289,7 +2281,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 16px;border-bottom:1px solid var(--border);
 }
-.pt-title { font-family:'Syne',sans-serif;font-weight:700;font-size:15px; }
+.pt-title { font-family:var(--font);font-weight:700;font-size:15px; }
 .pt-stats {
   display:flex;gap:16px;padding:8px 16px;border-bottom:1px solid var(--border);
   flex-wrap:wrap;background:var(--surface2);
@@ -2327,15 +2319,15 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .m-lbl { font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px; }
 .m-val { font-size:19px;font-weight:700;line-height:1.2; }
 .m-sub { font-size:11px;color:var(--text-muted);margin-top:3px; }
-.mono  { font-family:'Instrument Sans',sans-serif; }
+.mono  { font-family:var(--font); }
 
 /* Badges */
 .pt-badge { display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px; }
-.b-buy  { background:rgba(22,163,74,.15);  color:var(--success); }
-.b-sell { background:rgba(220,38,38,.15);  color:var(--danger);  }
-.b-hold { background:rgba(96,165,250,.15); color:#60a5fa; }
-.b-trim { background:rgba(217,119,6,.15);  color:var(--warning); }
-.b-dca  { background:rgba(168,85,247,.15); color:#c084fc; }
+.b-buy  { background:rgba(85,132,103,.16); color:#558467; }
+.b-sell { background:rgba(184,104,79,.16); color:#b8684f; }
+.b-hold { background:rgba(107,140,174,.16);color:#5a7695; }
+.b-trim { background:rgba(201,146,46,.16); color:#a9791f; }
+.b-dca  { background:rgba(122,110,95,.16); color:#7a6e5f; }
 
 /* Weight bar */
 .pt-bar-wrap { display:flex;align-items:center;gap:5px;justify-content:flex-end; }
@@ -2354,7 +2346,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
   background:transparent;color:var(--text-muted);font-size:10px;cursor:pointer;
   transition:all .12s;margin:0 1px;
 }
-.pt-act-btn:hover    { border-color:var(--accent);color:var(--accent); }
+.pt-act-btn:hover    { border-color:var(--primary);color:var(--primary); }
 .pt-act-del:hover    { border-color:var(--danger);color:var(--danger); }
 
 /* Live dot */
@@ -2366,7 +2358,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .pt-th-sort { cursor:pointer;user-select:none; }
 .pt-th-sort:hover { color:var(--text); }
 .pt-sort-ind { display:inline-block;margin-left:3px;font-size:9px;opacity:.5; }
-.pt-sort-ind.active { opacity:1;color:var(--accent); }
+.pt-sort-ind.active { opacity:1;color:var(--primary); }
 
 /* ── Ticker Detail modal ─────────────────────────────────────────────────── */
 .pt-ticker { cursor:pointer; }
@@ -2385,14 +2377,14 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .tk-dark  { background:#15171d;border:1px solid rgba(255,255,255,.14); }
 .tk-fill  { background:transparent;border:1px solid var(--border); }
 .tk-fill .tk-logo-img { width:100%;height:100%;object-fit:cover; }
-.tk-badge { color:#fff;font-family:'Instrument Sans',sans-serif;font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
+.tk-badge { color:#fff;font-family:var(--font);font-weight:700;letter-spacing:-.3px;border:none;line-height:1; }
 .pt-ticker-wrap { display:inline-flex;align-items:center;gap:7px;cursor:pointer; }
 .pt-ticker-wrap:hover .pt-ticker { text-decoration:underline;text-underline-offset:2px; }
 .td-head { display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px; }
-.td-tk   { font-family:'Syne',sans-serif;font-size:24px;font-weight:700;line-height:1; }
+.td-tk   { font-family:var(--font);font-size:24px;font-weight:700;line-height:1; }
 .td-name { font-size:12px;color:var(--text-muted);margin-top:4px;max-width:230px; }
-.td-price{ font-family:'Instrument Sans',sans-serif;font-size:22px;font-weight:700;text-align:right;line-height:1.1; }
-.td-chg  { font-family:'Instrument Sans',sans-serif;font-size:12px;font-weight:600;text-align:right;margin-top:3px; }
+.td-price{ font-family:var(--font);font-size:22px;font-weight:700;text-align:right;line-height:1.1; }
+.td-chg  { font-family:var(--font);font-size:12px;font-weight:600;text-align:right;margin-top:3px; }
 .td-sec-lbl { font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px; }
 .td-gauge-wrap { display:flex;flex-direction:column;align-items:center;padding:6px 0 2px; }
 .td-gauge-verdict { font-size:20px;font-weight:700;margin-top:2px;line-height:1; }
@@ -2400,12 +2392,12 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-ind-row { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px; }
 .td-ind { background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 6px;text-align:center; }
 .td-ind-lbl { font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted); }
-.td-ind-val { font-family:'Instrument Sans',sans-serif;font-size:15px;font-weight:700;margin-top:3px; }
+.td-ind-val { font-family:var(--font);font-size:15px;font-weight:700;margin-top:3px; }
 .td-ind-tag { font-size:9px;font-weight:700;text-transform:uppercase;margin-top:2px;letter-spacing:.04em; }
 .td-stats { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
 .td-stat { background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px; }
 .td-stat-lbl { font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted); }
-.td-stat-val { font-family:'Instrument Sans',sans-serif;font-size:14px;font-weight:700;margin-top:4px; }
+.td-stat-val { font-family:var(--font);font-size:14px;font-weight:700;margin-top:4px; }
 .td-news-item { padding:9px 0;border-bottom:1px solid var(--border); }
 .td-news-item:last-child { border-bottom:none;padding-bottom:0; }
 .td-news-item:first-child { padding-top:2px; }
@@ -2415,7 +2407,7 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-news-empty { font-size:12px;color:var(--text-muted);line-height:1.5;padding:6px 0; }
 .td-news-load { font-size:12px;color:var(--text-muted);padding:6px 0; }
 .td-loading { text-align:center;color:var(--text-muted);padding:34px 0;font-size:13px; }
-.td-spin { width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--accent);
+.td-spin { width:22px;height:22px;border:2.5px solid var(--border);border-top-color:var(--primary);
   border-radius:50%;animation:tdspin .7s linear infinite;margin:0 auto 12px; }
 @keyframes tdspin { to { transform:rotate(360deg); } }
 /* Tab bar (Ticker Detail modal — horizontal scrollable pills) */
@@ -2426,18 +2418,18 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
   background:var(--surface2);color:var(--text-muted);font-size:12.5px;font-weight:600;
   cursor:pointer;white-space:nowrap;
 }
-.td-tab.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.td-tab.active { background:var(--primary);border-color:var(--primary);color:#fff; }
 .td-tabpane { padding-top:14px; }
 /* Overview key-stats list (TradingView style) */
 .td-ov-row { display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 2px;border-bottom:1px solid var(--border); }
 .td-ov-row:last-child { border-bottom:none; }
 .td-ov-lbl { font-size:13px;color:var(--text-muted);line-height:1.35; }
-.td-ov-val { font-family:'Instrument Sans',sans-serif;font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap; }
+.td-ov-val { font-family:var(--font);font-size:13.5px;font-weight:700;text-align:right;white-space:nowrap; }
 .td-pane-msg { text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.55;padding:26px 8px; }
 /* Earnings tab */
 .td-earn-next { display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px; }
 .td-earn-next-lbl { font-size:12px;color:var(--text-muted); }
-.td-earn-next-val { font-family:'Instrument Sans',sans-serif;font-size:14px;font-weight:700;text-align:right; }
+.td-earn-next-val { font-family:var(--font);font-size:14px;font-weight:700;text-align:right; }
 .td-earn-next-sub { font-size:11px;color:var(--text-muted);font-weight:500; }
 .td-earn-q { margin-bottom:10px;padding:13px 14px; }
 .td-earn-q:last-child { margin-bottom:0; }
@@ -2450,25 +2442,25 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .td-earn-grid { display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px; }
 .td-earn-cell { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 9px; }
 .td-earn-cell-lbl { font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted); }
-.td-earn-cell-val { font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:700;margin-top:3px; }
+.td-earn-cell-val { font-family:var(--font);font-size:13px;font-weight:700;margin-top:3px; }
 .td-earn-cell-sub { font-size:10px;color:var(--text-muted);margin-top:1px; }
 .td-earn-src { font-size:10.5px;color:var(--text-muted);text-align:center;margin-top:12px; }
 /* DCA Simulator (Ticker Detail modal) */
 .td-dca-input-wrap { display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:0 12px;margin-bottom:10px; }
-.td-dca-input-wrap:focus-within { border-color:var(--accent); }
-.td-dca-sign { color:var(--text-muted);font-family:'Instrument Sans',sans-serif;font-size:15px; }
-input.td-dca-input { flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Instrument Sans',sans-serif;font-size:16px;font-weight:700;padding:11px 0;min-width:0; }
+.td-dca-input-wrap:focus-within { border-color:var(--primary); }
+.td-dca-sign { color:var(--text-muted);font-family:var(--font);font-size:15px; }
+input.td-dca-input { flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--font);font-size:16px;font-weight:700;padding:11px 0;min-width:0; }
 .td-dca-presets { display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px; }
-.td-dca-preset { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 0;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:'Instrument Sans',sans-serif; }
-.td-dca-preset:hover { border-color:var(--accent);color:var(--accent); }
+.td-dca-preset { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 0;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font); }
+.td-dca-preset:hover { border-color:var(--primary);color:var(--primary); }
 .td-dca-row, .td-dca-head { display:grid;grid-template-columns:64px 1fr 20px 1fr;align-items:center;gap:6px; }
 .td-dca-head { padding-bottom:7px; }
 .td-dca-row { padding:8px 0;border-bottom:1px solid var(--border); }
 .td-dca-row:last-child { border-bottom:none;padding-bottom:0; }
 .td-dca-col-lbl { font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);text-align:right; }
 .td-dca-lbl { font-size:11px;font-weight:600;color:var(--text-muted); }
-.td-dca-cur { font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:600;text-align:right;color:var(--text-muted); }
-.td-dca-new { font-family:'Instrument Sans',sans-serif;font-size:13px;font-weight:700;text-align:right; }
+.td-dca-cur { font-family:var(--font);font-size:13px;font-weight:600;text-align:right;color:var(--text-muted); }
+.td-dca-new { font-family:var(--font);font-size:13px;font-weight:700;text-align:right; }
 .td-dca-arrow { color:var(--text-muted);text-align:center;font-size:12px; }
 .td-dca-delta { font-size:10px;font-weight:700;margin-top:2px; }
 </style>
@@ -2861,28 +2853,14 @@ function _syncLangUI() {
     b.classList.toggle('active', b.dataset.lang === state.lang));
 }
 
-function initTheme() {
-  const saved = localStorage.getItem('theme') || 'dark';
-  document.documentElement.classList.toggle('dark', saved === 'dark');
-  _syncThemeUI();
-}
-
-function toggleTheme() {
-  const isDark = document.documentElement.classList.toggle('dark');
-  localStorage.setItem('theme', isDark ? 'dark' : 'light');
-  _syncThemeUI();
-}
-
-function _syncThemeUI() {
-  const isDark = document.documentElement.classList.contains('dark');
-  document.querySelectorAll('.theme-btn').forEach(b => b.textContent = isDark ? '☀️' : '🌙');
-  const lbl = document.getElementById('theme-label');
-  if (lbl) lbl.textContent = isDark ? t('set.darkmode') : t('set.lightmode');
-}
+// Warm cream is the only theme — dark mode removed.
+function initTheme() { document.documentElement.classList.remove('dark'); }
+function toggleTheme() {}
+function _syncThemeUI() {}
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-const PORTFOLIO_COLORS = ['#ef4444','#22c55e','#f97316','#3b82f6','#a855f7','#06b6d4','#eab308','#ec4899'];
+const PORTFOLIO_COLORS = ['#558467','#b8684f','#c9922e','#6b8cae','#d9b382','#8a9a5b','#a0785a','#c8794f'];
 
 Chart.register({
   id: 'centerText',
@@ -2895,10 +2873,10 @@ Chart.register({
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 25px -apple-system,BlinkMacSystemFont,sans-serif';
-    ctx.fillStyle = opts.textColor || '#eef0f4';
+    ctx.fillStyle = opts.textColor || '#1a1a1a';
     ctx.fillText(opts.value, cx, cy - 14);
     ctx.font = '600 12px -apple-system,BlinkMacSystemFont,sans-serif';
-    ctx.fillStyle = opts.pnlColor || '#22c55e';
+    ctx.fillStyle = opts.pnlColor || '#558467';
     ctx.fillText(opts.pnl || '', cx, cy + 7);
     ctx.font = '500 10px -apple-system,BlinkMacSystemFont,sans-serif';
     ctx.fillText(opts.pct || '', cx, cy + 21);
@@ -2980,9 +2958,9 @@ function _syncDonutToggleUI() {
   const comBtn = document.getElementById('donut-mode-combined');
   if (!meBtn || !comBtn) return;
   const isMe = _dbDonutMode === 'me';
-  meBtn.style.background  = isMe ? 'var(--accent)' : 'none';
+  meBtn.style.background  = isMe ? 'var(--primary)' : 'none';
   meBtn.style.color       = isMe ? '#fff' : 'var(--text-muted)';
-  comBtn.style.background = isMe ? 'none' : 'var(--accent)';
+  comBtn.style.background = isMe ? 'none' : 'var(--primary)';
   comBtn.style.color      = isMe ? 'var(--text-muted)' : '#fff';
 }
 
@@ -2992,13 +2970,13 @@ function _refreshDonut() {
   if (!my) return;
 
   const _seg = (d) => [
-    { label: 'US Portfolio', value: d.portfolios.reduce((s, p) => s + p.valueUSD, 0), color: '#3b82f6' },
-    { label: 'Cash',         value: d.cashUSD,      color: '#06b6d4' },
-    { label: 'Gold',         value: d.goldUSD,      color: '#fbbf24' },
-    { label: 'Mutual Fund',  value: d.mfUSD || 0,   color: '#a855f7' },
-    { label: 'Bonds',        value: d.bondsUSD || 0, color: '#10b981' },
-    { label: 'Crypto',       value: d.cryptoUSD,    color: '#f97316' },
-    { label: 'Private',      value: d.privateUSD,   color: '#94a3b8' },
+    { label: 'US Portfolio', value: d.portfolios.reduce((s, p) => s + p.valueUSD, 0), color: '#558467' },
+    { label: 'Cash',         value: d.cashUSD,      color: '#6b8cae' },
+    { label: 'Gold',         value: d.goldUSD,      color: '#c9922e' },
+    { label: 'Mutual Fund',  value: d.mfUSD || 0,   color: '#b8684f' },
+    { label: 'Bonds',        value: d.bondsUSD || 0, color: '#8a9a5b' },
+    { label: 'Crypto',       value: d.cryptoUSD,    color: '#a0785a' },
+    { label: 'Private',      value: d.privateUSD,   color: '#7a6e5f' },
   ].filter(s => s.value > 0);
 
   if (_dbDonutMode === 'me') {
@@ -3033,7 +3011,7 @@ function _renderHomeDonut(canvasId, legendId, segments, totalUSD) {
   const hasData = segments.length > 0;
   const segs    = hasData ? segments : [{ label: 'Empty', value: 1, color: '#1e2230' }];
   const isDark  = document.documentElement.classList.contains('dark');
-  const textClr = isDark ? '#e2e6f0' : '#111827';
+  const textClr = '#1a1a1a';
 
   state.charts[canvasId] = new Chart(canvas, {
     type: 'doughnut',
@@ -3152,18 +3130,18 @@ function _renderDonut(canvasId, legendId, data) {
   if (!canvas) return;
 
   const isDark    = document.documentElement.classList.contains('dark');
-  const textColor = isDark ? '#eef0f4' : '#111827';
+  const textColor = '#1a1a1a';
   const pnlSign   = data.gainLossUSD >= 0 ? '+' : '';
-  const pnlColor  = data.gainLossUSD >= 0 ? '#22c55e' : '#ef4444';
+  const pnlColor  = data.gainLossUSD >= 0 ? '#558467' : '#b8684f';
   const pnlPct    = data.costBasisUSD > 0 ? (data.gainLossUSD / data.costBasisUSD) * 100 : 0;
 
   let segs = data.portfolios
     .filter(p => p.valueUSD > 0)
     .map((p, i) => ({ label: p.name, value: p.valueUSD, color: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length] }));
-  if (data.cashUSD  > 0) segs.push({ label: 'Cash',  value: data.cashUSD,  color: '#06b6d4' });
-  if (data.otherUSD > 0) segs.push({ label: 'Other', value: data.otherUSD, color: '#94a3b8' });
+  if (data.cashUSD  > 0) segs.push({ label: 'Cash',  value: data.cashUSD,  color: '#6b8cae' });
+  if (data.otherUSD > 0) segs.push({ label: 'Other', value: data.otherUSD, color: '#7a6e5f' });
   const hasData = segs.length > 0;
-  if (!hasData) segs = [{ label: 'Empty', value: 1, color: isDark ? '#1e2230' : '#e5e7eb' }];
+  if (!hasData) segs = [{ label: 'Empty', value: 1, color: '#e5d4b0' }];
 
   state.charts[canvasId] = new Chart(canvas, {
     type: 'doughnut',
@@ -3260,13 +3238,13 @@ function _renderSlices(containerId, data, isOwn) {
       <div class="slice-row" style="cursor:pointer" onclick="navigate('cash')">
         <div class="slice-top">
           <div class="slice-left">
-            <div class="slice-name"><span style="color:#06b6d4">●</span> Cash
+            <div class="slice-name"><span style="color:#6b8cae">●</span> Cash
               ${parts.length ? `<span class="slice-count">${parts.join(' · ')}</span>` : ''}
             </div>
           </div>
           <div class="slice-right">
             <div class="slice-val">${fmtVal(data.cashUSD)}</div>
-            <span class="slice-pct-badge" style="background:#06b6d422;color:#06b6d4">${cashPct.toFixed(1)}%</span>
+            <span class="slice-pct-badge" style="background:#6b8cae22;color:#6b8cae">${cashPct.toFixed(1)}%</span>
           </div>
         </div>
       </div>`;
@@ -3299,12 +3277,12 @@ function editSliceTarget(portfolioId, currentTarget) {
       <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">Target %</span>
       <input id="tgt-${portfolioId}" type="number" inputmode="decimal" value="${currentTarget || ''}"
         placeholder="e.g. 30" min="0" max="100" step="1"
-        style="width:64px;padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--accent);
+        style="width:64px;padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--primary);
                background:var(--surface2);color:var(--text);font-size:13px;font-weight:700"
         onkeydown="if(event.key==='Enter')saveSliceTarget('${portfolioId}')">
       <button onclick="saveSliceTarget('${portfolioId}')"
         style="padding:4px 14px;border:none;border-radius:var(--radius-sm);
-               background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
+               background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
       <button onclick="loadDashboard()"
         style="padding:4px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);
                background:var(--surface2);color:var(--text-muted);font-size:12px;cursor:pointer">✕</button>
@@ -3876,7 +3854,7 @@ function _techMACD(a) {
 }
 
 const _TD_LEVELS = ['Strong Sell', 'Sell', 'Neutral', 'Buy', 'Strong Buy'];
-const _TD_COLORS = ['#dc2626', '#f97316', '#6b7280', '#84cc16', '#16a34a'];
+const _TD_COLORS = ['#b8684f', '#cc8b6b', '#7a6e5f', '#7d9b6a', '#558467'];
 
 // Combine the three indicators into a single score in [-1, +1] (+ = buy).
 function _techGauge(closes) {
@@ -4417,10 +4395,10 @@ function startRenamePortfolio(portfolioId, currentName) {
   if (!row) return;
   row.innerHTML = `
     <input id="rename-port-input" value="${currentName}"
-      style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600"
+      style="flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--primary);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600"
       onkeydown="if(event.key==='Enter')savePortfolioName('${portfolioId}')">
     <button onclick="savePortfolioName('${portfolioId}')"
-      style="margin-left:8px;padding:6px 14px;border:none;border-radius:var(--radius-sm);background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
+      style="margin-left:8px;padding:6px 14px;border:none;border-radius:var(--radius-sm);background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save</button>
     <button onclick="loadPortfolioTab('${portfolioId}',document.querySelector('.tab-btn.active'))"
       style="margin-left:6px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text-muted);font-size:12px;cursor:pointer">✕</button>
   `;
@@ -4919,11 +4897,11 @@ function toggleMFExpand(id) {
 
 function _mfCatStyle(cat) {
   const map = {
-    Onshore:  'background:rgba(37,99,235,.12);color:#3b82f6;border:1px solid rgba(37,99,235,.25)',
-    Offshore: 'background:rgba(234,88,12,.12);color:#ea580c;border:1px solid rgba(234,88,12,.25)',
-    RMF:      'background:rgba(124,58,237,.12);color:#7c3aed;border:1px solid rgba(124,58,237,.25)',
-    ESG:      'background:rgba(22,163,74,.12);color:#16a34a;border:1px solid rgba(22,163,74,.25)',
-    SSF:      'background:rgba(217,119,6,.12);color:#d97706;border:1px solid rgba(217,119,6,.25)',
+    Onshore:  'background:rgba(85,132,103,.14);color:#558467;border:1px solid rgba(85,132,103,.3)',
+    Offshore: 'background:rgba(184,104,79,.14);color:#b8684f;border:1px solid rgba(184,104,79,.3)',
+    RMF:      'background:rgba(107,140,174,.14);color:#5a7695;border:1px solid rgba(107,140,174,.3)',
+    ESG:      'background:rgba(138,154,91,.16);color:#6f7d41;border:1px solid rgba(138,154,91,.32)',
+    SSF:      'background:rgba(201,146,46,.14);color:#a9791f;border:1px solid rgba(201,146,46,.3)',
     Other:    'background:var(--surface2);color:var(--text-muted);border:1px solid var(--border)',
   };
   return map[cat] || 'background:var(--surface2);color:var(--text-muted)';
@@ -5421,7 +5399,7 @@ async function loadCash() {
     html += `<div class="section-header">${labels[type]}</div><div class="card">`;
     accs.forEach(a => {
       const bank = THAI_BANKS[a.bank];
-      const accentColor = bank ? bank.color : 'var(--accent)';
+      const accentColor = bank ? bank.color : 'var(--primary)';
       const logoHtml = a.bank
         ? `<img src="assets/banks/${a.bank}.png" alt="${a.bank}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2.5px solid ${accentColor}55;flex-shrink:0" onerror="this.style.visibility='hidden'">`
         : `<div style="width:42px;height:42px;border-radius:50%;background:var(--surface2);flex-shrink:0"></div>`;
@@ -5507,7 +5485,7 @@ function _renderFcdCard(a, bank, accentColor) {
   const fxGain = (currentThb !== null && purchaseThb > 0) ? currentThb - purchaseThb : null;
   const displayThb = currentThb !== null ? currentThb : a.balance;
 
-  const curBadge = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--accent)22;color:var(--accent)">${a.currency}</span>`;
+  const curBadge = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--primary)22;color:var(--primary)">${a.currency}</span>`;
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
@@ -5875,7 +5853,7 @@ let _bmTf        = '6mo';    // '1mo' | '3mo' | '6mo' | '1y' | 'ytd'
 let _bmPorts     = [];       // [{id, name, emoji}] for this user's portfolios
 let _bmSel       = 'total';  // 'total' | Set<portfolioId>
 let _bmReqSeq    = 0;        // guards against out-of-order async renders
-const _BM_NASDAQ = '#eab308', _BM_SP = '#14b8a6', _BM_PORT = '#22d3ee';
+const _BM_NASDAQ = '#c9922e', _BM_SP = '#6b8cae', _BM_PORT = '#558467';
 
 function _anEsc(s) {
   return String(s == null ? '' : s)
@@ -6240,8 +6218,8 @@ function _bmRenderChart(d) {
   if (!canvas || !d) return;
 
   const isDark  = document.documentElement.classList.contains('dark');
-  const gridClr = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
-  const tickClr = isDark ? '#5a6278' : '#6b7280';
+  const gridClr = 'rgba(85,132,103,.14)';
+  const tickClr = '#7a6e5f';
 
   const mk = (label, data, color) => ({
     label, data, borderColor: color, backgroundColor: color,
@@ -6874,7 +6852,7 @@ let _selectedLoanId  = null;
 let _loanPayCtx      = null;        // { paymentId } while the mark-paid modal is open
 
 const _LOAN_STATUS = {
-  active:    { label: 'Active',    color: 'var(--accent)' },
+  active:    { label: 'Active',    color: 'var(--primary)' },
   completed: { label: 'Completed', color: 'var(--text-muted)' },
   overdue:   { label: 'Overdue',   color: 'var(--danger)' }
 };
@@ -7356,11 +7334,11 @@ let _bondSortKey = 'maturity';
 function _ratingColor(rating) {
   if (!rating) return '#6b7280';
   const r = rating.toUpperCase();
-  if (r.startsWith('AAA'))        return '#16a34a';
-  if (r.startsWith('AA'))         return '#22c55e';
-  if (r.startsWith('A'))          return '#3b82f6';
-  if (r.startsWith('BBB'))        return '#f59e0b';
-  if (r.startsWith('BB') || r.startsWith('B')) return '#ef4444';
+  if (r.startsWith('AAA'))        return '#558467';
+  if (r.startsWith('AA'))         return '#6f9e7f';
+  if (r.startsWith('A'))          return '#6b8cae';
+  if (r.startsWith('BBB'))        return '#c9922e';
+  if (r.startsWith('BB') || r.startsWith('B')) return '#b8684f';
   return '#6b7280';
 }
 
@@ -7493,10 +7471,10 @@ function _renderBondDashboard(bonds) {
 
   // Maturity distribution
   const buckets = [
-    { label: '< 90d',    min: 0,    max: 90,         color: '#ef4444', value: 0 },
-    { label: '90d–1yr',  min: 91,   max: 365,        color: '#f97316', value: 0 },
-    { label: '1–3 yrs',  min: 366,  max: 1095,       color: '#f59e0b', value: 0 },
-    { label: '> 3 yrs',  min: 1096, max: Infinity,   color: '#22c55e', value: 0 },
+    { label: '< 90d',    min: 0,    max: 90,         color: '#b8684f', value: 0 },
+    { label: '90d–1yr',  min: 91,   max: 365,        color: '#c9922e', value: 0 },
+    { label: '1–3 yrs',  min: 366,  max: 1095,       color: '#d9b382', value: 0 },
+    { label: '> 3 yrs',  min: 1096, max: Infinity,   color: '#558467', value: 0 },
   ];
   bonds.forEach(b => {
     const days = _daysTo(b.maturity_date);
@@ -7507,7 +7485,7 @@ function _renderBondDashboard(bonds) {
   const matItems = buckets.filter(bk => bk.value > 0);
 
   const isDark  = document.documentElement.classList.contains('dark');
-  const textClr = isDark ? '#e2e6f0' : '#111827';
+  const textClr = '#1a1a1a';
 
   dashWrap.style.display = 'block';
   dashWrap.innerHTML = `
@@ -7955,7 +7933,7 @@ let _dcaMonths = [];     // available months, desc
 
 const _DCA_STATUS = {
   draft:       { lbl: 'DRAFT',       clr: 'var(--warning)' },
-  in_progress: { lbl: 'IN PROGRESS', clr: 'var(--accent)'  },
+  in_progress: { lbl: 'IN PROGRESS', clr: 'var(--primary)'  },
   completed:   { lbl: 'COMPLETED',   clr: 'var(--success)' },
 };
 
@@ -8433,7 +8411,7 @@ async function loadMonthlyReview() {
 
   const plan = plans[0];
   const { data: items } = await sb.from('dca_plan_items').select('*').eq('plan_id', plan.id);
-  const statusColor = { draft: 'var(--warning)', approved: 'var(--success)', executed: 'var(--accent)' };
+  const statusColor = { draft: 'var(--warning)', approved: 'var(--success)', executed: 'var(--primary)' };
 
   el.innerHTML = `
     <div class="card">
@@ -8447,7 +8425,7 @@ async function loadMonthlyReview() {
             <div style="font-weight:700;font-size:14px">${item.ticker}</div>
             <div style="font-size:11px;color:var(--text-muted);max-width:220px">${(item.reasoning || '').slice(0, 80)}</div>
           </div>
-          <div style="font-weight:700;font-size:14px;color:var(--accent);white-space:nowrap">${fmtUSD(item.adjusted_amount_usd || item.suggested_amount_usd)}</div>
+          <div style="font-weight:700;font-size:14px;color:var(--primary);white-space:nowrap">${fmtUSD(item.adjusted_amount_usd || item.suggested_amount_usd)}</div>
         </div>`).join('')}
       <div style="margin-top:10px;text-align:right">
         <button class="btn btn-primary" style="font-size:12px;padding:6px 14px" onclick="navigate('dca')">View Full Plan ›</button>
