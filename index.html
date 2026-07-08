@@ -209,6 +209,25 @@ body {
 .pin-key.del { font-size: 16px; }
 .login-error { color: var(--danger); font-size: 14px; text-align: center; min-height: 20px; }
 
+/* Google sign-in */
+.login-divider {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; max-width: 280px; color: var(--text-muted); font-size: 12px;
+}
+.login-divider::before, .login-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; max-width: 280px; padding: 12px 16px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: #fff; color: #1f1f1f;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.google-btn:active { transform: scale(0.98); }
+.google-btn:disabled { opacity: 0.6; cursor: default; }
+.google-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
 /* ── DCA Plan ────────────────────────────────────────────────────────────── */
 .dca-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .dca-row:last-child { border-bottom: none; }
@@ -399,6 +418,18 @@ textarea, input, select { font-family: 'Instrument Sans', sans-serif; }
     <div class="user-btn selected" style="opacity:0.4;pointer-events:none">Loading…</div>
   </div>
   <div class="login-error" id="login-error"></div>
+
+  <div class="login-divider">หรือ · or</div>
+
+  <button class="google-btn" id="google-btn" onclick="signInWithGoogle()">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+    <span>เข้าสู่ระบบด้วย Google</span>
+  </button>
 </div>
 
 <!-- ── MAIN APP ───────────────────────────────────────────────────────────── -->
@@ -2632,12 +2663,14 @@ let _dbDonutMode = 'me';
 
 // ── PIN Auth ──────────────────────────────────────────────────────────────────
 
-function logout() {
+async function logout() {
   localStorage.removeItem('session');
+  // Also end any Google session so getSession() doesn't auto-log back in.
+  try { await sb.auth.signOut(); } catch (_) {}
   state.userId = null; state.userName = null;
   document.getElementById('main-app').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
-  updatePinDots();
+  initLoginScreen();
 }
 
 // ── App entry ─────────────────────────────────────────────────────────────────
@@ -8871,10 +8904,20 @@ function showToast(msg) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-(function init() {
+(async function init() {
   initTheme();
   initLang();
-  // Check for existing session
+
+  // 1. Google session? (returning from OAuth, or a persisted Supabase session)
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user) {
+      const handled = await handleGoogleSession(session.user);
+      if (handled) return;  // entered the app, or showed the link picker
+    }
+  } catch (e) { console.error('getSession', e); }
+
+  // 2. Existing name-tap session
   const saved = localStorage.getItem('session');
   if (saved) {
     try {
@@ -8886,10 +8929,99 @@ function showToast(msg) {
       return;
     } catch (_) {}
   }
-  // Show login and populate user selector with real names from DB
+
+  // 3. Show login and populate user selector with real names from DB
   document.getElementById('login-page').style.display = 'flex';
   initLoginScreen();
 })();
+
+// ── Google session → link to a users row ────────────────────────────────────
+// Match a Google identity to an existing profile: by auth_uid (already linked)
+// or by email (auto-link). No match → name-picker fallback. Keeps users.id as
+// the canonical user_id, so no per-table data migration is ever needed.
+async function handleGoogleSession(gUser) {
+  const email = (gUser.email || '').toLowerCase();
+  const uid = gUser.id;
+  try {
+    const { data: users } = await sb.from('users').select('id, name, avatar, email, auth_uid');
+    const list = users || [];
+    const match = list.find(u => u.auth_uid === uid)
+               || list.find(u => (u.email || '').toLowerCase() === email);
+    if (match) {
+      // Stamp the link if it isn't recorded yet (first-time auto-link).
+      if (match.auth_uid !== uid || (match.email || '').toLowerCase() !== email) {
+        await sb.from('users').update({ auth_uid: uid, email }).eq('id', match.id);
+      }
+      await _finishGoogleLogin(match);
+      return true;
+    }
+    // No profile matches this Google account → let the user pick which is theirs.
+    showGoogleLinkPicker(gUser);
+    return true;
+  } catch (e) {
+    console.error('handleGoogleSession', e);
+    return false;
+  }
+}
+
+async function _finishGoogleLogin(u) {
+  const { data: others } = await sb.from('users').select('id').neq('id', u.id);
+  state.userId    = u.id;
+  state.userName  = u.name;
+  state.userAvatar = u.avatar || '😊';
+  state.partnerId = others?.[0]?.id || null;
+  localStorage.setItem('session', JSON.stringify({ userId: u.id, userName: u.name, partnerId: state.partnerId }));
+  enterApp();
+}
+
+// First-time Google login with no email match: ask which existing profile is theirs.
+function showGoogleLinkPicker(gUser) {
+  const page = document.getElementById('login-page');
+  page.style.display = 'flex';
+  document.getElementById('google-btn').style.display = 'none';
+  const divider = document.querySelector('.login-divider');
+  if (divider) divider.style.display = 'none';
+  document.getElementById('login-error').textContent = '';
+  const sub = document.querySelector('.login-sub');
+  if (sub) sub.textContent = `เชื่อมบัญชี ${gUser.email || 'Google'} — เลือกโปรไฟล์ของคุณ`;
+  _renderLinkPicker();
+}
+
+async function _renderLinkPicker() {
+  const { data: users } = await sb.from('users').select('id, name, avatar').order('id');
+  const selector = document.getElementById('user-selector');
+  selector.style.flexDirection = 'column';
+  selector.innerHTML = (users || []).map(u => `
+    <button class="user-btn" onclick="linkGoogleTo('${u.id}')">
+      ${u.avatar || '😊'} ${u.name}
+    </button>
+  `).join('');
+}
+
+// Stamp the current Google identity onto the profile the user picked.
+async function linkGoogleTo(userId) {
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = 'กำลังเชื่อมบัญชี…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const email = (session?.user?.email || '').toLowerCase();
+    const uid = session?.user?.id;
+    if (!uid) throw new Error('no session');
+
+    // Guard: don't hijack a profile already linked to a different Google account.
+    const { data: row } = await sb.from('users').select('id, name, avatar, auth_uid').eq('id', userId).single();
+    if (row?.auth_uid && row.auth_uid !== uid) {
+      errEl.textContent = 'โปรไฟล์นี้เชื่อมกับบัญชี Google อื่นแล้ว';
+      return;
+    }
+
+    await sb.from('users').update({ auth_uid: uid, email }).eq('id', userId);
+    await _finishGoogleLogin(row || { id: userId, name: '', avatar: '😊' });
+  } catch (e) {
+    console.error('linkGoogleTo', e);
+    errEl.textContent = 'เชื่อมบัญชีไม่สำเร็จ ลองใหม่อีกครั้ง';
+  }
+}
 
 async function initLoginScreen() {
   const { data: users } = await sb.from('users').select('id, name, avatar').order('id');
@@ -8916,6 +9048,28 @@ async function loginAs(userId, userName, userAvatar) {
     enterApp();
   } catch (e) {
     errEl.textContent = 'Login error. Check connection.';
+  }
+}
+
+// ── Google sign-in ──────────────────────────────────────────────────────────
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (btn) btn.disabled = true;
+  try {
+    // Return to this exact page after the Google consent flow.
+    const redirectTo = window.location.href.split('#')[0].split('?')[0];
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo }
+    });
+    if (error) throw error;
+    // On success the browser is redirected to Google; nothing else runs here.
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    errEl.textContent = 'Google sign-in failed. Please try again.';
+    console.error('signInWithGoogle', e);
   }
 }
 
