@@ -2369,6 +2369,30 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .pt-act-btn:hover    { border-color:var(--primary);color:var(--primary); }
 .pt-act-del:hover    { border-color:var(--danger);color:var(--danger); }
 
+/* Cash card tap-to-expand */
+.cash-card { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cash-actions {
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+  max-height:0; opacity:0; overflow:hidden; margin-top:0;
+  transition:max-height .28s ease, opacity .2s ease, margin-top .28s ease;
+}
+.cash-card.expanded .cash-actions {
+  max-height:80px; opacity:1; margin-top:12px;
+  padding-top:12px; border-top:1px solid var(--border);
+}
+.cash-act-btn {
+  display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:9px 6px; border-radius:8px; border:1px solid transparent;
+  font-size:12.5px; font-weight:700; cursor:pointer; transition:all .12s;
+  font-family:var(--font);
+}
+.cash-act-edit   { background:var(--primary); color:var(--text-inv); }
+.cash-act-edit:hover   { filter:brightness(1.08); }
+.cash-act-del    { background:var(--accent); color:var(--text-inv); }
+.cash-act-del:hover    { filter:brightness(1.08); }
+.cash-act-cancel { background:transparent; color:var(--text-muted); border-color:var(--border); }
+.cash-act-cancel:hover { color:var(--text); border-color:var(--text-muted); }
+
 /* Live dot */
 .live-dot { width:5px;height:5px;border-radius:50%;background:var(--success);
   animation:pulse 2s infinite;display:inline-block;vertical-align:middle; }
@@ -5449,7 +5473,7 @@ async function loadCash() {
       else if (type === 'fixed_deposit') inner = _renderFdCard(a, bank, accentColor);
       else if (type === 'fcd')      inner = _renderFcdCard(a, bank, accentColor);
 
-      html += `<div class="holding-row" style="padding:14px 16px"><div style="display:flex;align-items:flex-start;gap:12px">${logoHtml}<div style="flex:1;min-width:0">${inner}</div></div></div>`;
+      html += `<div class="holding-row cash-card" id="cash-card-${a.id}" onclick="toggleCashCard('${a.id}')" style="padding:14px 16px"><div style="display:flex;align-items:flex-start;gap:12px">${logoHtml}<div style="flex:1;min-width:0">${inner}</div></div>${_cashActions(a.id)}</div>`;
     });
     html += '</div>';
   });
@@ -5464,7 +5488,19 @@ function _cashBankLine(a, bank, accentColor) {
 }
 
 function _cashActions(id) {
-  return `<div style="display:flex;gap:4px;margin-top:4px"><button class="pt-act-btn" onclick="openEditCash('${id}')">✏️</button><button class="pt-act-btn" onclick="deleteCashAccount('${id}')">🗑</button></div>`;
+  return `<div class="cash-actions">
+    <button class="cash-act-btn cash-act-edit" onclick="event.stopPropagation();openEditCash('${id}')">✏️ Edit</button>
+    <button class="cash-act-btn cash-act-del" onclick="event.stopPropagation();deleteCashAccount('${id}')">🗑️ Delete</button>
+    <button class="cash-act-btn cash-act-cancel" onclick="event.stopPropagation();toggleCashCard('${id}')">✕ Cancel</button>
+  </div>`;
+}
+
+function toggleCashCard(id) {
+  const card = document.getElementById('cash-card-' + id);
+  if (!card) return;
+  const wasOpen = card.classList.contains('expanded');
+  document.querySelectorAll('.cash-card.expanded').forEach(c => c.classList.remove('expanded'));
+  if (!wasOpen) card.classList.add('expanded');
 }
 
 function _renderSavingCard(a, bank, accentColor) {
@@ -5478,7 +5514,6 @@ function _renderSavingCard(a, bank, accentColor) {
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:17px;font-weight:700">${fmtTHB(a.balance)}</div>
-        ${_cashActions(a.id)}
       </div>
     </div>
     ${a.cash_on_hand_thb > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ฿${a.cash_on_hand_thb.toLocaleString('th-TH')} cash on hand</div>` : ''}`;
@@ -5506,7 +5541,6 @@ function _renderFdCard(a, bank, accentColor) {
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:17px;font-weight:700">${fmtTHB(a.balance)}</div>
         ${a.interest_rate ? `<div style="font-size:11px;color:var(--success);font-weight:600">${a.interest_rate}% p.a.${a.duration_months ? ' · ' + a.duration_months + 'mo' : ''}</div>` : ''}
-        ${_cashActions(a.id)}
       </div>
     </div>
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--text-muted)">
@@ -5537,7 +5571,6 @@ function _renderFcdCard(a, bank, accentColor) {
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:17px;font-weight:700">${fmtTHB(displayThb)}</div>
         ${fxGain !== null ? `<div style="font-size:12px;font-weight:600;color:${fxGain>=0?'var(--success)':'var(--danger)'}">${fxGain>=0?'+':''}${fmtTHB(fxGain)} FX</div>` : ''}
-        ${_cashActions(a.id)}
       </div>
     </div>
     <div style="margin-top:6px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px">
