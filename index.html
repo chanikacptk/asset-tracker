@@ -337,24 +337,25 @@ body {
 .dca-cards { display: none; }              /* desktop: hidden — table is shown */
 .dca-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 14px; margin-bottom: 12px;
+  padding: 14px; margin-bottom: 12px; overflow: hidden;
 }
-.dca-card.done { opacity: .6; }
-.dca-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.dca-card.done { opacity: .7; border-color: var(--primary); background: rgba(85,132,103,.06); }
+.dca-card-head { display: flex; align-items: center; gap: 10px; }
 .dca-card-tk { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .dca-card-tk .dca-tk-name { font-weight: 700; font-size: 17px; }
-.dca-card-reason { font-size: 12px; color: var(--text-muted); line-height: 1.35; flex: 1; min-width: 120px; }
+.dca-card-reason { font-size: 12px; color: var(--text-muted); line-height: 1.35; flex: 1; min-width: 0; }
 .dca-card-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .dca-card-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.dca-card-row:last-child { margin-bottom: 0; }
 .dca-card-lbl { font-size: 13px; color: var(--text-muted); width: 78px; flex-shrink: 0; }
 .dca-card-sugg { font-weight: 600; font-size: 14px; }
 .dca-card-row .dca-io { flex: 1; width: auto; text-align: left; }
 .dca-card-done {
-  display: inline-flex; align-items: center; gap: 8px; margin-left: auto; margin-top: 2px;
-  min-height: 44px; min-width: 44px; padding: 0 6px; justify-content: flex-end;
-  cursor: pointer; font-size: 14px; font-weight: 600; float: right;
+  flex-shrink: 0; margin-left: auto; align-self: flex-start;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; min-width: 44px; cursor: pointer;
 }
-.dca-card-done .dca-check { width: 24px; height: 24px; }
+.dca-card-done .dca-check { width: 22px; height: 22px; }
 .dca-card-empty { text-align: center; color: var(--text-muted); padding: 22px 4px; font-size: 13px; }
 
 @media (max-width: 767px) {
@@ -8175,6 +8176,11 @@ async function _dcaRenderActive() {
           <div class="dca-card-head">
             <div class="dca-card-tk">${_assetLogoImg(i.ticker, 22)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div>
             <div class="dca-card-reason">${_esc(i.reasoning || '')}</div>
+            <label class="dca-card-done">
+              <input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+                     data-item="${i.id}" data-field="is_done"
+                     onchange="_dcaToggleDone('${i.id}',this)">
+            </label>
           </div>
           <div class="dca-card-body">
             <div class="dca-card-row">
@@ -8195,12 +8201,6 @@ async function _dcaRenderActive() {
                      value="${actual}" oninput="_numInputFmt(this)"
                      onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)">
             </div>
-            <label class="dca-card-done">
-              <input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
-                     data-item="${i.id}" data-field="is_done"
-                     onchange="_dcaToggleDone('${i.id}',this)">
-              <span>Done</span>
-            </label>
           </div>
         </div>`;
       }).join('');
