@@ -3828,19 +3828,18 @@ async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
   _portTableData._allocatedTarget = allocatedTarget;
   _renderPortTbody();
 
-  // Background live price refresh — fires once per tab load (not on the re-render pass)
+  // Background live price refresh — one batched GAS call for all tickers.
+  // GAS fetches Yahoo server-side AND persists to market_data, so this works on
+  // mobile (no client-side proxy) and avoids ~2×N requests getting throttled.
   if (!_liveRefreshed && state.gasUrl && holdings.length > 0) {
     const tickers = [...new Set(holdings.map(h => h.ticker))];
     const capturedId = portfolioId;
-    Promise.all(tickers.map(async ticker => {
-      try {
-        const r = await callGAS('getPrice', { symbol: ticker });
-        if (r?.ok && r.price > 0) {
-          state.cache[ticker] = r.price;
-          callGAS('savePrice', { symbol: ticker, price: r.price, asset_type: 'stock', currency: 'USD' });
-        }
-      } catch (_) {}
-    })).then(() => {
+    callGAS('getPrices', { tickers: tickers.join(',') }).then(r => {
+      if (r?.ok && r.prices) {
+        Object.keys(r.prices).forEach(sym => {
+          if (r.prices[sym] > 0) state.cache[sym] = r.prices[sym];
+        });
+      }
       // Only re-render if this tab is still the active one
       const activeId = document.querySelector('#portfolio-tabs .tab-btn.active')?.dataset.portfolioId;
       if (activeId === capturedId) {

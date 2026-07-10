@@ -46,6 +46,25 @@ function doGet(e) {
       result.price = data.regularMarketPrice;
       result.name = data.shortName || data.longName || symbol;
       result.currency = data.currency || 'USD';
+    } else if (action === 'getPrices') {
+      // Batch quote: one request for many tickers. Fetches each server-side
+      // (works on mobile where client-side proxies get blocked) and persists
+      // to market_data so the frontend doesn't need a separate savePrice call.
+      const raw = e?.parameter?.tickers || '';
+      const symbols = raw.split(',').map(function(s){ return s.trim().toUpperCase(); }).filter(String);
+      if (!symbols.length) throw new Error('tickers required');
+      const prices = {};
+      symbols.forEach(function(sym) {
+        try {
+          const meta = _yahooQuoteMeta(sym);
+          const p = meta && meta.regularMarketPrice;
+          if (p > 0) {
+            prices[sym] = p;
+            DataAgent.savePrice(sym, p, 'stock', meta.currency || 'USD');
+          }
+        } catch (e2) { /* skip one bad ticker, keep the rest */ }
+      });
+      result.prices = prices;
     } else if (action === 'savePrice') {
       const symbol = (e?.parameter?.symbol || '').toUpperCase();
       const price  = parseFloat(e?.parameter?.price || '0');
