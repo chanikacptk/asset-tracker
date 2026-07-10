@@ -54,7 +54,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 
 | Layer | Technology |
 |---|---|
-| Frontend | Single HTML file (`index.html`, ~7 925 lines) — vanilla JS, no build step |
+| Frontend | Single HTML file (`index.html`, ~9 680 lines) — vanilla JS, no build step |
 | Fonts | **IBM Plex Sans Thai + Noto Sans Thai** (bilingual Thai/Latin) via one global `--font` stack (set 2026-07-08 redesign). Instrument Sans / Syne / JetBrains Mono all removed; `.mono`/`.pt-mono` map to `var(--font)`. See **DESIGN.md** |
 | Styling | CSS variables (warm cream palette in `:root`). **Light theme only** — dark mode + `html.dark` removed 2026-07-08. See **DESIGN.md** |
 | Charts | Chart.js 4.4.0 (CDN) |
@@ -62,7 +62,7 @@ A personal finance PWA for 2 users (partners). Tracks US stocks/ETFs, gold, cash
 | Backend | Google Apps Script (GAS) — `.gs` files in `gas/` |
 | AI | Claude API (`claude-sonnet-4-6`) called from GAS |
 | Notifications | Telegram bot (per-user chat IDs) |
-| PWA | `manifest.json` + `sw.js` (cache `myasset-v108`) |
+| PWA | `manifest.json` + `sw.js` (cache `myasset-v110`) |
 
 CDN deps in `index.html`: `@supabase/supabase-js@2`, `chart.js@4.4.0`, Google Fonts.
 
@@ -87,7 +87,7 @@ git push origin main   # GitHub Pages auto-deploys in ~60s
 ## Project structure
 
 ```
-index.html              Main app — all HTML/CSS/JS (~7 925 lines)
+index.html              Main app — all HTML/CSS/JS (~9 680 lines)
 sw.js                   Service worker (cache-first CDN, network-first app shell)
 manifest.json           PWA manifest
 portfolio_tracker.html  Design reference — NOT the active app
@@ -405,10 +405,15 @@ Nav highlight logic:
 - `_refreshDonut()` → `_renderAssetSummary(segments, totalUSD)` — 2-column card grid (`#db-port-summary`) below donut; one card per donut segment, percentages match exactly. **Note**: the old `#db-metrics` 2×2 grid (US Portfolio / Cash / Gold / Other) was removed 2026-06-20 — it was duplicate stale code.
 
 ### US Portfolio
-- `loadUSPortfolio()` — builds tabs + calls `_computeUSCombinedMetrics` and `loadPortfolioTab` in parallel
-- `_computeUSCombinedMetrics(portfolios)` — fetches all holdings + prev-day prices, returns combined value/PL/dayChange
-- `loadPortfolioTab(portfolioId, tabBtn)` — fetches holdings + prices + prev prices + analyses; renders stats bar + table
-- Stats bar includes: Value · Cost · P/L · 1D Change · N positions
+- `loadUSPortfolio()` — caches the portfolio list in `_usPortfolios`, builds the tab strip (**`All` first**, then each portfolio, then `📊 Benchmark`), and calls `_computeUSCombinedMetrics` + `loadPortfolioTab(firstPortfolio)` in parallel. Default active tab is the **first real portfolio** (passes `.tab-btn[data-portfolio-id]`, not the `All` button)
+- `_computeUSCombinedMetrics(portfolios)` — fetches all holdings + prev-day prices, returns combined value/cost/PL/dayChange
+- `loadPortfolioTab(portfolioId, tabBtn)` — fetches one portfolio's holdings → `_renderHoldingsView`
+- `loadAllPortfolioTab(tabBtn)` — the **`All`** tab: pulls holdings from every `_usPortfolios` entry, **merges duplicate tickers** (shares summed, avg cost = share-weighted average) → `_renderHoldingsView({isAll:true, portfolioId:null})`
+- `_renderHoldingsView({holdings, portfolioName, portfolioId, isAll})` — shared render path for both loaders: computes totals, builds header (All = title + `+Add` only; real tab = rename + Analyze + Add), desktop `.pt-stats` + wide `.pt-table`, mobile Dime cards, sort/toggle bar; then `_renderPortTbody()` + `_renderUSMobileSummary()`; fires the batched `getPrices` live-refresh (re-render branches on `isAll`)
+- `_renderUSMetricCards(metrics)` — fills the **desktop** 2-metric grid only (combined totals)
+- `_renderUSMobileSummary(metrics)` — fills the **mobile** Dime summary card; re-rendered on every tab load so it shows the active tab's own totals (All = combined)
+- `_renderPortTbody()` — emits the desktop `<tbody>` **and** the mobile `.ph-card.ph-dime` cards. Dime card: `.ph-d-left` (logo+ticker) taps → `openTickerDetail` modal; `.ph-d-right` (value+caret) taps → `_usToggleExpand` inline detail (Shares/Price/AVG Cost/Cost, one open at a time via `_usExpandedTk`). **Swipe** (real tabs only, `_swStart/_swMove/_swEnd`): left = `deleteHolding`, right = `openEditHolding`
+- Desktop stats bar (`.pt-stats`) includes: Value · Cost · P/L · 1D Change · N positions. Mobile sub-total (`.pt-subtotal`) shows only **N positions** (the rest is in the summary card)
 - **Ticker Detail modal** — tapping a `$ticker` in any holdings table calls `openTickerDetail(ticker)` (no navigation). Fetches GAS `getHistory`, then `_tdRender` builds a **header** (logo · ticker · name · price + day change) and a **horizontal scrollable pill tab bar** (`.td-tabbar` / `.td-tab`, TradingView-style, active = `--accent`): **Overview · Technicals · News · Earnings · Simulator**. Bottom-sheet modal (`#td-modal`), same pattern as gold/bond modals. Only the active tab's content is rendered into `#td-tab-content` — `_tdShowTab(tab)` swaps it. Shared state in `_tdCtx = {ticker, hist, g, price}`; each tab's async data is **lazy-loaded on first view**.
   - **Overview tab** (`_tdOverviewHtml` / `_tdFetchOverview`) — TradingView-style key-stats list (`.td-ov-row` label-left/value-right): Volume, Average volume (30D), Market cap, Dividend yield (indicated — only shown when > 0), P/E (TTM), Basic EPS (TTM), Net income (FY), Revenue (FY), Shares float, Beta (1Y), 52-week high/low. Data from **GAS `getOverview`** (Yahoo v10 quoteSummary — see GAS actions); cached per-ticker in `_tdOverview` (`{_error:true}` on failure → Thai "unavailable" message), `_tdOverviewToken` drops out-of-order fetches. Big numbers via `_tdFmtBig(v, cur)` (T/B/M/K, `$` when `cur`).
   - **Technicals tab** (`_tdTechnicalsHtml`, unchanged logic, just relocated): `_techRSI` (Wilder 14), `_techSMA` (20/50), `_techMACD` (12/26/9), combined by `_techGauge(closes)` into a score ∈ [−1,+1] → bucket `Strong Sell…Strong Buy`. `_tdGaugeSVG(score)` draws the 5-segment semicircle + needle. Validated on live NVDA (−0.46 → "Sell").
@@ -547,7 +552,7 @@ Key classes:
 - `.g2x` / `.g4x` — 2 or 4-column grid
 - `.m-lbl` / `.m-val` / `.m-sub` — metric label/value/subtitle (body font)
 - `.mono` — table numbers (now Instrument Sans; JetBrains Mono removed 2026-06-29)
-- `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells (desktop). Below 768px the table is hidden and a **card-per-holding** layout renders instead: `.ph-cards` / `.ph-card` (`.ph-card-top`/`-id`/`-tk`/`-price`/`-shares`/`-body`/`-row`/`-actions`) — logo+ticker+price, shares, Avg Cost / Value / P/L, edit+delete. `_renderPortTbody` emits both the `<tbody>` and `#pt-cards`; CSS `@media(max-width:767px)` toggles `.pt-card .tbl-wrap`↔`.pt-card .ph-cards`
+- `.pt-table` / `.pt-mono` / `.pt-ticker` — portfolio table cells (desktop). Below 768px the table is hidden and the **Dime-style holding cards** render instead: `.ph-cards` / `.ph-card.ph-dime` → `.ph-swipe-bg` (edit/del reveal) + `.ph-d-body` (swipe layer) → `.ph-d-main` (`.ph-d-left` logo+ticker+`⊕`weight → modal; `.ph-d-right` value+`.ph-d-caret`+secondary → toggle expand) + collapsible `.ph-d-detail` (`.ph-d-detgrid` Shares/Price/AVG Cost/Cost). The older `.ph-card-top`/`-id`/`-tk`/`-price`/`-shares`/`-row`/`-actions` classes still exist for other card layouts. `_renderPortTbody` emits both the `<tbody>` and `#pt-cards`; CSS `@media(max-width:767px)` toggles `.pt-card .tbl-wrap`↔`.pt-card .ph-cards`. Mobile show/hide rules are scoped under `#us-metrics-wrap`/`.pt-card` parents so they out-specify the later base defs
 - `.pt-sr` / `.pt-sr-s` / `.pt-sr-r` — S/R level display
 - `.gc` / `.rc` / `.ac` — green/red/amber color utilities
 - `.b-buy` / `.b-sell` / `.b-hold` / `.b-trim` / `.b-dca` — signal badges
