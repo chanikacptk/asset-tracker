@@ -366,14 +366,17 @@ body {
   .pt-card .tbl-wrap { display: none; }
   .pt-card .ph-cards { display: block; }
 
-  /* US Portfolio Dime-style: summary card replaces the 2-metric grid */
-  .us-metrics-grid { display: none; }
-  .us-summary-card { display: block; }
+  /* US Portfolio Dime-style: summary card replaces the 2-metric grid.
+     NOTE: these use a parent selector (higher specificity) so they win over the
+     base .us-metrics-grid / .us-summary-card / .pt-stats rules that are defined
+     LATER in the stylesheet (equal-specificity later rules would otherwise win). */
+  #us-metrics-wrap .us-metrics-grid { display: none; }
+  #us-metrics-wrap .us-summary-card { display: block; }
   /* compact single-line sub-total replaces the wrapped stats bar */
-  .pt-stats { display: none; }
-  .pt-subtotal { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.55; margin: 2px 0 12px; }
-  .pt-mobilebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-  .pt-assetcount { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+  .pt-card .pt-stats { display: none; }
+  .pt-card .pt-subtotal { display: block; font-size: 12px; color: var(--text-muted); line-height: 1.55; margin: 2px 0 12px; }
+  .pt-card .pt-mobilebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .pt-card .pt-assetcount { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -2332,22 +2335,35 @@ html.dark .theme-toggle-thumb { transform:translateX(20px); }
 .us-sum-total { font-size:32px;font-weight:800;letter-spacing:-0.5px;margin:2px 0;line-height:1.1; }
 .us-sum-unit { font-size:14px;font-weight:600;color:var(--text-muted);margin-left:5px; }
 .us-sum-cost { font-size:13px;color:var(--text-muted);margin-bottom:14px; }
-.us-sum-rows { display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--border);padding-top:12px; }
+.us-sum-rows { display:flex;flex-direction:column;gap:9px;border-top:1px dashed var(--border);padding-top:12px; }
 .us-sum-row { display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13px; }
 .us-sum-row > span:first-child { color:var(--text-muted); }
 .us-sum-row > span:last-child { font-weight:700;text-align:right; }
-/* Dime holding cards */
-.ph-dime { padding:14px 16px; }
-.ph-d-main { display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer; }
-.ph-d-left { display:flex;align-items:center;gap:11px;min-width:0; }
+/* Dime holding cards — swipeable + inline-expandable */
+.ph-dime { padding:0;position:relative;overflow:hidden;touch-action:pan-y; }
+.ph-d-body { position:relative;z-index:2;background:var(--surface);padding:14px 16px;transition:transform .2s ease; }
+.ph-dime.swiping .ph-d-body { transition:none; }
+.ph-swipe-bg { position:absolute;top:0;bottom:0;width:55%;display:flex;align-items:center;z-index:1;color:#fff;font-size:13px;font-weight:700; }
+.ph-swipe-bg-edit { left:0;justify-content:flex-start;padding-left:18px;background:var(--primary); }
+.ph-swipe-bg-del  { right:0;justify-content:flex-end;padding-right:18px;background:var(--danger); }
+.ph-d-main { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.ph-d-left { display:flex;align-items:center;gap:11px;min-width:0;cursor:pointer; }
 .ph-d-idcol { min-width:0; }
 .ph-d-tk { font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .ph-d-weight { font-size:12px;color:var(--text-muted);margin-top:2px; }
 .ph-d-wicon { color:var(--primary);font-weight:700; }
-.ph-d-right { text-align:right;flex-shrink:0; }
+.ph-d-right { text-align:right;flex-shrink:0;cursor:pointer;padding-left:8px; }
 .ph-d-value { font-size:17px;font-weight:800;letter-spacing:-0.3px; }
+.ph-d-caret { font-size:12px;font-weight:700;color:var(--text-muted);transition:transform .25s ease;display:inline-block; }
+.ph-dime.expanded .ph-d-caret { transform:rotate(180deg); }
 .ph-d-sec { font-size:12px;font-weight:600;margin-top:3px; }
 .ph-d-muted { color:var(--text-muted); }
+/* Inline expand detail */
+.ph-d-detail { max-height:0;overflow:hidden;opacity:0;transition:max-height .3s ease,opacity .25s ease,margin-top .3s ease; }
+.ph-d-detail.open { max-height:160px;opacity:1;margin-top:12px; }
+.ph-d-detgrid { display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;padding-top:12px;border-top:1px dashed var(--border); }
+.ph-d-dlbl { font-size:11px;color:var(--text-muted);margin-bottom:2px; }
+.ph-d-dval { font-size:14px;font-weight:700; }
 /* Sort + right-column toggle bar */
 .pt-sort-sel { font-family:var(--font);font-size:12px;padding:7px 26px 7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-weight:600;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a6e5f' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 8px center; }
 .pt-toggle-btn { font-family:var(--font);font-size:12px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-weight:600;cursor:pointer;white-space:nowrap; }
@@ -2738,6 +2754,9 @@ let _sortState = { col: null, dir: 1 }; // dir: 1=asc, -1=desc
 let _usMobileSort = 'az';       // az | za | value | plpct | day
 let _usMobileRightCol = 'pl';   // pl | price | day  (toggled right column)
 const _US_RIGHT_LABELS = { pl: 'Unrealized P/L', price: 'Current Price', day: '1D Change' };
+let _usPortfolios = [];          // cached portfolio list (for the 'All' aggregate tab)
+let _usExpandedTk = null;        // ticker whose Dime card detail is expanded (one at a time)
+let _sw = null;                  // in-flight swipe gesture state
 let _dbCache = { my: null, partner: null };  // cached for donut mode switch
 let _dbDonutMode = 'me';
 
@@ -3505,9 +3524,13 @@ async function loadUSPortfolio() {
     return;
   }
 
-  // Build tabs (portfolios + a trailing Benchmark comparison tab)
+  _usPortfolios = portfolios;   // cache for the 'All' aggregate tab
+
+  // Build tabs (All aggregate + portfolios + a trailing Benchmark comparison tab)
   const tabsEl = document.getElementById('portfolio-tabs');
-  tabsEl.innerHTML = portfolios.map((p, i) => `
+  tabsEl.innerHTML =
+    `<button class="tab-btn" id="us-all-tab" onclick="loadAllPortfolioTab(this)">All</button>` +
+    portfolios.map((p, i) => `
     <button class="tab-btn ${i === 0 ? 'active' : ''}" data-portfolio-id="${p.id}" data-portfolio-name="${p.name.replace(/"/g,'&quot;')}" onclick="loadPortfolioTab('${p.id}', this)">
       ${p.name}
     </button>
@@ -3528,7 +3551,7 @@ async function loadUSPortfolio() {
 
   const [metrics] = await Promise.all([
     _computeUSCombinedMetrics(portfolios),
-    loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn'))
+    loadPortfolioTab(portfolios[0].id, tabsEl.querySelector('.tab-btn[data-portfolio-id]'))
   ]);
   _renderUSMetricCards(metrics);
 }
@@ -3585,24 +3608,30 @@ function _renderUSMetricCards({ totalValue, totalCost, totalPL, totalPLPct, dayC
     `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Total P/L</div>
      <div style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:${plClr}">${plSign}${fmtVal(totalPL)}</div>
      <div style="font-size:12px;color:${plClr}">${plSign}${totalPLPct.toFixed(1)}%</div>`;
+}
 
-  // Mobile (Dime-style) summary card
+// Mobile (Dime-style) summary card — re-rendered on every tab switch so it shows the
+// selected portfolio's totals (or the combined 'All' totals). Desktop grid is untouched.
+function _renderUSMobileSummary({ totalValue, totalCost, totalPL, totalPLPct, dayChangeUSD, dayChangePct, hasDayData }) {
   const smEl = document.getElementById('us-summary-mobile');
-  if (smEl) {
-    const cur   = state.currency;
-    const now   = new Date();
-    const dLbl  = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    const tLbl  = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    const plUp  = totalPL >= 0;
-    smEl.innerHTML =
-      `<div class="us-sum-lbl">Total Asset Value <span class="us-sum-ts">(${dLbl} - ${tLbl})</span></div>
-       <div class="us-sum-total">${_usPlainNum(totalValue)}<span class="us-sum-unit">${cur}</span></div>
-       <div class="us-sum-cost">Total Cost: ${_usPlainNum(totalCost)} ${cur}</div>
-       <div class="us-sum-rows">
-         ${hasDayData ? `<div class="us-sum-row"><span>1-Day Change</span><span style="color:${dayClr}">${daySign}${fmtVal(dayChangeUSD)} (${daySign}${dayChangePct.toFixed(1)}%)</span></div>` : ''}
-         <div class="us-sum-row"><span>Unrealized P/L</span><span style="color:${plClr}">${plUp ? '↗' : '↘'} ${plSign}${totalPLPct.toFixed(1)}% (${plSign}${fmtVal(totalPL)} ${cur})</span></div>
-       </div>`;
-  }
+  if (!smEl) return;
+  const now      = new Date();
+  const dLbl     = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const tLbl     = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const plClr    = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
+  const plSign   = totalPL >= 0 ? '+' : '';
+  const plArrow  = totalPL >= 0 ? '↗' : '↘';
+  const dayClr   = dayChangeUSD >= 0 ? 'var(--success)' : 'var(--danger)';
+  const daySign  = dayChangeUSD >= 0 ? '+' : '';
+  const dayArrow = dayChangeUSD >= 0 ? '↗' : '↘';
+  smEl.innerHTML =
+    `<div class="us-sum-lbl">Total Asset Value <span class="us-sum-ts">(${dLbl} - ${tLbl})</span></div>
+     <div class="us-sum-total">${fmtVal(totalValue)}</div>
+     <div class="us-sum-cost">Total Cost: ${fmtVal(totalCost)}</div>
+     <div class="us-sum-rows">
+       ${hasDayData ? `<div class="us-sum-row"><span>1-Day Change</span><span style="color:${dayClr}">${dayArrow} ${daySign}${fmtVal(dayChangeUSD)} (${daySign}${dayChangePct.toFixed(1)}%)</span></div>` : ''}
+       <div class="us-sum-row"><span>P/L</span><span style="color:${plClr}">${plArrow} ${plSign}${fmtVal(totalPL)} (${plSign}${totalPLPct.toFixed(2)}%)</span></div>
+     </div>`;
 }
 
 // Plain grouped number (no currency symbol) — honours the USD/THB toggle
@@ -3671,7 +3700,51 @@ async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
     .eq('portfolio_id', portfolioId)
     .order('target_pct', { ascending: false, nullsFirst: false });
 
-  const nameHeader = `
+  await _renderHoldingsView({ holdings: holdings || [], portfolioName, portfolioId, isAll: false, _liveRefreshed });
+}
+
+// 'All' tab — aggregate every ticker across all portfolios into one list.
+// Duplicate tickers are merged: shares summed, avg cost re-derived as a
+// share-weighted average so total cost / P/L stay correct.
+async function loadAllPortfolioTab(tabBtn, _liveRefreshed = false) {
+  document.querySelectorAll('#portfolio-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+  tabBtn?.classList.add('active');
+  _sortState = { col: null, dir: 1 };
+
+  let all = [];
+  for (const p of (_usPortfolios || [])) {
+    const { data } = await sb.from('holdings')
+      .select('ticker, shares, avg_cost_usd').eq('portfolio_id', p.id);
+    if (data) all = all.concat(data);
+  }
+  const merged = {};
+  for (const h of all) {
+    const k = h.ticker;
+    if (!merged[k]) merged[k] = { ticker: k, shares: 0, costTotal: 0 };
+    merged[k].shares    += h.shares;
+    merged[k].costTotal += h.shares * (h.avg_cost_usd || 0);
+  }
+  const holdings = Object.values(merged).map(m => ({
+    ticker: m.ticker,
+    shares: m.shares,
+    avg_cost_usd: m.shares > 0 ? m.costTotal / m.shares : 0,
+    target_pct: null
+  })).sort((a, b) => a.ticker.localeCompare(b.ticker));
+
+  await _renderHoldingsView({ holdings, portfolioName: 'All', portfolioId: null, isAll: true, _liveRefreshed });
+}
+
+async function _renderHoldingsView({ holdings, portfolioName, portfolioId, isAll, _liveRefreshed }) {
+  const nameHeader = isAll ? `
+    <div id="port-name-row" class="pt-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="pt-title">All Holdings</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="navigate('us');setTimeout(openAddHolding,80)"
+          style="padding:5px 12px;border-radius:8px;border:1px solid rgba(34,197,94,.4);background:rgba(34,197,94,.06);color:var(--success);font-size:11px;font-weight:700;cursor:pointer">+ Add</button>
+      </div>
+    </div>` : `
     <div id="port-name-row" class="pt-header">
       <div style="display:flex;align-items:center;gap:8px">
         <span class="pt-title">${portfolioName}</span>
@@ -3828,6 +3901,9 @@ async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
   _portTableData._allocatedTarget = allocatedTarget;
   _renderPortTbody();
 
+  // Mobile summary card reflects the active tab's own totals
+  _renderUSMobileSummary({ totalValue, totalCost, totalPL, totalPLPct, dayChangeUSD, dayChangePct, hasDayData });
+
   // Background live price refresh — one batched GAS call for all tickers.
   // GAS fetches Yahoo server-side AND persists to market_data, so this works on
   // mobile (no client-side proxy) and avoids ~2×N requests getting throttled.
@@ -3841,10 +3917,15 @@ async function loadPortfolioTab(portfolioId, tabBtn, _liveRefreshed = false) {
         });
       }
       // Only re-render if this tab is still the active one
-      const activeId = document.querySelector('#portfolio-tabs .tab-btn.active')?.dataset.portfolioId;
-      if (activeId === capturedId) {
-        const btn = document.querySelector(`.tab-btn[data-portfolio-id="${capturedId}"]`);
-        loadPortfolioTab(capturedId, btn, true);
+      if (isAll) {
+        if (document.getElementById('us-all-tab')?.classList.contains('active'))
+          loadAllPortfolioTab(document.getElementById('us-all-tab'), true);
+      } else {
+        const activeId = document.querySelector('#portfolio-tabs .tab-btn.active')?.dataset.portfolioId;
+        if (activeId === capturedId) {
+          const btn = document.querySelector(`.tab-btn[data-portfolio-id="${capturedId}"]`);
+          loadPortfolioTab(capturedId, btn, true);
+        }
       }
     }).catch(() => {});
   }
@@ -3926,26 +4007,45 @@ function _renderPortTbody() {
     </tr>`;
   });
 
-  // Mobile (Dime-style) holding cards — independently sorted by _usMobileSort
+  // Mobile (Dime-style) holding cards — independently sorted by _usMobileSort.
+  //  • Tap the TICKER (left)  → opens the Overview/Technical/News/Simulator modal
+  //  • Tap the VALUE (right)  → expands the inline detail (shares/price/avg cost/cost)
+  //  • Swipe LEFT  → delete   • Swipe RIGHT → edit   (real portfolio tabs only)
   let cards = '';
   _sortMobileCards(_portTableData).forEach(r => {
-    cards += `<div class="ph-card ph-dime">
-      <div class="ph-d-main" onclick="openTickerDetail('${r.ticker}')">
-        <div class="ph-d-left">
-          ${_assetLogoImg(r.ticker, 30)}
-          <div class="ph-d-idcol">
-            <div class="ph-d-tk">${r.ticker}</div>
-            <div class="ph-d-weight"><span class="ph-d-wicon">⊕</span> ${r.weight.toFixed(2)}%</div>
+    const expanded = _usExpandedTk === r.ticker;
+    const swipeable = r.portfolioId != null;   // 'All' tab merges portfolios → no swipe
+    const swipeAttrs = swipeable
+      ? ` data-pid="${r.portfolioId}" ontouchstart="_swStart(event,this)" ontouchmove="_swMove(event,this)" ontouchend="_swEnd(event,this)"`
+      : '';
+    const swipeBgs = swipeable
+      ? `<div class="ph-swipe-bg ph-swipe-bg-edit">✏️ Edit</div>
+         <div class="ph-swipe-bg ph-swipe-bg-del">Delete 🗑</div>`
+      : '';
+    cards += `<div class="ph-card ph-dime${expanded ? ' expanded' : ''}" data-tk="${r.ticker}"${swipeAttrs}>
+      ${swipeBgs}
+      <div class="ph-d-body">
+        <div class="ph-d-main">
+          <div class="ph-d-left" onclick="openTickerDetail('${r.ticker}')">
+            ${_assetLogoImg(r.ticker, 30)}
+            <div class="ph-d-idcol">
+              <div class="ph-d-tk">${r.ticker}</div>
+              <div class="ph-d-weight"><span class="ph-d-wicon">⊕</span> ${r.weight.toFixed(2)}%</div>
+            </div>
+          </div>
+          <div class="ph-d-right" onclick="_usToggleExpand(this,'${r.ticker}')">
+            <div class="ph-d-value">${r.price > 0 ? fmtVal(r.value) : '—'} <span class="ph-d-caret">⌄</span></div>
+            ${_usCardSec(r)}
           </div>
         </div>
-        <div class="ph-d-right">
-          <div class="ph-d-value">${r.price > 0 ? fmtVal(r.value) : '—'}</div>
-          ${_usCardSec(r)}
+        <div class="ph-d-detail${expanded ? ' open' : ''}">
+          <div class="ph-d-detgrid">
+            <div><div class="ph-d-dlbl">Shares</div><div class="ph-d-dval">${parseFloat(r.shares.toPrecision(9))}</div></div>
+            <div><div class="ph-d-dlbl">Price</div><div class="ph-d-dval">${r.price > 0 ? fmtUSD(r.price) : '—'}</div></div>
+            <div><div class="ph-d-dlbl">AVG Cost</div><div class="ph-d-dval">${fmtUSD(r.avg_cost_usd)}</div></div>
+            <div><div class="ph-d-dlbl">Cost</div><div class="ph-d-dval">${fmtVal(r.cost)}</div></div>
+          </div>
         </div>
-      </div>
-      <div class="ph-card-actions">
-        <button class="pt-act-btn" onclick="event.stopPropagation();openEditHolding('${r.portfolioId}','${r.ticker}',${r.shares},${r.avg_cost_usd},${r.target_pct || ''})">✏️</button>
-        <button class="pt-act-btn pt-act-del" onclick="event.stopPropagation();deleteHolding('${r.portfolioId}','${r.ticker}')">🗑</button>
       </div>
     </div>`;
   });
@@ -3995,6 +4095,61 @@ function _usCardSec(r) {
 function _usSetMobileSort(v) {
   _usMobileSort = v;
   _renderPortTbody();
+}
+
+// Expand/collapse a Dime card's inline detail — only one open at a time.
+function _usToggleExpand(rightEl, tk) {
+  const card   = rightEl.closest('.ph-card');
+  if (!card) return;
+  const detail = card.querySelector('.ph-d-detail');
+  const isOpen = detail.classList.contains('open');
+  document.querySelectorAll('#pt-cards .ph-d-detail.open').forEach(d => d.classList.remove('open'));
+  document.querySelectorAll('#pt-cards .ph-card.expanded').forEach(c => c.classList.remove('expanded'));
+  if (isOpen) { _usExpandedTk = null; return; }
+  detail.classList.add('open');
+  card.classList.add('expanded');
+  _usExpandedTk = tk;
+}
+
+// ── Swipe-to-edit / swipe-to-delete on Dime cards (touch only) ───────────────
+function _swStart(e, card) {
+  if (!e.touches || e.touches.length !== 1) return;
+  _sw = { x: e.touches[0].clientX, y: e.touches[0].clientY,
+          card, body: card.querySelector('.ph-d-body'), dx: 0, active: false };
+}
+function _swMove(e, card) {
+  if (!_sw || _sw.card !== card) return;
+  const dx = e.touches[0].clientX - _sw.x;
+  const dy = e.touches[0].clientY - _sw.y;
+  if (!_sw.active) {
+    if (Math.abs(dx) < 8) return;
+    if (Math.abs(dy) > Math.abs(dx)) { _sw = null; return; }  // vertical scroll wins
+    _sw.active = true;
+    card.classList.add('swiping');
+  }
+  _sw.dx = dx;
+  const clamped = Math.max(-130, Math.min(130, dx));
+  _sw.body.style.transform = `translateX(${clamped}px)`;
+  card.classList.toggle('sw-left', dx < 0);
+  card.classList.toggle('sw-right', dx > 0);
+}
+function _swEnd(e, card) {
+  if (!_sw || _sw.card !== card) { _sw = null; return; }
+  const s = _sw; _sw = null;
+  card.classList.remove('swiping');
+  s.body.style.transform = '';
+  card.classList.remove('sw-left', 'sw-right');
+  if (!s.active) return;               // was a tap → let the click handlers run
+  e.preventDefault();                  // suppress the synthesized click after a swipe
+  const THRESH = 70;
+  const pid = card.dataset.pid, tk = card.dataset.tk;
+  if (!pid) return;
+  if (s.dx <= -THRESH) {
+    deleteHolding(pid, tk);
+  } else if (s.dx >= THRESH) {
+    const row = _portTableData.find(r => r.ticker === tk && String(r.portfolioId) === String(pid));
+    if (row) openEditHolding(pid, tk, row.shares, row.avg_cost_usd, row.target_pct || '');
+  }
 }
 
 function _usCycleRightCol(btn) {
