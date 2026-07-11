@@ -233,7 +233,8 @@ Sum of all "amount" values must equal ${budget}.`;
   // Called from the web app (action=dcaEmailSummary) when the user ticks every
   // ticker across all portfolios and hits "Complete Month". Builds a plain-text
   // per-portfolio summary from dca_plans + dca_plan_items and emails the owner
-  // via MailApp (no OAuth — GAS runs as the account owner).
+  // via GmailApp (runs as the account owner; needs the Gmail send OAuth scope
+  // declared in appsscript.json — re-authorize once after pasting).
 
   const _SUMMARY_EMAIL = 'chanika.cptk@gmail.com';
 
@@ -303,7 +304,7 @@ Sum of all "amount" values must equal ${budget}.`;
       `Completion: ${grandDone}/${grandTotal} tickers fully done\n\n` +
       `Sent from MyAsset+`;
 
-    MailApp.sendEmail(_SUMMARY_EMAIL, subject, body);
+    GmailApp.sendEmail(_SUMMARY_EMAIL, subject, body);
     Logger.log(`[DCAAgent] Sent DCA ${mode} summary for ${monthYear} to ${_SUMMARY_EMAIL}`);
 
     // Only "complete" flags the month's plans as completed

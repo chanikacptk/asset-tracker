@@ -8305,6 +8305,7 @@ const _DCA_STATUS = {
   draft:       { lbl: 'DRAFT',       clr: 'var(--warning)' },
   in_progress: { lbl: 'IN PROGRESS', clr: 'var(--primary)'  },
   completed:   { lbl: 'COMPLETED',   clr: 'var(--success)' },
+  submitted:   { lbl: 'SUBMITTED',   clr: 'var(--muted)'   },
 };
 
 function _dcaThisMonth() {
@@ -8723,38 +8724,57 @@ async function _dcaUpdateCompleteBtn() {
     .select('id, status, dca_plan_items(is_done)')
     .eq('user_id', state.userId).eq('month_year', _dcaMonth);
 
+  // A submitted month is archived history — no email/rollover button on it.
+  const anySubmitted = (plans || []).some(p => p.status === 'submitted');
   const allItems = (plans || []).flatMap(p => p.dca_plan_items || []);
   const total = allItems.length;
-  if (total === 0) { wrap.innerHTML = ''; return; }   // nothing to email
+  if (total === 0 || anySubmitted) { wrap.innerHTML = ''; return; }
   const done = allItems.filter(i => i.is_done).length;
-  const allDone = done === total;
 
-  let html = `
+  wrap.innerHTML = `
     <button class="dca-complete-btn submit" onclick="_dcaSubmitEmail()">📧 Submit & Email Summary</button>
-    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · emails a snapshot now</div>`;
-  if (allDone) {
-    html += `<button class="dca-complete-btn" onclick="_dcaCompleteMonth()">✅ Complete Month</button>`;
-  }
-  wrap.innerHTML = html;
+    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · emails the summary, archives ${_dcaMonthLabel(_dcaMonth)}, and starts ${_dcaMonthLabel(_dcaMonthAdd(_dcaMonth, 1))}</div>`;
 }
 
-// Send a progress snapshot email — does NOT mark the month complete
+// Email the month's summary, then archive it and roll the planner over to a fresh
+// next month: (a) mark every plan SUBMITTED (kept in DB as history), (b/d) switch
+// the selector to the next month — which has no items yet, so the UI looks fresh,
+// (c) seed a blank next-month plan for every portfolio (budget carried forward).
 async function _dcaSubmitEmail() {
-  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'submit' });
-  if (res && res.ok) showToast('Email sent to chanika.cptk@gmail.com ✓');
-  else showToast('Email failed: ' + (res?.error || 'unknown error'));
-}
+  const btn = document.querySelector('.dca-complete-btn.submit');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
 
-// Email the summary AND flag every plan for the month completed
-async function _dcaCompleteMonth() {
-  if (!confirm(`Email the ${_dcaMonthLabel(_dcaMonth)} DCA summary and mark the month complete?`)) return;
-  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'complete' });
-  if (res && res.ok) {
-    showToast('Email sent to chanika.cptk@gmail.com ✓');
-    await loadDCA();
-  } else {
-    showToast('Email failed: ' + (res?.error || 'unknown error'));
+  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'submit' });
+  if (!res || !res.ok) {
+    showToast('❌ ส่งอีเมลไม่สำเร็จ — กรุณา re-authorize GAS ก่อน');
+    if (btn) { btn.disabled = false; btn.textContent = '📧 Submit & Email Summary'; }
+    return;
   }
+  showToast('✅ Email sent to chanika.cptk@gmail.com');
+
+  const submitted = _dcaMonth;
+  const next = _dcaMonthAdd(submitted, 1);
+
+  // (a) archive the submitted month — keep the rows, just flag them
+  await sb.from('dca_plans').update({ status: 'submitted' })
+    .eq('user_id', state.userId).eq('month_year', submitted);
+
+  // (c) seed a blank plan for next month for every portfolio not already there
+  const { data: nextPlans } = await sb.from('dca_plans').select('portfolio_id')
+    .eq('user_id', state.userId).eq('month_year', next);
+  const have = new Set((nextPlans || []).map(p => p.portfolio_id));
+  for (const port of (_dcaPorts || [])) {
+    if (have.has(port.id)) continue;
+    const budget = await _dcaPriorBudget(port.id, next, port);
+    await sb.from('dca_plans').insert({
+      user_id: state.userId, portfolio_id: port.id, month_year: next,
+      status: 'draft', total_budget_usd: budget
+    });
+  }
+
+  // (b + d) jump to the fresh month and re-render — blank planner, ready to fill
+  _dcaMonth = next;
+  await loadDCA();
 }
 
 function _dcaFmtInput(v) {
