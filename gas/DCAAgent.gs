@@ -244,16 +244,20 @@ Sum of all "amount" values must equal ${budget}.`;
                          'Actual', 'Done', 'Export Date'];
   const _SHEET_TZ     = 'Asia/Bangkok';
 
-  function exportDCAToSheet(userId, monthYear) {
+  // Export one portfolio (portfolioId given) or every portfolio (omitted) for the
+  // month. Each portfolio goes to its own tab inside the one spreadsheet, named
+  // after the portfolio; rows for successive months are appended below the tab.
+  function exportDCAToSheet(userId, monthYear, portfolioId) {
     if (!userId)    throw new Error('userId required');
     if (!monthYear) throw new Error('monthYear required');
 
-    const plans = supabaseRequest('GET',
-      `dca_plans?user_id=eq.${userId}&month_year=eq.${monthYear}` +
-      `&select=id,portfolio_id&order=created_at`);
+    let query = `dca_plans?user_id=eq.${userId}&month_year=eq.${monthYear}` +
+                `&select=id,portfolio_id&order=created_at`;
+    if (portfolioId) query += `&portfolio_id=eq.${portfolioId}`;
+    const plans = supabaseRequest('GET', query);
     if (!plans || plans.length === 0) throw new Error('No DCA plans for ' + monthYear);
 
-    // Portfolio names
+    // Portfolio names → tab names
     const portIds = plans.map(p => p.portfolio_id).filter(Boolean);
     const portMap = {};
     if (portIds.length) {
@@ -264,59 +268,76 @@ Sum of all "amount" values must equal ${budget}.`;
 
     const monthShort = _monthShort(monthYear);
     const exportDate = Utilities.formatDate(new Date(), _SHEET_TZ, 'yyyy-MM-dd');
+    const ss = _getOrCreateDCASheet();
 
-    let grandPlanned = 0, grandActual = 0, grandDone = 0, grandTotal = 0;
-    const rows = [];
-
+    const results = [];
+    let grandDone = 0, grandTotal = 0;
     plans.forEach(plan => {
-      const items = supabaseRequest('GET',
-        `dca_plan_items?plan_id=eq.${plan.id}` +
-        `&select=ticker,suggested_amount_usd,planned_amount_usd,actual_amount_usd,is_done`) || [];
-      if (items.length === 0) return;
-
       const portName = portMap[plan.portfolio_id] || 'Portfolio';
-      items.forEach(it => {
-        const suggested = Number(it.suggested_amount_usd) || 0;
-        const planned   = Number(it.planned_amount_usd)   || 0;
-        const actual    = Number(it.actual_amount_usd)    || 0;
-        grandPlanned += planned; grandActual += actual; grandTotal += 1;
-        if (it.is_done) grandDone += 1;
-        rows.push([
-          monthShort, portName, it.ticker,
-          suggested > 0 ? suggested : '—',
-          planned, actual,
-          it.is_done ? '✓' : '',
-          exportDate
-        ]);
-      });
+      const r = _exportPlanToTab(ss, plan.id, monthShort, exportDate, portName);
+      if (r) { results.push(r); grandDone += r.done; grandTotal += r.total; }
     });
 
-    if (rows.length === 0) throw new Error('No plan items to export');
+    if (results.length === 0) throw new Error('No plan items to export');
+    _cleanupDefaultSheet(ss);
 
-    // Per-month summary row
+    Logger.log(`[DCAAgent] Exported ${grandTotal} tickers across ${results.length} tab(s) for ${monthYear} to "${_SHEET_NAME}" (${ss.getUrl()})`);
+    return {
+      exported: true, month: monthYear, sheetName: _SHEET_NAME, url: ss.getUrl(),
+      portfolios: results, done: grandDone, total: grandTotal
+    };
+  }
+
+  // Append one portfolio's plan to its own tab (created + headed on first write).
+  function _exportPlanToTab(ss, planId, monthShort, exportDate, portName) {
+    const items = supabaseRequest('GET',
+      `dca_plan_items?plan_id=eq.${planId}` +
+      `&select=ticker,suggested_amount_usd,planned_amount_usd,actual_amount_usd,is_done`) || [];
+    if (items.length === 0) return null;
+
+    let planned = 0, actual = 0, done = 0;
+    const rows = [];
+    items.forEach(it => {
+      const suggested = Number(it.suggested_amount_usd) || 0;
+      const p = Number(it.planned_amount_usd) || 0;
+      const a = Number(it.actual_amount_usd)  || 0;
+      planned += p; actual += a;
+      if (it.is_done) done += 1;
+      rows.push([
+        monthShort, portName, it.ticker,
+        suggested > 0 ? suggested : '—',
+        p, a, it.is_done ? '✓' : '', exportDate
+      ]);
+    });
+    // Per-month summary row for this portfolio tab
     rows.push([
-      monthShort, 'ALL', 'TOTAL', '—',
-      '$' + grandPlanned + ' planned',
-      '$' + grandActual + ' actual',
-      grandDone + '/' + grandTotal + ' done',
-      '—'
+      monthShort, portName, 'TOTAL', '—',
+      '$' + planned + ' planned', '$' + actual + ' actual',
+      done + '/' + items.length + ' done', '—'
     ]);
 
-    // Write to the sheet (header only if the sheet is empty), one batch append
-    const ss    = _getOrCreateDCASheet();
-    const sheet = ss.getSheets()[0];
+    const sheet = _getOrCreateDCATab(ss, portName);
     if (sheet.getLastRow() === 0) {
       sheet.getRange(1, 1, 1, _SHEET_HEADER.length).setValues([_SHEET_HEADER]).setFontWeight('bold');
       sheet.setFrozenRows(1);
     }
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, rows.length, _SHEET_HEADER.length).setValues(rows);
+    return { portfolio: portName, rows: rows.length - 1, done: done, total: items.length };
+  }
 
-    Logger.log(`[DCAAgent] Exported ${rows.length - 1} tickers for ${monthYear} to "${_SHEET_NAME}" (${ss.getUrl()})`);
-    return {
-      exported: true, month: monthYear, sheetName: _SHEET_NAME, url: ss.getUrl(),
-      rows: rows.length - 1, done: grandDone, total: grandTotal
-    };
+  // Get (or create) the tab for a portfolio; sheet names can't contain [ ] * ? / \ :
+  function _getOrCreateDCATab(ss, name) {
+    const safe = String(name).replace(/[\[\]\*\?\/\\:]/g, ' ').trim().slice(0, 90) || 'Portfolio';
+    return ss.getSheetByName(safe) || ss.insertSheet(safe);
+  }
+
+  // A freshly created spreadsheet carries an empty default "Sheet1" — drop it once
+  // real portfolio tabs exist so the file only shows the tabs that matter.
+  function _cleanupDefaultSheet(ss) {
+    if (ss.getSheets().length < 2) return;
+    const def = ss.getSheetByName('Sheet1');
+    if (def && def.getLastRow() === 0) ss.deleteSheet(def);
   }
 
   // Reuse the same spreadsheet across months: try the remembered id first, then a

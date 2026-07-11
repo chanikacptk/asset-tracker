@@ -317,6 +317,8 @@ body {
 .dca-io.plan { border-color: rgba(85,132,103,.35); }
 .dca-io.act  { border-color: rgba(34,197,94,.30); }
 .dca-check { width: 20px; height: 20px; accent-color: var(--success); cursor: pointer; }
+.dca-io:disabled { opacity: .55; background: var(--surface); color: var(--text-muted); cursor: default; }
+.dca-check:disabled { opacity: .55; cursor: default; }
 
 .dca-progress { margin-top: 14px; }
 .dca-progress-bar-track { height: 8px; border-radius: 6px; background: var(--surface2); overflow: hidden; margin: 6px 0; }
@@ -330,6 +332,8 @@ body {
 }
 .dca-complete-btn:disabled { opacity: .5; cursor: default; }
 .dca-complete-btn.submit { background: var(--primary); }
+.dca-complete-btn.mark { background: var(--warning); }
+.dca-complete-btn.ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .dca-complete-btn + .dca-complete-btn { margin-top: 10px; }
 .dca-complete-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
 
@@ -8420,12 +8424,15 @@ async function _dcaRenderActive() {
   let budget = plan ? Number(plan.total_budget_usd) || 0 : 0;
   if (!plan) budget = await _dcaPriorBudget(_dcaPortId, _dcaMonth, port);
 
-  // Keep the DB status in sync with the derived lifecycle
+  // A submitted plan is locked: inputs read-only, SUBMITTED badge, no status churn.
+  const locked = !!(plan && plan.status === 'submitted');
+
+  // Keep the DB status in sync with the derived lifecycle (never for a locked plan)
   const derived = _dcaDeriveStatus(items);
-  if (plan && plan.status !== derived && ['draft','in_progress','completed'].includes(plan.status)) {
+  if (plan && !locked && plan.status !== derived && ['draft','in_progress','completed'].includes(plan.status)) {
     sb.from('dca_plans').update({ status: derived }).eq('id', plan.id).then(() => {});
   }
-  const st = _DCA_STATUS[derived] || _DCA_STATUS.draft;
+  const st = locked ? _DCA_STATUS.submitted : (_DCA_STATUS[derived] || _DCA_STATUS.draft);
 
   const plannedSum = items.reduce((s, i) => s + (Number(i.planned_amount_usd) || 0), 0);
   const actualSum  = items.reduce((s, i) => s + (Number(i.actual_amount_usd)  || 0), 0);
@@ -8446,15 +8453,15 @@ async function _dcaRenderActive() {
           <td><div class="dca-cell-tk">${_assetLogoImg(i.ticker, 20)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div></td>
           <td class="dca-cell-reason">${_esc(i.reasoning || '')}</td>
           <td class="dca-cell-sugg">${i.suggested_amount_usd ? fmtUSD(i.suggested_amount_usd) : '—'}</td>
-          <td style="text-align:right"><input class="dca-io plan" inputmode="decimal" placeholder="—"
+          <td style="text-align:right"><input class="dca-io plan" inputmode="decimal" placeholder="—" ${locked ? 'disabled' : ''}
                 data-item="${i.id}" data-field="planned_amount_usd"
                 value="${planned}" oninput="_numInputFmt(this)"
                 onchange="_dcaEditItem('${i.id}','planned_amount_usd',this)"></td>
-          <td style="text-align:right"><input class="dca-io act" inputmode="decimal" placeholder="—"
+          <td style="text-align:right"><input class="dca-io act" inputmode="decimal" placeholder="—" ${locked ? 'disabled' : ''}
                 data-item="${i.id}" data-field="actual_amount_usd"
                 value="${actual}" oninput="_numInputFmt(this)"
                 onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)"></td>
-          <td style="text-align:center"><input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+          <td style="text-align:center"><input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''} ${locked ? 'disabled' : ''}
                 data-item="${i.id}" data-field="is_done"
                 onchange="_dcaToggleDone('${i.id}',this)"></td>
         </tr>`;
@@ -8472,7 +8479,7 @@ async function _dcaRenderActive() {
             <div class="dca-card-tk">${_assetLogoImg(i.ticker, 22)}<span class="dca-tk-name">${_esc(i.ticker)}</span></div>
             <div class="dca-card-reason">${_esc(i.reasoning || '')}</div>
             <label class="dca-card-done">
-              <input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''}
+              <input type="checkbox" class="dca-check" ${i.is_done ? 'checked' : ''} ${locked ? 'disabled' : ''}
                      data-item="${i.id}" data-field="is_done"
                      onchange="_dcaToggleDone('${i.id}',this)">
             </label>
@@ -8484,14 +8491,14 @@ async function _dcaRenderActive() {
             </div>
             <div class="dca-card-row">
               <span class="dca-card-lbl">Planned</span>
-              <input class="dca-io plan" inputmode="decimal" placeholder="—"
+              <input class="dca-io plan" inputmode="decimal" placeholder="—" ${locked ? 'disabled' : ''}
                      data-item="${i.id}" data-field="planned_amount_usd"
                      value="${planned}" oninput="_numInputFmt(this)"
                      onchange="_dcaEditItem('${i.id}','planned_amount_usd',this)">
             </div>
             <div class="dca-card-row">
               <span class="dca-card-lbl">Actual</span>
-              <input class="dca-io act" inputmode="decimal" placeholder="—"
+              <input class="dca-io act" inputmode="decimal" placeholder="—" ${locked ? 'disabled' : ''}
                      data-item="${i.id}" data-field="actual_amount_usd"
                      value="${actual}" oninput="_numInputFmt(this)"
                      onchange="_dcaEditItem('${i.id}','actual_amount_usd',this)">
@@ -8715,69 +8722,80 @@ function _dcaDeriveStatus(items) {
   return 'draft';
 }
 
-// Export to Google Sheets — always shown (any month with items); hidden on an
-// already-submitted (archived) month.
+// Action row under the planner. Submit and Export are independent: Submit locks
+// the month; Export writes to Google Sheets (active tab or all) without clearing,
+// archiving, or rolling over — a new month is only started via the ＋ button.
 async function _dcaUpdateCompleteBtn() {
   const wrap = document.getElementById('dca-complete-wrap');
   if (!wrap) return;
   const { data: plans } = await sb.from('dca_plans')
-    .select('id, status, dca_plan_items(is_done)')
+    .select('id, status, portfolio_id, dca_plan_items(is_done)')
     .eq('user_id', state.userId).eq('month_year', _dcaMonth);
 
-  // A submitted month is archived history — no export/rollover button on it.
-  const anySubmitted = (plans || []).some(p => p.status === 'submitted');
   const allItems = (plans || []).flatMap(p => p.dca_plan_items || []);
   const total = allItems.length;
-  if (total === 0 || anySubmitted) { wrap.innerHTML = ''; return; }
+  if (total === 0) { wrap.innerHTML = ''; return; }
   const done = allItems.filter(i => i.is_done).length;
 
-  wrap.innerHTML = `
-    <button class="dca-complete-btn submit" onclick="_dcaExportSheet()">📊 Export to Google Sheets</button>
-    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · exports to “MyAsset+ DCA History”, archives ${_dcaMonthLabel(_dcaMonth)}, and starts ${_dcaMonthLabel(_dcaMonthAdd(_dcaMonth, 1))}</div>`;
+  // A month is "submitted" once every plan row for it is flagged submitted.
+  const submitted = (plans || []).length > 0 && (plans || []).every(p => p.status === 'submitted');
+
+  const port = _dcaPorts.find(p => p.id === _dcaPortId);
+  const portName = port ? port.name : 'portfolio';
+  const activePlan = (plans || []).find(p => p.portfolio_id === _dcaPortId);
+  const activeItems = activePlan ? (activePlan.dca_plan_items || []).length : 0;
+
+  const submitBtn = submitted
+    ? `<button class="dca-complete-btn ghost" disabled>✓ Submitted — locked</button>`
+    : `<button class="dca-complete-btn mark" onclick="_dcaSubmitMonth()">Submit ✓</button>`;
+  const exportActive = activeItems > 0
+    ? `<button class="dca-complete-btn submit" onclick="_dcaExportSheet('${_dcaPortId}')">📊 Export ${_esc(portName)} to Sheets</button>` : '';
+  const exportAll = `<button class="dca-complete-btn" onclick="_dcaExportSheet()">📊 Export All Portfolios</button>`;
+
+  wrap.innerHTML = submitBtn + exportActive + exportAll + `
+    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · Submit locks ${_dcaMonthLabel(_dcaMonth)} · Export writes to “MyAsset+ DCA History” (one tab per portfolio) · use ＋ to start a new month</div>`;
 }
 
-// Export the month to Google Sheets, then archive it and roll the planner over to
-// a fresh next month: (a) mark every plan SUBMITTED (kept in DB as history), (b/d)
-// switch the selector to the next month — which has no items yet, so the UI looks
-// fresh, (c) seed a blank next-month plan for every portfolio (budget carried
-// forward). The spreadsheet url is opened in a new tab on success.
-async function _dcaExportSheet() {
-  const btn = document.querySelector('.dca-complete-btn.submit');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting…'; }
+// Lock the month: flag every portfolio's plan for it as submitted, then re-render
+// so inputs go read-only and the badge shows SUBMITTED. Independent of Export.
+async function _dcaSubmitMonth() {
+  const btn = document.querySelector('.dca-complete-btn.mark');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Submitting…'; }
+  const { error } = await sb.from('dca_plans').update({ status: 'submitted' })
+    .eq('user_id', state.userId).eq('month_year', _dcaMonth);
+  if (error) {
+    showToast('❌ Submit ไม่สำเร็จ — ' + error.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit ✓'; }
+    return;
+  }
+  showToast(`🔒 ${_dcaMonthLabel(_dcaMonth)} submitted — plan locked`);
+  await _dcaRenderActive();   // re-render: read-only inputs + SUBMITTED badge
+}
 
-  const res = await callGAS('dcaExportSheet', { userId: state.userId, month: _dcaMonth });
+// Export to Google Sheets. portfolioId → just the active portfolio's tab; omitted
+// → every portfolio, each to its own tab. Data stays exactly as-is afterwards
+// (no clear, no archive, no rollover). Opens the spreadsheet on success.
+async function _dcaExportSheet(portfolioId) {
+  const wrap = document.getElementById('dca-complete-wrap');
+  const btns = wrap ? [...wrap.querySelectorAll('.dca-complete-btn')] : [];
+  btns.forEach(b => { b.disabled = true; });
+  const clicked = btns.find(b => b.getAttribute('onclick') ===
+    (portfolioId ? `_dcaExportSheet('${portfolioId}')` : '_dcaExportSheet()'));
+  if (clicked) clicked.textContent = '⏳ Exporting…';
+
+  const params = { userId: state.userId, month: _dcaMonth };
+  if (portfolioId) params.portfolioId = portfolioId;
+  const res = await callGAS('dcaExportSheet', params);
+
   if (!res || !res.ok) {
     showToast('❌ Export ไม่สำเร็จ — กรุณา re-authorize GAS ก่อน');
-    if (btn) { btn.disabled = false; btn.textContent = '📊 Export to Google Sheets'; }
+    _dcaUpdateCompleteBtn();   // restore buttons
     return;
   }
   showToast('✅ Exported to Google Sheets — MyAsset+ DCA History');
   const url = res.export?.url;
   if (url) window.open(url, '_blank');
-
-  const submitted = _dcaMonth;
-  const next = _dcaMonthAdd(submitted, 1);
-
-  // (a) archive the submitted month — keep the rows, just flag them
-  await sb.from('dca_plans').update({ status: 'submitted' })
-    .eq('user_id', state.userId).eq('month_year', submitted);
-
-  // (c) seed a blank plan for next month for every portfolio not already there
-  const { data: nextPlans } = await sb.from('dca_plans').select('portfolio_id')
-    .eq('user_id', state.userId).eq('month_year', next);
-  const have = new Set((nextPlans || []).map(p => p.portfolio_id));
-  for (const port of (_dcaPorts || [])) {
-    if (have.has(port.id)) continue;
-    const budget = await _dcaPriorBudget(port.id, next, port);
-    await sb.from('dca_plans').insert({
-      user_id: state.userId, portfolio_id: port.id, month_year: next,
-      status: 'draft', total_budget_usd: budget
-    });
-  }
-
-  // (b + d) jump to the fresh month and re-render — blank planner, ready to fill
-  _dcaMonth = next;
-  await loadDCA();
+  _dcaUpdateCompleteBtn();      // rebuild buttons; plan data untouched
 }
 
 function _dcaFmtInput(v) {
