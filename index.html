@@ -1051,7 +1051,10 @@ textarea, input, select { font-family: var(--font); }
         style="width:100%;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;margin-bottom:10px"
         oninput="document.getElementById('settings-gas-url').style.borderColor='var(--border)'"
       >
-      <button class="btn btn-primary" onclick="saveGasUrl()" data-i18n="set.saveUrl">Save URL</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" style="flex:1;min-width:120px;width:auto" onclick="saveGasUrl()" data-i18n="set.saveUrl">Save URL</button>
+        <button class="btn" id="settings-gas-test-btn" style="flex:1;min-width:120px;width:auto;background:transparent;color:var(--primary);border:1px solid var(--primary)" onclick="testGasConnection()" data-i18n="set.testGas">Test Connection</button>
+      </div>
       <div id="settings-gas-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
     </div>
 
@@ -2899,7 +2902,7 @@ const I18N = {
     'set.language':'Language','set.language.sub':'App display language',
     'set.displayname':'Display Name','set.namePh':'Your name','common.save':'Save','set.logout':'Log Out',
     'set.gas':'Google Apps Script','set.gas.desc':'Web App URL — used to trigger agents from the app.',
-    'set.saveUrl':'Save URL','set.telegram':'Telegram Notifications',
+    'set.saveUrl':'Save URL','set.testGas':'Test Connection','set.telegram':'Telegram Notifications',
     'set.tg.desc':'Your Chat ID — get it by messaging @userinfobot on Telegram.',
     'set.myChatId':'My Chat ID','set.partnerChatId':'Partner Chat ID','set.testNotif':'🤖 Send Test Notification',
     'set.market':'Market Data','set.exRate':'Exchange Rate',
@@ -2922,7 +2925,7 @@ const I18N = {
     'set.language':'ภาษา','set.language.sub':'ภาษาที่แสดงในแอป',
     'set.displayname':'ชื่อที่แสดง','set.namePh':'ชื่อของคุณ','common.save':'บันทึก','set.logout':'ออกจากระบบ',
     'set.gas':'Google Apps Script','set.gas.desc':'Web App URL — ใช้เรียกใช้งานเอเจนต์จากแอป',
-    'set.saveUrl':'บันทึก URL','set.telegram':'การแจ้งเตือน Telegram',
+    'set.saveUrl':'บันทึก URL','set.testGas':'ทดสอบการเชื่อมต่อ','set.telegram':'การแจ้งเตือน Telegram',
     'set.tg.desc':'Chat ID ของคุณ — ทักหา @userinfobot ใน Telegram เพื่อรับ',
     'set.myChatId':'Chat ID ของฉัน','set.partnerChatId':'Chat ID พาร์ทเนอร์','set.testNotif':'🤖 ส่งการแจ้งเตือนทดสอบ',
     'set.market':'ข้อมูลตลาด','set.exRate':'อัตราแลกเปลี่ยน',
@@ -9248,21 +9251,102 @@ async function saveGasUrl() {
   showToast('GAS URL saved');
 }
 
+// Ping the deployed GAS Web App and report ✅/❌ + response time. Uses the URL
+// currently in the input box (falling back to the saved one) so it can be tested
+// before saving.
+async function testGasConnection() {
+  const btn = document.getElementById('settings-gas-test-btn');
+  const statusEl = document.getElementById('settings-gas-status');
+  const url = (document.getElementById('settings-gas-url').value.trim()) || state.gasUrl;
+
+  if (!url) {
+    statusEl.textContent = '⚠️ Enter or save a GAS Web App URL first.';
+    statusEl.style.color = 'var(--warning)';
+    return;
+  }
+
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Testing…';
+  statusEl.textContent = 'Pinging GAS…';
+  statusEl.style.color = 'var(--text-muted)';
+
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(`${url}?action=ping`);
+    const ms = Math.round(performance.now() - t0);
+    const text = await resp.text();
+    const gasErr = _parseGasHtmlError(text);
+    if (gasErr) {
+      statusEl.textContent = `❌ GAS script error (${ms}ms): ${gasErr}`;
+      statusEl.style.color = 'var(--danger)';
+    } else {
+      const data = JSON.parse(text);
+      if (data?.ok) {
+        statusEl.textContent = `✅ Connected (${ms}ms) — ${data.message || 'GAS is alive'}`;
+        statusEl.style.color = 'var(--success)';
+      } else {
+        statusEl.textContent = `❌ GAS responded but ping failed (${ms}ms): ${data?.error || 'unknown'}`;
+        statusEl.style.color = 'var(--danger)';
+      }
+    }
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    statusEl.textContent = `❌ Cannot reach GAS (${ms}ms): ${e.message}. Check the URL and that the deployment access is "Anyone".`;
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 // Call GAS Web App endpoint (used by other pages to trigger agents)
-async function callGAS(action, params = {}) {
+async function callGAS(action, params = {}, retries = 3) {
   if (!state.gasUrl) {
     showToast('No GAS URL set — add it in Settings');
     return null;
   }
   const qs = new URLSearchParams({ action, ...params }).toString();
-  try {
-    const resp = await fetch(`${state.gasUrl}?${qs}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } catch (e) {
-    showToast('GAS call failed: ' + e.message);
-    return null;
+  let lastErr = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const resp = await fetch(`${state.gasUrl}?${qs}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = await resp.text();
+      // GAS returns an HTML error page (200 OK) when the script fails to compile
+      // or throws — trying to JSON.parse that yields a cryptic "Unexpected token <".
+      // Surface the real Apps Script error instead so it's actionable.
+      const gasErr = _parseGasHtmlError(text);
+      if (gasErr) throw new Error('GAS script error: ' + gasErr);
+      return JSON.parse(text);
+    } catch (e) {
+      lastErr = e;
+      // Don't retry a real script error — retrying can't fix broken/undeployed code.
+      if (/GAS script error/.test(e.message)) break;
+      if (attempt < retries - 1) await new Promise(r => setTimeout(r, 1000));
+    }
   }
+  const detail = lastErr?.message || 'unknown';
+  if (/GAS script error/.test(detail)) {
+    showToast('⚠️ ' + detail.replace('GAS script error: ', 'GAS ผิดพลาด: '));
+  } else {
+    showToast('⚠️ ไม่สามารถเชื่อมต่อ GAS ได้ — กด Refresh หรือตรวจสอบ GAS URL ใน Settings');
+  }
+  return null;
+}
+
+// Extract the human-readable error from a GAS HTML error page, else null for real JSON.
+function _parseGasHtmlError(text) {
+  if (!text) return null;
+  const t = text.trimStart();
+  if (t[0] !== '<') return null;               // normal JSON response
+  // GAS error pages put the message in a centered monospace <div>.
+  const m = text.match(/font-family:monospace[^>]*>([\s\S]*?)<\/div>/i);
+  const raw = (m ? m[1] : text).replace(/<[^>]+>/g, ' ');
+  const msg = raw.replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ').trim();
+  return msg.slice(0, 200) || 'script returned an HTML error page';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
