@@ -229,26 +229,28 @@ Sum of all "amount" values must equal ${budget}.`;
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  // ── Month-completion email summary ──────────────────────────────────────────
-  // Called from the web app (action=dcaEmailSummary) when the user ticks every
-  // ticker across all portfolios and hits "Complete Month". Builds a plain-text
-  // per-portfolio summary from dca_plans + dca_plan_items and emails the owner
-  // via GmailApp (runs as the account owner; needs the Gmail send OAuth scope
-  // declared in appsscript.json — re-authorize once after pasting).
+  // ── Month export to Google Sheets ───────────────────────────────────────────
+  // Called from the web app (action=dcaExportSheet) when the user hits
+  // "Export to Google Sheets". Reads dca_plans + dca_plan_items for the month and
+  // appends one row per ticker per portfolio (plus a per-month TOTAL summary row)
+  // to a single spreadsheet named 'MyAsset+ DCA History'. The spreadsheet id is
+  // remembered in Script Properties (DCA_SHEET_ID) so subsequent months append to
+  // the same file; the sheet is created automatically on the first export.
+  // Needs the spreadsheets + drive.file OAuth scopes in appsscript.json
+  // (re-authorize once after pasting).
 
-  const _SUMMARY_EMAIL = 'chanika.cptk@gmail.com';
+  const _SHEET_NAME   = 'MyAsset+ DCA History';
+  const _SHEET_HEADER = ['Month', 'Portfolio', 'Ticker', 'Suggested', 'Planned',
+                         'Actual', 'Done', 'Export Date'];
+  const _SHEET_TZ     = 'Asia/Bangkok';
 
-  // mode: 'submit' (progress snapshot — does NOT complete) | 'complete' (also
-  // flags every plan for the month as completed). Per-ticker status icon:
-  // ✅ done · 🔄 actual entered but not done · ⬜ not started.
-  function emailMonthSummary(userId, monthYear, mode) {
-    mode = mode || 'submit';
+  function exportDCAToSheet(userId, monthYear) {
     if (!userId)    throw new Error('userId required');
     if (!monthYear) throw new Error('monthYear required');
 
     const plans = supabaseRequest('GET',
       `dca_plans?user_id=eq.${userId}&month_year=eq.${monthYear}` +
-      `&select=id,total_budget_usd,portfolio_id&order=created_at`);
+      `&select=id,portfolio_id&order=created_at`);
     if (!plans || plans.length === 0) throw new Error('No DCA plans for ' + monthYear);
 
     // Portfolio names
@@ -260,76 +262,100 @@ Sum of all "amount" values must equal ${budget}.`;
       (ports || []).forEach(p => { portMap[p.id] = p.name; });
     }
 
+    const monthShort = _monthShort(monthYear);
+    const exportDate = Utilities.formatDate(new Date(), _SHEET_TZ, 'yyyy-MM-dd');
+
     let grandPlanned = 0, grandActual = 0, grandDone = 0, grandTotal = 0;
-    const sections = [];
+    const rows = [];
 
     plans.forEach(plan => {
       const items = supabaseRequest('GET',
         `dca_plan_items?plan_id=eq.${plan.id}` +
-        `&select=ticker,planned_amount_usd,actual_amount_usd,is_done`) || [];
+        `&select=ticker,suggested_amount_usd,planned_amount_usd,actual_amount_usd,is_done`) || [];
       if (items.length === 0) return;
 
       const portName = portMap[plan.portfolio_id] || 'Portfolio';
-      let secPlanned = 0, secActual = 0;
-      const lines = items.map(it => {
-        const planned = Number(it.planned_amount_usd) || 0;
-        const actual  = Number(it.actual_amount_usd)  || 0;
-        secPlanned += planned; secActual += actual;
-        grandTotal += 1;
-        let icon;
-        if (it.is_done)     { icon = '✅'; grandDone += 1; }
-        else if (actual > 0)  icon = '🔄';
-        else                  icon = '⬜';
-        return `${icon} ${it.ticker}: Planned ${_usd(planned)} · Actual ${_usd(actual)}`;
+      items.forEach(it => {
+        const suggested = Number(it.suggested_amount_usd) || 0;
+        const planned   = Number(it.planned_amount_usd)   || 0;
+        const actual    = Number(it.actual_amount_usd)    || 0;
+        grandPlanned += planned; grandActual += actual; grandTotal += 1;
+        if (it.is_done) grandDone += 1;
+        rows.push([
+          monthShort, portName, it.ticker,
+          suggested > 0 ? suggested : '—',
+          planned, actual,
+          it.is_done ? '✓' : '',
+          exportDate
+        ]);
       });
-      grandPlanned += secPlanned; grandActual += secActual;
-
-      sections.push(
-        `${portName} Portfolio\n` +
-        lines.map(l => '  ' + l).join('\n') +
-        `\n  Total ${portName}: Planned ${_usd(secPlanned)} · Actual ${_usd(secActual)}`
-      );
     });
 
-    if (sections.length === 0) throw new Error('No plan items to summarise');
+    if (rows.length === 0) throw new Error('No plan items to export');
 
-    const label   = _monthLabel(monthYear);
-    const subject = `MyAsset+ DCA Summary — ${label} (${grandDone}/${grandTotal} completed)`;
-    const body =
-      `DCA Summary — ${label}\n` +
-      `Legend: ✅ completed · 🔄 in progress · ⬜ not started\n\n` +
-      sections.join('\n\n') +
-      `\n\n─────────────────────\n` +
-      `Grand Total: Planned ${_usd(grandPlanned)} · Actual ${_usd(grandActual)}\n` +
-      `Completion: ${grandDone}/${grandTotal} tickers fully done\n\n` +
-      `Sent from MyAsset+`;
+    // Per-month summary row
+    rows.push([
+      monthShort, 'ALL', 'TOTAL', '—',
+      '$' + grandPlanned + ' planned',
+      '$' + grandActual + ' actual',
+      grandDone + '/' + grandTotal + ' done',
+      '—'
+    ]);
 
-    GmailApp.sendEmail(_SUMMARY_EMAIL, subject, body);
-    Logger.log(`[DCAAgent] Sent DCA ${mode} summary for ${monthYear} to ${_SUMMARY_EMAIL}`);
-
-    // Only "complete" flags the month's plans as completed
-    if (mode === 'complete') {
-      plans.forEach(plan => {
-        supabaseRequest('PATCH', `dca_plans?id=eq.${plan.id}`, { status: 'completed' });
-      });
+    // Write to the sheet (header only if the sheet is empty), one batch append
+    const ss    = _getOrCreateDCASheet();
+    const sheet = ss.getSheets()[0];
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, _SHEET_HEADER.length).setValues([_SHEET_HEADER]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
     }
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, rows.length, _SHEET_HEADER.length).setValues(rows);
 
-    return { sent: true, month: monthYear, mode: mode, done: grandDone, total: grandTotal, portfolios: sections.length };
+    Logger.log(`[DCAAgent] Exported ${rows.length - 1} tickers for ${monthYear} to "${_SHEET_NAME}" (${ss.getUrl()})`);
+    return {
+      exported: true, month: monthYear, sheetName: _SHEET_NAME, url: ss.getUrl(),
+      rows: rows.length - 1, done: grandDone, total: grandTotal
+    };
   }
 
-  function _usd(v) {
-    return '$' + (Number(v) || 0).toLocaleString('en-US',
-      { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  // Reuse the same spreadsheet across months: try the remembered id first, then a
+  // by-name lookup (files this script has touched), else create a fresh sheet.
+  function _getOrCreateDCASheet() {
+    const props = PropertiesService.getScriptProperties();
+    const id    = props.getProperty('DCA_SHEET_ID');
+    if (id) {
+      try { return SpreadsheetApp.openById(id); } catch (_) { /* stale id — fall through */ }
+    }
+    let ss = null;
+    try {
+      const files = DriveApp.getFilesByName(_SHEET_NAME);
+      if (files.hasNext()) ss = SpreadsheetApp.open(files.next());
+    } catch (_) { /* drive.file may not surface it — create instead */ }
+    if (!ss) ss = SpreadsheetApp.create(_SHEET_NAME);
+    props.setProperty('DCA_SHEET_ID', ss.getId());
+    return ss;
   }
 
-  function _monthLabel(monthYear) {
-    const MONTHS = ['January','February','March','April','May','June',
-                    'July','August','September','October','November','December'];
+  function _monthShort(monthYear) {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
+                    'Jul','Aug','Sep','Oct','Nov','Dec'];
     const parts = (monthYear || '').split('-');
     const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
     if (!y || !m) return monthYear;
     return `${MONTHS[m - 1]} ${y}`;
   }
 
-  return { generatePlans, checkMidMonthRevision, emailMonthSummary };
+  return { generatePlans, checkMidMonthRevision, exportDCAToSheet };
 })();
+
+// ── Manual test (top-level so it shows in the GAS Run dropdown) ────────────────
+// Set USER_ID to a real users.id that has DCA plan items for TEST_MONTH, then run
+// testExportDCAToSheet once from the IDE — it grants the Sheets/Drive scopes and
+// prints the spreadsheet url. Delete/ignore after verifying.
+function testExportDCAToSheet() {
+  const USER_ID    = '00000000-0000-0000-0000-000000000001';   // Chelsea
+  const TEST_MONTH = '2026-07';                                 // 'YYYY-MM' with plan items
+  const res = DCAAgent.exportDCAToSheet(USER_ID, TEST_MONTH);
+  Logger.log(JSON.stringify(res, null, 2));
+}

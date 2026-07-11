@@ -8715,8 +8715,8 @@ function _dcaDeriveStatus(items) {
   return 'draft';
 }
 
-// Submit & Email — always shown (any month with items); Complete Month — only
-// when every ticker across ALL portfolios is ticked.
+// Export to Google Sheets — always shown (any month with items); hidden on an
+// already-submitted (archived) month.
 async function _dcaUpdateCompleteBtn() {
   const wrap = document.getElementById('dca-complete-wrap');
   if (!wrap) return;
@@ -8724,7 +8724,7 @@ async function _dcaUpdateCompleteBtn() {
     .select('id, status, dca_plan_items(is_done)')
     .eq('user_id', state.userId).eq('month_year', _dcaMonth);
 
-  // A submitted month is archived history — no email/rollover button on it.
+  // A submitted month is archived history — no export/rollover button on it.
   const anySubmitted = (plans || []).some(p => p.status === 'submitted');
   const allItems = (plans || []).flatMap(p => p.dca_plan_items || []);
   const total = allItems.length;
@@ -8732,25 +8732,28 @@ async function _dcaUpdateCompleteBtn() {
   const done = allItems.filter(i => i.is_done).length;
 
   wrap.innerHTML = `
-    <button class="dca-complete-btn submit" onclick="_dcaSubmitEmail()">📧 Submit & Email Summary</button>
-    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · emails the summary, archives ${_dcaMonthLabel(_dcaMonth)}, and starts ${_dcaMonthLabel(_dcaMonthAdd(_dcaMonth, 1))}</div>`;
+    <button class="dca-complete-btn submit" onclick="_dcaExportSheet()">📊 Export to Google Sheets</button>
+    <div class="dca-complete-note">${done}/${total} tickers completed across all portfolios · exports to “MyAsset+ DCA History”, archives ${_dcaMonthLabel(_dcaMonth)}, and starts ${_dcaMonthLabel(_dcaMonthAdd(_dcaMonth, 1))}</div>`;
 }
 
-// Email the month's summary, then archive it and roll the planner over to a fresh
-// next month: (a) mark every plan SUBMITTED (kept in DB as history), (b/d) switch
-// the selector to the next month — which has no items yet, so the UI looks fresh,
-// (c) seed a blank next-month plan for every portfolio (budget carried forward).
-async function _dcaSubmitEmail() {
+// Export the month to Google Sheets, then archive it and roll the planner over to
+// a fresh next month: (a) mark every plan SUBMITTED (kept in DB as history), (b/d)
+// switch the selector to the next month — which has no items yet, so the UI looks
+// fresh, (c) seed a blank next-month plan for every portfolio (budget carried
+// forward). The spreadsheet url is opened in a new tab on success.
+async function _dcaExportSheet() {
   const btn = document.querySelector('.dca-complete-btn.submit');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting…'; }
 
-  const res = await callGAS('dcaEmailSummary', { userId: state.userId, month: _dcaMonth, mode: 'submit' });
+  const res = await callGAS('dcaExportSheet', { userId: state.userId, month: _dcaMonth });
   if (!res || !res.ok) {
-    showToast('❌ ส่งอีเมลไม่สำเร็จ — กรุณา re-authorize GAS ก่อน');
-    if (btn) { btn.disabled = false; btn.textContent = '📧 Submit & Email Summary'; }
+    showToast('❌ Export ไม่สำเร็จ — กรุณา re-authorize GAS ก่อน');
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Export to Google Sheets'; }
     return;
   }
-  showToast('✅ Email sent to chanika.cptk@gmail.com');
+  showToast('✅ Exported to Google Sheets — MyAsset+ DCA History');
+  const url = res.export?.url;
+  if (url) window.open(url, '_blank');
 
   const submitted = _dcaMonth;
   const next = _dcaMonthAdd(submitted, 1);
