@@ -2574,8 +2574,9 @@ input.td-dca-input { flex:1;background:none;border:none;outline:none;color:var(-
 
 <script>
 // ── Configuration ─────────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://zchwqmykjjjtoaymuvwx.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_ONSsLlQfSpD5uqIhCD-7eg_Lkb-0YlK';
+// Migrated into the MyExp+ project — data lives in the `asset_track` schema (see createClient below).
+const SUPABASE_URL = 'https://evowtnrqlsdddclngsrv.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2b3d0bnJxbHNkZGRjbG5nc3J2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNTAwNTcsImV4cCI6MjA5ODcyNjA1N30.oCdTH9ug7P3y4-XqJ1c7OFeYCZsgnhNeocDgvm1WpS4';
 
 // ── Thai bank config ──────────────────────────────────────────────────────────
 const THAI_BANKS = {
@@ -2734,7 +2735,11 @@ function _fundBadgeLabel(h, amc) {
 }
 
 // ── Supabase client ───────────────────────────────────────────────────────────
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// All app tables live in the `asset_track` schema (migrated into the MyExp+ project),
+// so the client targets it globally — every sb.from(...) call resolves to asset_track.
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  db: { schema: 'asset_track' }
+});
 
 // ── App state ─────────────────────────────────────────────────────────────────
 const state = {

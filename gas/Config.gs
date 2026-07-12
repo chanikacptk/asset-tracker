@@ -21,12 +21,18 @@ const Config = (() => {
     NEWSAPI_KEY:          () => props.getProperty('NEWSAPI_KEY'),
     SEC_API_KEY:          () => props.getProperty('SEC_API_KEY'),
 
-    /** Supabase REST headers for service-role requests */
+    /** Supabase REST headers for service-role requests.
+     *  Tables live in the `asset_track` schema (migrated into the MyExp+ project),
+     *  so PostgREST must be told which schema to use: Accept-Profile for reads,
+     *  Content-Profile for writes. Sending both on every request is harmless
+     *  (PostgREST uses the relevant one per method). */
     supabaseHeaders() {
       return {
         'apikey': this.SUPABASE_SERVICE_KEY(),
         'Authorization': `Bearer ${this.SUPABASE_SERVICE_KEY()}`,
         'Content-Type': 'application/json',
+        'Accept-Profile': 'asset_track',
+        'Content-Profile': 'asset_track',
         'Prefer': 'return=representation'
       };
     }
