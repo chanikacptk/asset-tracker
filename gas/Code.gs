@@ -2,7 +2,7 @@
  * Code.gs — Orchestrator
  *
  * TRIGGER SETUP (one-time, run setupTriggers() from the GAS IDE):
- *   - Daily 7AM Bangkok   → onNewsBriefTrigger (holdings-aware Tech-News brief)
+ *   - (removed) 7AM Tech-News brief — now on demand from the app (web action generateNewsBrief)
  *   - Daily 8AM Bangkok   → onDailyTrigger (morning fetch; US prices = prev-day close)
  *   - Daily 4AM Bangkok   → onDailyTrigger (= ~5PM ET; captures today's US closing prices)
  *   - Every Monday 8AM    → onWeeklyTrigger  (also fires from daily on Mondays)
@@ -141,6 +141,11 @@ function doGet(e) {
     } else if (action === 'sendNewsBrief') {
       NotificationAgent.sendDailyNewsBrief();
       result.sent = true;
+    } else if (action === 'generateNewsBrief') {
+      // On-demand brief for the Analysis › News page (no Telegram — the daily push was removed).
+      const userId = (e?.parameter?.userId || '').trim();
+      if (!userId) throw new Error('userId required');
+      result.brief = NotificationAgent.generateNewsBriefForUser(userId);
     } else if (action === 'dcaExportSheet') {
       const userId      = (e?.parameter?.userId      || '').trim();
       const month       = (e?.parameter?.month       || '').trim();   // 'YYYY-MM'
@@ -700,13 +705,10 @@ function setupTriggers() {
     .everyMinutes(5)
     .create();
 
-  // Daily 7AM Bangkok — Tech-News brief (atHour uses the project timezone; set it to
-  // Asia/Bangkok in Project Settings so this fires at 07:00 Bangkok, before the 8AM review).
-  ScriptApp.newTrigger('onNewsBriefTrigger')
-    .timeBased()
-    .everyDays(1)
-    .atHour(7)
-    .create();
+  // NOTE: the daily 7AM Tech-News brief trigger (onNewsBriefTrigger) was REMOVED
+  // 2026-07-16 — the brief is now generated on demand from the Analysis › News tab
+  // (web action `generateNewsBrief`) so the Claude API is only called when the user
+  // actually wants to read it. onNewsBriefTrigger() still exists for manual runs.
 
   // Daily 8PM mutual-fund NAV refresh (atHour uses the project timezone — set it to
   // Asia/Bangkok in Project Settings so this fires at 20:00 Bangkok).
@@ -716,7 +718,7 @@ function setupTriggers() {
     .atHour(20)
     .create();
 
-  Logger.log('[Orchestrator] Triggers set up: newsBrief@7AM + daily@8AM + daily@4AM + every5min + mfNav@8PM');
+  Logger.log('[Orchestrator] Triggers set up: daily@8AM + daily@4AM + every5min + mfNav@8PM (newsBrief@7AM removed — on-demand from the app)');
 }
 
 // ── Supabase helpers ──────────────────────────────────────────────────────────

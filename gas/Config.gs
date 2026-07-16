@@ -21,6 +21,12 @@ const Config = (() => {
     NEWSAPI_KEY:          () => props.getProperty('NEWSAPI_KEY'),
     SEC_API_KEY:          () => props.getProperty('SEC_API_KEY'),
 
+    /** Master switch for ALL Telegram sends (news brief, reviews, alerts).
+     *  Paused 2026-07-16 for cost/noise reduction — flip to `true` to re-enable
+     *  every notification without touching any other code. Guarded in
+     *  NotificationAgent `_send` / `_sendHtml`. */
+    TELEGRAM_ENABLED:     () => false,
+
     /** Supabase REST headers for service-role requests.
      *  Tables live in the `asset_track` schema (migrated into the MyExp+ project),
      *  so PostgREST must be told which schema to use: Accept-Profile for reads,

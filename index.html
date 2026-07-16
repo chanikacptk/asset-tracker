@@ -937,6 +937,8 @@ textarea, input, select { font-family: var(--font); }
 
     <!-- NEWS pane -->
     <div id="an-pane-news" class="an-tab-pane active">
+      <!-- on-demand brief generator (news is generated only when the user asks) -->
+      <div id="an-gen-wrap"></div>
       <!-- date selector / history -->
       <div class="an-datebar">
         <button class="an-date-nav" id="an-date-prev" onclick="anStepDate(1)" title="Older">‹</button>
@@ -2081,6 +2083,12 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 .an-tab.active { background:var(--primary);border-color:var(--primary);color:#fff; }
 .an-tab-pane { display:none; }
 .an-tab-pane.active { display:block; }
+.an-gen-btn {
+  width:100%;padding:13px 14px;margin-bottom:14px;border:none;border-radius:var(--radius-sm);
+  background:var(--primary);color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+}
+.an-gen-btn.done { background:var(--surface2);color:var(--text);border:1px solid var(--border); }
+.an-gen-btn:disabled { opacity:.6;cursor:default; }
 .an-datebar { display:flex;align-items:center;gap:8px;margin-bottom:14px; }
 .an-date-nav {
   width:36px;height:36px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);
@@ -6270,6 +6278,7 @@ async function loadAnalysis() {
   const dates = [...new Set((dateRows || []).map(r => r.news_date))];
 
   const today = _bkkToday();
+  _anRenderGenBtn(dates.includes(today)); // show Generate / Generated-today button
   if (!_anDate || (!dates.includes(_anDate) && _anDate !== today)) {
     _anDate = dates.includes(today) ? today : (dates[0] || today);
   }
@@ -6284,6 +6293,32 @@ async function loadAnalysis() {
 
   _anTickerFilter = null;
   await _anRenderDate();
+}
+
+// On-demand news brief: renders the Generate button and drives generation.
+// News is no longer produced automatically — the Claude web_search call only
+// happens when the user taps this button (cost control).
+function _anRenderGenBtn(hasToday) {
+  const wrap = document.getElementById('an-gen-wrap');
+  if (!wrap) return;
+  const label = hasToday ? '✅ Generated today — Refresh' : "🔄 Generate Today's Brief";
+  wrap.innerHTML = `<button id="an-gen-btn" class="an-gen-btn${hasToday ? ' done' : ''}" onclick="generateTodaysBrief()">${label}</button>`;
+}
+
+async function generateTodaysBrief() {
+  const btn = document.getElementById('an-gen-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating today’s brief…'; }
+  const res = await callGAS('generateNewsBrief', { userId: state.userId });
+  const b = res && res.brief;
+  if (b && b.ok) {
+    showToast(`✅ Brief generated — ${b.holdings} holdings · ${b.market} market stories`);
+    _anDate = _bkkToday();
+    await loadAnalysis(); // re-renders the button (→ "Generated today") + shows the news
+  } else {
+    // callGAS already toasts on a null (network) failure; only toast a script-level error.
+    if (res) showToast('❌ ' + ((b && b.error) || res.error || 'Generation failed'));
+    _anRenderGenBtn(false);
+  }
 }
 
 async function anSelectDate(d) { _anDate = d; _anTickerFilter = null; await _anRenderDate(); }

@@ -226,6 +226,36 @@ const NotificationAgent = (() => {
     });
   }
 
+  // On-demand generation for the web app: build + persist a brief for ONE user,
+  // WITHOUT sending Telegram (the daily 7AM push was removed 2026-07-16 — the app
+  // now generates on demand from the Analysis › News tab). Returns a small summary
+  // object for the frontend to toast. Never throws.
+  function generateNewsBriefForUser(userId) {
+    if (!userId) return { ok: false, error: 'userId required' };
+    try {
+      const ctx = _getUserHoldingsForBrief(userId);
+      const prompt = _buildNewsBriefPrompt(ctx);
+      let data = _callClaudeWebSearch(_NEWS_SYSTEM, prompt);
+      if (!data) {
+        Logger.log('[NewsBrief] on-demand first attempt failed — retrying once');
+        data = _callClaudeWebSearch(_NEWS_SYSTEM, prompt);
+      }
+      if (!data) return { ok: false, error: 'no brief generated' };
+
+      _persistNewsBrief(userId, data); // Analysis page history (non-fatal)
+      _logNotification(userId, 'news_brief', _renderNewsBrief(data) || 'news brief (on-demand)');
+      return {
+        ok: true,
+        date: _bkkIsoDate(),
+        holdings: (data.holdings_stories || []).length,
+        market: (data.market_stories || []).length
+      };
+    } catch (e) {
+      Logger.log('[NotificationAgent] generateNewsBriefForUser error: ' + e.message);
+      return { ok: false, error: e.message };
+    }
+  }
+
   // Gather what the user holds: US tickers (growth/dividend/etf) drive 🎯 matching;
   // Thai mutual-fund names are passed as secondary awareness only.
   function _getUserHoldingsForBrief(userId) {
@@ -294,7 +324,7 @@ Rules:
   // runs its searches internally and returns the final answer. Returns parsed JSON or null.
   function _callClaudeWebSearch(systemPrompt, userPrompt) {
     const payload = {
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5', // cost optimization — news brief runs on Haiku (portfolio/DCA/ticker stay on Sonnet)
       max_tokens: 5000, // raised from 3500 — the full-set prompt (~8-12 stories) was truncating
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -572,6 +602,7 @@ Rules:
   }
 
   function _send(chatId, text) {
+    if (!Config.TELEGRAM_ENABLED()) return; // all Telegram sends paused — see Config.TELEGRAM_ENABLED
     if (!chatId) return;
     const token = Config.TELEGRAM_BOT_TOKEN();
     if (!token) { Logger.log('[NotificationAgent] TELEGRAM_BOT_TOKEN not set'); return; }
@@ -588,6 +619,7 @@ Rules:
 
   // Same as _send but parse_mode=HTML (used by the news brief — content is pre-escaped).
   function _sendHtml(chatId, text) {
+    if (!Config.TELEGRAM_ENABLED()) return; // all Telegram sends paused — see Config.TELEGRAM_ENABLED
     if (!chatId) return;
     const token = Config.TELEGRAM_BOT_TOKEN();
     if (!token) { Logger.log('[NotificationAgent] TELEGRAM_BOT_TOKEN not set'); return; }
@@ -617,5 +649,5 @@ Rules:
     return d.toISOString().slice(11, 16) + ' BKK';
   }
 
-  return { sendDailyGrowthReview, sendWeeklyReview, sendHighImpactNewsAlerts, sendRealtimeAlerts, sendToUser, sendDailyNewsBrief };
+  return { sendDailyGrowthReview, sendWeeklyReview, sendHighImpactNewsAlerts, sendRealtimeAlerts, sendToUser, sendDailyNewsBrief, generateNewsBriefForUser };
 })();
