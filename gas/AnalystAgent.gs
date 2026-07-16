@@ -14,26 +14,48 @@ const AnalystAgent = (() => {
     _reviewByType('etf');
   }
 
-  // Analyze every portfolio regardless of type — used by daily trigger
+  // Analyze every portfolio regardless of type. Returns a per-portfolio summary
+  // array (used by the on-demand generatePortfolioAnalysis web action).
   function reviewAllPortfolios() {
     Logger.log('[AnalystAgent] Reviewing ALL portfolios');
     const portfolios = supabaseRequest('GET',
       'portfolios?select=id,user_id,name,type,dca_budget_usd');
-    if (!portfolios || portfolios.length === 0) return;
+    if (!portfolios || portfolios.length === 0) return [];
+    const results = [];
     portfolios.forEach(portfolio => {
       try {
-        _analyzePortfolio(portfolio);
+        const r = _analyzePortfolio(portfolio);
+        if (r) results.push(r);
       } catch (e) {
         Logger.log(`[AnalystAgent] Error analyzing ${portfolio.name}: ${e.message}`);
+        results.push({ portfolioId: portfolio.id, name: portfolio.name, error: e.message });
       }
     });
+    return results;
   }
 
   function reviewPortfolioById(portfolioId) {
     const portfolios = supabaseRequest('GET',
       `portfolios?id=eq.${portfolioId}&select=id,user_id,name,type,dca_budget_usd`);
-    if (!portfolios || portfolios.length === 0) return;
-    _analyzePortfolio(portfolios[0]);
+    if (!portfolios || portfolios.length === 0) return [];
+    try {
+      const r = _analyzePortfolio(portfolios[0]);
+      return r ? [r] : [];
+    } catch (e) {
+      Logger.log(`[AnalystAgent] Error analyzing ${portfolios[0].name}: ${e.message}`);
+      return [{ portfolioId: portfolios[0].id, name: portfolios[0].name, error: e.message }];
+    }
+  }
+
+  // On-demand entry point (web action `generatePortfolioAnalysis`). A blank/null
+  // portfolioId analyzes every portfolio; a set value analyzes just that one.
+  // Persistence (ai_analyses / sr_levels) is unchanged — only the return shape is added.
+  function generatePortfolioAnalysis(portfolioId) {
+    const generatedAt = new Date().toISOString();
+    const portfolios = portfolioId
+      ? reviewPortfolioById(portfolioId)
+      : reviewAllPortfolios();
+    return { ok: true, generatedAt: generatedAt, portfolios: portfolios || [] };
   }
 
   // ── Core review flow ────────────────────────────────────────────────────────
@@ -57,7 +79,7 @@ const AnalystAgent = (() => {
   function _analyzePortfolio(portfolio) {
     const holdings = supabaseRequest('GET',
       `holdings?portfolio_id=eq.${portfolio.id}&select=ticker,target_pct,shares,avg_cost_usd`);
-    if (!holdings || holdings.length === 0) return;
+    if (!holdings || holdings.length === 0) return null;
 
     // Get current prices
     const tickers = holdings.map(h => h.ticker);
@@ -97,7 +119,7 @@ const AnalystAgent = (() => {
     const prompt = _buildAnalysisPrompt(holdingsContext, sp500Change, usdThb, newsHeadlines);
     const analyses = _callClaude(prompt);
 
-    if (!analyses) return;
+    if (!analyses) return null;
 
     // Store results
     analyses.forEach(analysis => {
@@ -123,6 +145,13 @@ const AnalystAgent = (() => {
     });
 
     Logger.log(`[AnalystAgent] Stored ${analyses.length} analyses for portfolio ${portfolio.name}`);
+
+    return {
+      portfolioId: portfolio.id,
+      name: portfolio.name,
+      tickers: analyses.length,
+      analyzedAt: new Date().toISOString()
+    };
   }
 
   // ── Prompt builder ──────────────────────────────────────────────────────────
@@ -246,5 +275,5 @@ Be concise but specific. Never fabricate news. Only reference news from the cont
     return rows || [];
   }
 
-  return { reviewGrowthPortfolios, reviewDividendAndETF, reviewAllPortfolios, reviewPortfolioById };
+  return { reviewGrowthPortfolios, reviewDividendAndETF, reviewAllPortfolios, reviewPortfolioById, generatePortfolioAnalysis };
 })();

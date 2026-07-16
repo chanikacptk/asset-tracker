@@ -987,11 +987,6 @@ textarea, input, select { font-family: var(--font); }
       <button onclick="navigate('analysis')" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px">‹</button>
     </div>
     <div style="height:12px"></div>
-    <div class="card" style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Runs AI analysis across all portfolios and sends the weekly review to Telegram.</div>
-      <button id="weekly-run-btn" class="btn btn-primary" onclick="runWeeklyReview()">📆 Run Weekly Review</button>
-      <div id="weekly-status" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:16px"></div>
-    </div>
     <div id="weekly-content"></div>
   </div>
 
@@ -2089,6 +2084,9 @@ html.dark .mf-sort-select { background-image:url("data:image/svg+xml,%3Csvg xmln
 }
 .an-gen-btn.done { background:var(--surface2);color:var(--text);border:1px solid var(--border); }
 .an-gen-btn:disabled { opacity:.6;cursor:default; }
+.an-analysis-bar { display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px; }
+.an-analysis-bar .an-gen-btn { width:auto;flex:0 0 auto;margin:0;padding:10px 16px; }
+.an-analysis-when { flex:1 1 auto;font-size:12px;color:var(--text-muted);min-width:160px; }
 .an-datebar { display:flex;align-items:center;gap:8px;margin-bottom:14px; }
 .an-date-nav {
   width:36px;height:36px;flex-shrink:0;border-radius:9px;border:1px solid var(--border);
@@ -8927,8 +8925,12 @@ async function loadWeeklyReview() {
     .gte('created_at', since)
     .order('created_at', { ascending: false });
 
+  // Latest analysis timestamp across all portfolios (analyses are ordered desc).
+  const lastIso = (analyses && analyses[0]) ? analyses[0].created_at : null;
+  const bar = _analysisBar(lastIso);
+
   if (!analyses || analyses.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📆</div><div class="empty-text">No analyses in the past 7 days</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Click "Run Weekly Review" to generate one</div></div>';
+    el.innerHTML = bar + '<div class="empty"><div class="empty-icon">📆</div><div class="empty-text">No analyses in the past 7 days</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Tap 🔄 Refresh Analysis to generate one</div></div>';
     return;
   }
 
@@ -8949,7 +8951,7 @@ async function loadWeeklyReview() {
   });
 
   const SIG_COLOR = { BUY:'var(--success)', SELL:'var(--danger)', HOLD:'var(--warning)', TRIM:'#f97316' };
-  el.innerHTML = Object.entries(byPort).map(([portName, rows]) => `
+  el.innerHTML = bar + Object.entries(byPort).map(([portName, rows]) => `
     <div class="card" style="margin-bottom:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">📁 ${portName}</div>
       ${rows.map(a => `
@@ -8963,22 +8965,42 @@ async function loadWeeklyReview() {
     </div>`).join('');
 }
 
-async function runWeeklyReview() {
-  if (!state.gasUrl) { showToast('Set GAS URL in Settings first'); return; }
-  const btn = document.getElementById('weekly-run-btn');
-  const status = document.getElementById('weekly-status');
-  btn.disabled = true; btn.textContent = '⏳ Running…';
-  status.textContent = '';
-  try {
-    await callGAS('analyzeAll');
-    status.style.color = 'var(--success)';
-    status.textContent = '✓ Analysis complete — weekly review sent to Telegram';
-    await loadWeeklyReview();
-  } catch (e) {
-    status.style.color = 'var(--danger)';
-    status.textContent = 'Error: ' + e.message;
-  } finally {
-    btn.disabled = false; btn.textContent = '📆 Run Weekly Review';
+// ── On-demand portfolio analysis (All Portfolio + Weekly Review) ──────────────
+// Same pattern as generateTodaysBrief: on-demand only, no auto schedule. The
+// Claude Sonnet call fires only when the user taps 🔄 Refresh Analysis.
+function _analysisLastLabel(iso) {
+  if (!iso) return 'ยังไม่เคยวิเคราะห์';
+  const then = new Date(iso);
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000);
+  let rel;
+  if (mins < 1)         rel = 'เมื่อสักครู่';
+  else if (mins < 60)   rel = `${mins} นาทีที่แล้ว`;
+  else if (mins < 1440) rel = `${Math.floor(mins / 60)} ชม.ที่แล้ว`;
+  else                  rel = `${Math.floor(mins / 1440)} วันที่แล้ว`;
+  const abs = then.toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return `${rel} · ${abs}`;
+}
+
+// Shared "วิเคราะห์ล่าสุดเมื่อ X + 🔄 Refresh Analysis" bar for both pages.
+function _analysisBar(lastIso) {
+  return `<div class="an-analysis-bar">
+    <span class="an-analysis-when">🕐 วิเคราะห์ล่าสุด: ${_analysisLastLabel(lastIso)}</span>
+    <button class="an-gen-btn" onclick="refreshPortfolioAnalysis()">🔄 Refresh Analysis</button>
+  </div>`;
+}
+
+// Runs the on-demand analysis (all portfolios) then re-renders the current page.
+async function refreshPortfolioAnalysis(portfolioId) {
+  const btns = document.querySelectorAll('.an-analysis-bar .an-gen-btn');
+  btns.forEach(b => { b.disabled = true; b.textContent = '⏳ กำลังวิเคราะห์…'; });
+  const res = await callGAS('generatePortfolioAnalysis', portfolioId ? { portfolioId } : {});
+  if (res && res.ok && res.portfolios) {
+    showToast(`✅ วิเคราะห์เสร็จ — ${res.portfolios.length} พอร์ต`);
+    await loadPage(state.currentPage); // re-renders the page (bar → updated timestamp + signals)
+  } else {
+    // callGAS already toasts on a null (network) failure; only toast a script-level error.
+    if (res) showToast('❌ ' + (res.error || 'วิเคราะห์ไม่สำเร็จ'));
+    btns.forEach(b => { b.disabled = false; b.textContent = '🔄 Refresh Analysis'; });
   }
 }
 
@@ -9002,6 +9024,10 @@ async function loadAllPortfolio() {
     .in('portfolio_id', portIds)
     .order('created_at', { ascending: false });
 
+  // Latest analysis timestamp across all portfolios (analyses are ordered desc).
+  const lastIso = (analyses && analyses[0]) ? analyses[0].created_at : null;
+  const bar = _analysisBar(lastIso);
+
   const seen = new Set();
   const deduped = (analyses || []).filter(a => {
     const key = `${a.portfolio_id}_${a.ticker}`;
@@ -9022,11 +9048,11 @@ async function loadAllPortfolio() {
   const SIG_EMOJI = { BUY:'🟢', SELL:'🔴', HOLD:'🟡', TRIM:'🟠' };
 
   if (Object.keys(byPort).length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No AI analyses yet</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Run Weekly Review to generate signals</div></div>';
+    el.innerHTML = bar + '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No AI analyses yet</div><div style="font-size:12px;margin-top:6px;color:var(--text-muted)">Tap 🔄 Refresh Analysis to generate signals</div></div>';
     return;
   }
 
-  el.innerHTML = Object.entries(byPort).map(([portName, rows]) => `
+  el.innerHTML = bar + Object.entries(byPort).map(([portName, rows]) => `
     <div class="card" style="margin-bottom:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">📁 ${portName}</div>
       ${rows.map(a => `

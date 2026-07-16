@@ -97,6 +97,14 @@ function doGet(e) {
       const portfolioId = e?.parameter?.portfolioId;
       if (!portfolioId) throw new Error('portfolioId required');
       AnalystAgent.reviewPortfolioById(portfolioId);
+    } else if (action === 'generatePortfolioAnalysis') {
+      // On-demand portfolio analysis for the All Portfolio / Weekly Review pages
+      // (replaced the auto onDailyTrigger call, 2026-07-16). Blank portfolioId = all
+      // portfolios; a set value = that one. Persists to ai_analyses/sr_levels as before.
+      const portfolioId = (e?.parameter?.portfolioId || '').trim();
+      const res = AnalystAgent.generatePortfolioAnalysis(portfolioId || null);
+      result.generatedAt = res.generatedAt;
+      result.portfolios  = res.portfolios;
     } else if (action === 'testTelegram') {
       const userId = e?.parameter?.userId;
       result.sent = _sendTestTelegram(userId);
@@ -598,9 +606,10 @@ function onDailyTrigger() {
     if (dayOfWeek === 1) {
       onWeeklyTrigger();
     } else {
-      // Daily growth portfolio review (skip Sat/Sun)
+      // Daily news + notifications (skip Sat/Sun). Portfolio analysis
+      // (AnalystAgent.reviewAllPortfolios) is NO LONGER auto-run here — it is
+      // on-demand only via the web action `generatePortfolioAnalysis` (2026-07-16).
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        AnalystAgent.reviewAllPortfolios();
         NewsAgent.fetchForAllHoldings();
         NotificationAgent.sendHighImpactNewsAlerts();
         NotificationAgent.sendDailyGrowthReview();
@@ -617,7 +626,8 @@ function onWeeklyTrigger() {
   try {
     DataAgent.fetchAll();
     DataAgent.updateDynamicSRLevels(); // Recalculate S/R from 90-day history + 52wk levels weekly
-    AnalystAgent.reviewAllPortfolios();
+    // AnalystAgent.reviewAllPortfolios() removed 2026-07-16 — portfolio analysis is
+    // on-demand only (web action `generatePortfolioAnalysis`), no auto schedule.
     NewsAgent.fetchForAllHoldings();
     NotificationAgent.sendHighImpactNewsAlerts();
     NotificationAgent.sendWeeklyReview();
