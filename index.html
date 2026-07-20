@@ -9376,7 +9376,10 @@ async function callGAS(action, params = {}, retries = 3) {
   let lastErr = null;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const resp = await fetch(`${state.gasUrl}?${qs}`);
+      // `cache: 'no-store'` bypasses the iOS Safari HTTP cache so live prices
+      // (getPrices etc.) are always fresh — a second guard alongside the SW's
+      // network-first GAS branch (fixes the mobile stale-price bug).
+      const resp = await fetch(`${state.gasUrl}?${qs}`, { cache: 'no-store' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const text = await resp.text();
       // GAS returns an HTML error page (200 OK) when the script fails to compile

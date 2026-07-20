@@ -1,4 +1,4 @@
-const CACHE = 'myasset-v117';
+const CACHE = 'myasset-v118';
 const PRECACHE = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'
@@ -23,6 +23,17 @@ self.addEventListener('fetch', e => {
 
   // Network-first for Supabase API calls (always fresh data)
   if (url.hostname.includes('supabase.co')) {
+    e.respondWith(
+      fetch(e.request).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Network-first for the GAS backend — live prices/actions (getPrices etc.)
+  // must NEVER be served cache-first, or a stale price snapshot freezes per
+  // device (this was the "iPhone PWA price ≠ Chrome" bug). Falls through to the
+  // catch-all cache-first block below without this exception.
+  if (url.hostname.includes('script.google') || url.hostname.includes('googleusercontent.com')) {
     e.respondWith(
       fetch(e.request).catch(() => caches.match(e.request))
     );
